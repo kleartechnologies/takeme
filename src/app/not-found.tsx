@@ -1,0 +1,3 @@
+import Image from "next/image";
+import Link from "next/link";
+export default function NotFound() { return <main className="page-shell grid min-h-[60vh] place-items-center py-12"><div className="max-w-md text-center"><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-3xl font-bold">We couldn’t find that</h1><p className="mt-2 text-[var(--takeme-gray)]">The listing may have moved or the address may be incorrect.</p><Link href="/explore" className="button-primary mt-6 h-11 px-5">Explore listings</Link></div></main>; }

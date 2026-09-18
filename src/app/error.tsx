@@ -1,0 +1,3 @@
+"use client";
+import { AlertTriangle } from "lucide-react";
+export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) { return <main className="page-shell grid min-h-[60vh] place-items-center py-12"><div className="max-w-md text-center"><AlertTriangle className="mx-auto text-[var(--takeme-dark-green)]" size={38} /><h1 className="mt-4 text-3xl font-bold">That didn’t load properly</h1><p className="mt-2 text-[var(--takeme-gray)]">Please try again. Your marketplace data has not been changed.</p><button onClick={reset} className="button-primary mt-6 h-11 px-5">Try again</button></div></main>; }

@@ -1,0 +1,64 @@
+"use client";
+
+import { CalendarDays, ChevronLeft, Heart, MapPin, ShieldCheck, UserRound } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { ListingSection } from "@/components/listings/listing-section";
+import { FirebaseSetupState } from "@/components/ui/firebase-state";
+import { ErrorState, ListingSkeleton } from "@/components/ui/states";
+import { isFirebaseConfigured } from "@/lib/firebase/client";
+import { getListing, getListingsBySeller } from "@/lib/services/listings";
+import { getUserProfile } from "@/lib/services/users";
+import type { Listing, UserProfile } from "@/types/marketplace";
+
+const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 2 });
+
+export function ListingDetailView({ id, created = false }: { id: string; created?: boolean }) {
+  const { user } = useAuth();
+  const [state, setState] = useState<{ loading: boolean; listing: Listing | null; seller: UserProfile | null; related: Listing[]; error: string }>({ loading: true, listing: null, seller: null, related: [], error: "" });
+  const [selectedImage, setSelectedImage] = useState(0);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    let active = true;
+    getListing(id).then(async (listing) => {
+      if (!listing) { if (active) setState({ loading: false, listing: null, seller: null, related: [], error: "not-found" }); return; }
+      const [seller, related] = await Promise.all([getUserProfile(listing.sellerId), getListingsBySeller(listing.sellerId)]);
+      if (active) setState({ loading: false, listing, seller, related: related.filter((item) => item.id !== listing.id), error: "" });
+    }).catch((error: unknown) => { if (active) setState({ loading: false, listing: null, seller: null, related: [], error: firebaseErrorMessage(error) }); });
+    return () => { active = false; };
+  }, [id]);
+
+  if (!isFirebaseConfigured) return <main className="page-shell py-10"><FirebaseSetupState /></main>;
+  if (state.loading) return <main className="page-shell py-10"><div className="grid gap-7 lg:grid-cols-[1.35fr_0.85fr]"><ListingSkeleton /><div className="min-h-96 animate-pulse rounded-3xl bg-stone-100" /></div></main>;
+  if (state.error === "not-found") return <NotFoundState />;
+  if (state.error) return <main className="page-shell py-10"><ErrorState message={state.error === "permission-denied" ? "This listing is unavailable or you do not have permission to view it." : state.error} /></main>;
+  const listing = state.listing!;
+  const owner = user?.uid === listing.sellerId;
+
+  return (
+    <main className="page-shell py-6 md:py-10">
+      <Link href="/explore" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[var(--takeme-gray)] hover:text-[var(--takeme-dark-green)]"><ChevronLeft size={17} /> Back to explore</Link>
+      {created && listing.status === "active" && <div className="mb-5 flex items-center gap-4 overflow-hidden rounded-2xl border border-[var(--takeme-green)]/25 bg-[var(--takeme-light-green)] px-4 py-3"><Image src="/brand/mascot-2d-excited.png" alt="" width={80} height={68} className="h-16 w-auto shrink-0 object-contain" /><div><p className="font-semibold text-[var(--takeme-dark-green)]">Your listing is live</p><p className="mt-0.5 text-sm text-[var(--takeme-gray)]">It now appears in the active TAKEME marketplace.</p></div></div>}
+      {listing.status !== "active" && <div className="mb-5 rounded-2xl border border-gray-200 bg-gray-100 p-4 text-sm font-semibold text-[var(--takeme-charcoal)]">This listing is {listing.status} and is only visible to its owner.</div>}
+      <div className="grid gap-7 lg:grid-cols-[1.35fr_0.85fr]">
+        <section>
+          <div className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-stone-100"><Image src={listing.imageUrls[selectedImage]} alt={listing.title} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover" /></div>
+          {listing.imageUrls.length > 1 && <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-6">{listing.imageUrls.map((url, index) => <button key={url} onClick={() => setSelectedImage(index)} className={`relative aspect-square overflow-hidden rounded-xl border-2 ${selectedImage === index ? "border-[var(--takeme-green)]" : "border-transparent"}`} aria-label={`Show image ${index + 1}`}><Image src={url} alt="" fill sizes="100px" className="object-cover" /></button>)}</div>}
+          <div className="mt-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] sm:p-7"><h2 className="text-xl font-bold">About this item</h2><p className="mt-3 whitespace-pre-wrap leading-7 text-[var(--takeme-gray)]">{listing.description}</p><div className="mt-6 grid grid-cols-2 gap-5 border-t border-gray-100 pt-6 text-sm"><Fact label="Condition" value={listing.condition} /><Fact label="Category" value={listing.categoryId.replaceAll("-", " ")} /><Fact label="Listing type" value="Buy now" /><Fact label="Status" value={listing.status} /><Fact label="Published" value={new Date(listing.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })} /></div></div>
+        </section>
+        <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-md)] sm:p-7 lg:sticky lg:top-24"><div className="flex items-start justify-between gap-3"><span className="rounded-full bg-[var(--takeme-light-green)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Buy now</span><button disabled className="icon-button border border-gray-200" aria-label="Favorites coming soon" title="Favorites coming soon"><Heart size={18} /></button></div><h1 className="mt-5 text-2xl font-bold leading-tight tracking-[-0.035em] sm:text-3xl">{listing.title}</h1><p className="mt-4 text-3xl font-bold tracking-tight text-[var(--takeme-charcoal)]">{money.format(listing.price)}</p><p className="mt-5 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p><button disabled className="button-primary mt-6 h-12 w-full">Checkout coming soon</button>{owner && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
+          <Link href={`/sellers/${listing.sellerId}`} className="mt-6 flex items-center gap-3 border-t border-stone-100 pt-5"><span className="relative grid size-11 place-items-center overflow-hidden rounded-full bg-stone-100">{state.seller?.photoURL ? <Image src={state.seller.photoURL} alt="" fill sizes="44px" className="object-cover" /> : <UserRound size={20} />}</span><div><p className="text-sm font-bold">{state.seller?.displayName ?? "TAKEME seller"}</p><p className="text-xs text-stone-500">View seller profile</p></div></Link>
+          <div className="mt-5 grid gap-2 text-xs leading-5 text-[var(--takeme-gray)]"><p className="flex gap-2"><ShieldCheck size={16} className="shrink-0 text-[var(--takeme-dark-green)]" /> Checkout is not active yet. Never send payment based on this preview.</p><p className="flex gap-2"><CalendarDays size={16} className="shrink-0" /> Listed {new Date(listing.createdAt).toLocaleDateString("en-MY")}</p></div>
+        </aside>
+      </div>
+      {state.related.length > 0 && <div className="mt-6"><ListingSection title="More from this seller" listings={state.related} /></div>}
+    </main>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) { return <div><p className="text-xs font-semibold text-stone-400">{label}</p><p className="mt-1 capitalize font-bold text-stone-700">{value}</p></div>; }
+function NotFoundState() { return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-3xl font-bold">Listing not found</h1><p className="mt-2 text-[var(--takeme-gray)]">It may have been removed or the link is incorrect.</p><Link href="/explore" className="button-primary mt-6 h-11 px-6">Explore active listings</Link></div></main>; }
+function firebaseErrorMessage(error: unknown) { if (typeof error === "object" && error && "code" in error && String(error.code).includes("permission-denied")) return "permission-denied"; return error instanceof Error ? error.message : "Listing could not be loaded."; }
