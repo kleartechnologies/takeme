@@ -1,5 +1,13 @@
 {
   "indexes": [
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "eventType", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "userId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
     { "collectionGroup": "conversations", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
       { "fieldPath": "updatedAt", "order": "DESCENDING" }

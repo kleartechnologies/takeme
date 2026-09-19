@@ -3,11 +3,13 @@
 import { ArrowRight, LoaderCircle, MapPin } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { ListingCard } from "@/components/listings/listing-card";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type ListingPage, type ListingQuery } from "@/lib/services/listings";
+import { getHomeRecommendations, trackMarketplaceIntent, type CandidateSource } from "@/lib/services/intelligence";
 
 type Tab = "top" | "nearby" | "auctions" | "free";
 const tabs: { id: Tab; label: string }[] = [
@@ -23,14 +25,16 @@ function requestFor(tab: Tab, location: string): ListingQuery {
 }
 
 export function HomeMarketplace() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("top");
   const [locationInput, setLocationInput] = useState("");
   const [location, setLocation] = useState("");
   const [retry, setRetry] = useState(0);
-  const [state, setState] = useState<{ key: string; page: ListingPage; loading: boolean; error: string }>({ key: "", page: emptyPage, loading: true, error: "" });
+  const [state, setState] = useState<{ key: string; page: ListingPage; loading: boolean; error: string; personalized: boolean; sources: Record<string, CandidateSource> }>({ key: "", page: emptyPage, loading: true, error: "", personalized: false, sources: {} });
   const [loadingMore, setLoadingMore] = useState(false);
-  const cache = useRef(new Map<string, ListingPage>());
-  const key = tab === "nearby" ? `nearby:${location}` : tab;
+  const cache = useRef(new Map<string, { page: ListingPage; personalized: boolean; sources: Record<string, CandidateSource> }>());
+  const impressed = useRef(new Set<string>());
+  const key = tab === "nearby" ? `nearby:${location}` : tab === "top" ? `top:${user?.uid ?? "guest"}` : tab;
   const currentKey = useRef(key);
 
   useEffect(() => {
@@ -39,16 +43,44 @@ export function HomeMarketplace() {
     let active = true;
     const cached = cache.current.get(key);
     if (cached) {
-      setState({ key, page: cached, loading: false, error: "" });
+      setState({ key, ...cached, loading: false, error: "" });
       return;
     }
-    setState({ key, page: emptyPage, loading: true, error: "" });
-    getActiveListings(requestFor(tab, location)).then((page) => {
-      cache.current.set(key, page);
-      if (active) setState({ key, page, loading: false, error: "" });
-    }).catch(() => { if (active) setState({ key, page: emptyPage, loading: false, error: "We couldn’t load the marketplace right now. Please try again." }); });
+    setState({ key, page: emptyPage, loading: true, error: "", personalized: false, sources: {} });
+    const load = async () => {
+      if (tab === "top" && user) {
+        try {
+          const recommended = await getHomeRecommendations();
+          return { page: { listings: recommended.listings, cursor: null, hasMore: false }, personalized: recommended.personalized, sources: recommended.candidateSources };
+        } catch { /* Keep recent discovery when the new callable is not yet deployed. */ }
+      }
+      return { page: await getActiveListings(requestFor(tab, location)), personalized: false, sources: {} };
+    };
+    load().then((result) => {
+      cache.current.set(key, result);
+      if (active) setState({ key, ...result, loading: false, error: "" });
+    }).catch(() => { if (active) setState({ key, page: emptyPage, loading: false, error: "We couldn’t load the marketplace right now. Please try again.", personalized: false, sources: {} }); });
     return () => { active = false; };
-  }, [key, tab, location, retry]);
+  }, [key, tab, location, retry, user]);
+
+  useEffect(() => {
+    if (tab !== "top" || !user || !Object.keys(state.sources).length || state.key !== key || !state.page.listings.length || impressed.current.has(key)) return;
+    const target = document.getElementById("discovery");
+    if (!target || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting) || impressed.current.has(key)) return;
+      impressed.current.add(key);
+      const bySource = new Map<CandidateSource, string[]>();
+      for (const item of state.page.listings.slice(0, 8)) {
+        const source = state.sources[item.id];
+        if (source) bySource.set(source, [...(bySource.get(source) ?? []), item.id]);
+      }
+      for (const [candidateSource, listingIds] of bySource) trackMarketplaceIntent({ type: "RECOMMENDATION_IMPRESSION", listingIds, context: "home", candidateSource });
+      observer.disconnect();
+    }, { threshold: 0.25 });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [key, state.key, state.page.listings, state.sources, tab, user]);
 
   function selectTab(next: Tab) { setTab(next); setLoadingMore(false); }
   function keyboardTab(event: KeyboardEvent<HTMLButtonElement>) {
@@ -69,13 +101,13 @@ export function HomeMarketplace() {
     try {
       const page = await getActiveListings(requestFor(tab, location), state.page.cursor);
       const combined = { listings: [...state.page.listings, ...page.listings], cursor: page.cursor, hasMore: page.hasMore };
-      cache.current.set(key, combined);
-      if (currentKey.current === key) setState({ key, page: combined, loading: false, error: "" });
+      cache.current.set(key, { page: combined, personalized: false, sources: {} });
+      if (currentKey.current === key) setState({ key, page: combined, loading: false, error: "", personalized: false, sources: {} });
     } catch { if (currentKey.current === key) setState((previous) => ({ ...previous, error: "More listings couldn’t be loaded. Please try again." })); }
     finally { setLoadingMore(false); }
   }
 
-  const title = tab === "top" ? "Top Picks" : tab === "nearby" ? "Nearby" : tab === "auctions" ? "Auctions" : "Free Items";
+  const title = tab === "top" ? state.key === key && state.personalized ? "Recommended for You" : "Top Picks" : tab === "nearby" ? "Nearby" : tab === "auctions" ? "Auctions" : "Free Items";
   const viewAll = tab === "auctions" ? "/explore?type=auction" : tab === "nearby" ? `/explore?location=${encodeURIComponent(location)}` : "/explore";
   const loading = state.key !== key || state.loading;
   return <section id="discovery" className="scroll-mt-24 border-t border-gray-200 pt-2">
@@ -83,14 +115,14 @@ export function HomeMarketplace() {
       {tabs.map((item) => <button key={item.id} type="button" role="tab" id={`discovery-tab-${item.id}`} aria-controls="discovery-panel" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onKeyDown={keyboardTab} onClick={() => selectTab(item.id)} className={`relative min-h-12 shrink-0 whitespace-nowrap px-0.5 text-sm font-semibold transition-colors ${tab === item.id ? "text-[var(--takeme-dark-green)] after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[var(--takeme-green)]" : "text-[var(--takeme-gray)] hover:text-[var(--takeme-dark-green)]"}`}>{item.label}</button>)}
     </div>
     <div id="discovery-panel" role="tabpanel" aria-labelledby={`discovery-tab-${tab}`} tabIndex={0} className="pt-5">
-      <div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">{tab === "top" ? "Freshly listed items from TAKEME sellers." : tab === "auctions" ? "Live and upcoming auctions." : tab === "nearby" ? "Find listings by the seller’s stated location, not your device location." : "Free items are not supported yet."}</p></div>{tab !== "free" && (tab !== "nearby" || location) && <Link href={viewAll} className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">View all <ArrowRight size={15} /></Link>}</div>
+      <div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">{tab === "top" ? state.key === key && state.personalized ? "Based on your recent marketplace interests." : "Freshly listed items from TAKEME sellers." : tab === "auctions" ? "Live and upcoming auctions." : tab === "nearby" ? "Find listings by the seller’s stated location, not your device location." : "Free items are not supported yet."}</p></div>{tab !== "free" && (tab !== "nearby" || location) && <Link href={viewAll} className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">View all <ArrowRight size={15} /></Link>}</div>
       {tab === "nearby" && <form onSubmit={submitLocation} className="mb-5 flex max-w-md gap-2"><label className="input-shell min-w-0 flex-1"><MapPin size={17} className="shrink-0" /><span className="sr-only">Seller location</span><input value={locationInput} onChange={(event) => setLocationInput(event.target.value)} placeholder="e.g. Kuala Lumpur" /></label><button type="submit" className="button-secondary h-12 shrink-0 px-4">Find</button></form>}
       {tab === "free" ? <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm leading-6 text-[var(--takeme-gray)]">TAKEME listings currently require a positive price. Free items will appear here when the marketplace supports them. <Link href="/explore" className="font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">Browse listings</Link></div>
         : tab === "nearby" && !location ? <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm leading-6 text-[var(--takeme-gray)]">Enter a seller location above to see matching listings. This is a text location filter, not distance or GPS search.</div>
         : !isFirebaseConfigured ? <FirebaseSetupState />
         : state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => { cache.current.delete(key); setRetry((value) => value + 1); }} className="button-secondary mt-4 h-11 px-5">Retry</button></div>
         : loading ? <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <ListingSkeleton key={index} />)}</div>
-        : state.page.listings.length ? <><div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{state.page.listings.map((listing) => <ListingCard key={listing.id} listing={listing} sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw" />)}</div>{state.page.hasMore && <div className="mt-7 text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-11 px-5">{loadingMore && <LoaderCircle size={16} className="animate-spin" />}Load more</button></div>}</>
+        : state.page.listings.length ? <><div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{state.page.listings.map((listing) => <ListingCard key={listing.id} listing={listing} recommendationSource={tab === "top" ? state.sources[listing.id] : undefined} sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw" />)}</div>{state.page.hasMore && <div className="mt-7 text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-11 px-5">{loadingMore && <LoaderCircle size={16} className="animate-spin" />}Load more</button></div>}</>
         : <div><EmptyState title="Nothing here yet" description={tab === "nearby" ? "No active listings match that seller location. Try another location or browse all items." : "Be the first to list something."} /><Link href="/sell" className="button-primary mt-4 h-11 px-5">Sell Something</Link></div>}
     </div>
   </section>;

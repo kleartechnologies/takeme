@@ -175,6 +175,24 @@ service cloud.firestore {
       allow list: if false;
       allow create, update, delete: if false;
     }
+    match /marketplaceEvents/{eventId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin() && request.query.limit <= 100;
+      allow create, update, delete: if false;
+    }
+    match /userInterests/{uid} {
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+    match /listingTrends/{listingId} {
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+    match /intelligenceQuotas/{quotaId} {
+      allow read, write: if false;
+    }
     match /conversations/{conversationId} {
       allow get: if conversationParticipant(resource.data) || isAdmin();
       allow list: if (signedIn() && request.auth.uid in resource.data.participants || isAdmin()) && request.query.limit <= 20;

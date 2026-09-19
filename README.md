@@ -77,6 +77,12 @@ Saved listings use owner-only `users/{uid}/saved/{listingId}` records, an immuta
 
 Saved pagination and message ordering use Firestore's single-field indexes. Composite indexes were added for a future participant-scoped inbox and reporter-scoped report history. Run the new emulator test before any separately approved rules deployment. This local phase does not deploy Firebase or Vercel and does not push GitHub.
 
+## Phase 6 intelligence foundation
+
+Marketplace intent now flows through authenticated callable tracking, with authoritative Saved, bid and conversation triggers. A bounded server recommendation endpoint provides honest discovery until enough interest exists to label the feed “Recommended for You”. Detail pages show deterministic Similar items. Raw behavior and interest scores remain private. The event schema, scoring formula, cost limits, security model, future admin analytics and Flutter contract are in [mobile intelligence](docs/mobile-intelligence.md). This phase is local-only; deploy neither Functions nor rules nor the web app without separate approval.
+
+For local Phase 6 integration verification with Auth, Firestore and Functions emulators running on the demo project, run `node tests/intelligence-emulator.integration.mjs` in addition to the existing test commands above. Production rollout needs the new Functions and Firestore rules/indexes together, plus TTL setup noted in the document.
+
 ## Production deployment considerations
 
 Phase 3 source is **not deployed by this README**. Deploying only the UI or only the rules would break auctions. When Phase 3 is separately approved for production, deploy and verify the new Firestore/Storage rules, two lifecycle indexes, and six Cloud Functions before enabling the Phase 3 web build. Confirm the Firebase project and Blaze plan, Functions runtime `nodejs22`, regional availability, managed runtime permissions, App Check policy, and that all indexes have reached `READY`. Keep `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false` in Vercel and use the registered Firebase Web app's six `NEXT_PUBLIC_FIREBASE_*` values. Do not create fake production auctions or bids as smoke tests.

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states"
 import { categories } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type ListingPage, type ListingSort } from "@/lib/services/listings";
+import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { ListingCard } from "./listing-card";
 
 type Filters = { q: string; category: string; condition: string; type: string; auction: string; price: string; location: string; sort: ListingSort };
@@ -62,6 +63,9 @@ export function ExploreBrowser() {
       else url.searchParams.delete(key);
     }
     window.history.replaceState(null, "", url.pathname + url.search);
+    if (Object.keys(patch).some((field) => field !== "q")) {
+      trackMarketplaceIntent({ type: "FILTER_APPLIED", categoryId: next.category || undefined, filterKey: [next.category, next.condition, next.type, next.auction, next.price, next.sort].join("|") || "all", context: "explore" });
+    }
   }
 
   const request = useMemo(() => ({ search: filters.q, categoryId: filters.category || undefined, condition: filters.condition || undefined, listingType: filters.type || undefined, auctionStatus: filters.auction === "active" ? "active" as const : filters.auction === "scheduled" ? "scheduled" as const : undefined, location: filters.location || undefined, maxPrice: filters.price ? Number(filters.price) : undefined, sort: filters.sort, pageSize: 12 }), [filters]);
@@ -77,7 +81,7 @@ export function ExploreBrowser() {
   const loading = state.key !== requestKey;
   const activeCount = [filters.q, filters.category, filters.condition, filters.type, filters.auction, filters.price, filters.location].filter(Boolean).length;
   const reset = () => { update(defaults); setQueryInput(""); setSearchError(""); };
-  const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); update({ q: value }); };
+  const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); if (value.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: value, context: "explore" }); update({ q: value }); };
 
   async function loadMore() {
     if (!state.page.cursor) return;

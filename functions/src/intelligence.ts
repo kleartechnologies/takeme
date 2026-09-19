@@ -1,0 +1,228 @@
+import { createHash } from "node:crypto";
+import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import {
+  applyInterestSignal,
+  decayedTrend,
+  EVENT_WEIGHTS,
+  hasPersonalization,
+  rankCandidates,
+  RECOMMENDATION_VERSION,
+  type Candidate,
+  type CandidateSource,
+  type InterestProfile,
+  type MarketplaceEventType,
+  type RankableListing,
+  type Signal,
+} from "./intelligence-domain";
+
+const CLIENT_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SEARCH", "CATEGORY_VIEW", "FILTER_APPLIED", "SHARE_LISTING", "PROFILE_VIEW", "SELLER_VIEW", "RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "NOT_INTERESTED"]);
+const LISTING_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SHARE_LISTING", "RECOMMENDATION_CLICK", "NOT_INTERESTED"]);
+const SOURCES = new Set<CandidateSource>(["personalized", "trending", "recent", "similar", "nearby"]);
+const dailyClientCap = 100;
+const nowIso = () => new Date().toISOString();
+const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const clean = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, " ");
+
+function string(value: unknown, field: string, min: number, max: number) {
+  if (typeof value !== "string" || value.trim().length < min || value.trim().length > max) throw new HttpsError("invalid-argument", `${field} is invalid.`);
+  return value.trim();
+}
+
+function eventWindowMs(type: MarketplaceEventType) {
+  if (type === "VIEW_LISTING" || type === "AUCTION_VIEW") return 30 * 60_000;
+  if (type === "RECOMMENDATION_CLICK") return 10 * 60_000;
+  return 60 * 60_000;
+}
+
+interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource }
+
+export async function recordMarketplaceSignal(uid: string, signal: Signal, dedupeKey: string, envelope: EventEnvelope, now = new Date()) {
+  const db = getFirestore();
+  const eventId = hash(`${uid}|${signal.type}|${dedupeKey}`);
+  const eventRef = db.collection("marketplaceEvents").doc(eventId);
+  const interestRef = db.collection("userInterests").doc(uid);
+  const trendRef = signal.listingId && EVENT_WEIGHTS[signal.type] > 0 ? db.collection("listingTrends").doc(signal.listingId) : null;
+  const day = now.toISOString().slice(0, 10).replaceAll("-", "");
+  const quotaRef = envelope.source === "client" ? db.collection("intelligenceQuotas").doc(`${uid}_${day}`) : null;
+  return db.runTransaction(async (transaction) => {
+    const [existing, interest, trend, quota] = await Promise.all([
+      transaction.get(eventRef), transaction.get(interestRef), trendRef ? transaction.get(trendRef) : null, quotaRef ? transaction.get(quotaRef) : null,
+    ]);
+    if (existing.exists) return { accepted: false, reason: "duplicate" as const };
+    if (quotaRef && Number(quota?.data()?.count ?? 0) >= dailyClientCap) return { accepted: false, reason: "daily_limit" as const };
+    const profile = applyInterestSignal((interest.data() as InterestProfile | undefined) ?? null, signal, now);
+    const timestamp = Timestamp.fromDate(now);
+    transaction.create(eventRef, {
+      userId: uid, eventType: signal.type, source: envelope.source,
+      ...(signal.listingId ? { listingId: signal.listingId } : {}),
+      ...(signal.categoryId ? { categoryId: signal.categoryId } : {}),
+      ...(envelope.sellerId ? { sellerId: envelope.sellerId } : {}),
+      ...(signal.query ? { query: signal.query } : {}),
+      ...(signal.price !== undefined ? { price: signal.price } : {}),
+      ...(signal.listingType ? { listingType: signal.listingType, auction: signal.listingType !== "buy_now" } : {}),
+      ...(signal.exposedListingIds ? { exposedListingIds: signal.exposedListingIds } : {}),
+      ...(envelope.context ? { context: envelope.context } : {}),
+      ...(envelope.candidateSource ? { candidateSource: envelope.candidateSource } : {}),
+      createdAt: timestamp, expiresAt: Timestamp.fromMillis(now.getTime() + 90 * 86_400_000),
+    });
+    transaction.set(interestRef, { ...profile, userId: uid });
+    if (trendRef && trend) {
+      const prior = trend.data();
+      const priorScore = decayedTrend(Number(prior?.score ?? 0), typeof prior?.updatedAt === "string" ? prior.updatedAt : now.toISOString(), now);
+      transaction.set(trendRef, { listingId: signal.listingId, score: Math.min(100, priorScore + Math.min(8, EVENT_WEIGHTS[signal.type])), updatedAt: now.toISOString(), eventCount: Math.min(1_000_000, Number(prior?.eventCount ?? 0) + 1) });
+    }
+    if (quotaRef) transaction.set(quotaRef, { userId: uid, day, count: Number(quota?.data()?.count ?? 0) + 1, expiresAt: Timestamp.fromMillis(now.getTime() + 3 * 86_400_000) });
+    return { accepted: true, reason: "recorded" as const };
+  });
+}
+
+function publicListing(data: DocumentData, id: string): RankableListing & Record<string, unknown> {
+  const iso = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : typeof value === "string" ? value : null;
+  return {
+    id, sellerId: String(data.sellerId ?? ""), title: String(data.title ?? ""), description: String(data.description ?? ""), categoryId: String(data.categoryId ?? ""),
+    condition: String(data.condition ?? ""), price: Number(data.price ?? 0), listingType: String(data.listingType ?? "buy_now"), location: String(data.location ?? ""),
+    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [], status: String(data.status ?? ""), createdAt: iso(data.createdAt) ?? "", updatedAt: iso(data.updatedAt),
+    auctionStartAt: iso(data.auctionStartAt), auctionEndAt: iso(data.auctionEndAt), startingBid: data.startingBid ?? null, currentBid: data.currentBid ?? null,
+    currentBidderId: data.currentBidderId ?? null, bidCount: data.bidCount ?? null, minimumBidIncrement: data.minimumBidIncrement ?? null,
+    auctionStatus: data.auctionStatus ?? null, winnerId: data.winnerId ?? null, finalBid: data.finalBid ?? null, endedAt: iso(data.endedAt),
+  };
+}
+
+async function listingSignal(listingId: string, type: MarketplaceEventType, extra: Partial<Signal> = {}) {
+  const snapshot = await getFirestore().collection("listings").doc(listingId).get();
+  const data = snapshot.data();
+  if (!data || !["active", "ended"].includes(data.status)) return null;
+  const amount = data.listingType === "buy_now" ? Number(data.price) : Number(data.currentBid || data.startingBid || 0) / 100;
+  return { signal: { type, listingId, categoryId: String(data.categoryId ?? ""), price: amount, location: String(data.location ?? ""), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
+}
+
+export const trackMarketplaceEvent = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in to record marketplace activity.");
+  const input = request.data;
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new HttpsError("invalid-argument", "Event data is required.");
+  const data = input as Record<string, unknown>;
+  const type = data.type as MarketplaceEventType;
+  if (!CLIENT_TYPES.has(type)) throw new HttpsError("permission-denied", "This event must come from an authoritative marketplace record.");
+  if (Object.keys(data).some((key) => !["type", "listingId", "categoryId", "query", "targetId", "context", "candidateSource", "listingIds", "filterKey"].includes(key))) throw new HttpsError("invalid-argument", "Unexpected event field.");
+  const now = new Date();
+  let signal: Signal = { type };
+  let sellerId: string | undefined;
+  let scope: string;
+  if (LISTING_TYPES.has(type)) {
+    const listingId = string(data.listingId, "Listing", 1, 128);
+    const detail = await listingSignal(listingId, type);
+    if (!detail || (type !== "NOT_INTERESTED" && detail.signal.type === "AUCTION_VIEW" && detail.signal.listingType === "buy_now")) throw new HttpsError("failed-precondition", "Listing is unavailable for this event.");
+    if (detail.sellerId === uid) return { accepted: false, reason: "own_listing" };
+    signal = detail.signal; sellerId = detail.sellerId; scope = listingId;
+  } else if (type === "SEARCH") {
+    const query = clean(string(data.query, "Search", 2, 60));
+    if (query.length < 2) throw new HttpsError("invalid-argument", "Search must contain at least two characters.");
+    signal = { type, query }; scope = query;
+  } else if (type === "CATEGORY_VIEW") {
+    const categoryId = string(data.categoryId, "Category", 1, 60);
+    signal = { type, categoryId }; scope = categoryId;
+  } else if (type === "FILTER_APPLIED") {
+    const filterKey = string(data.filterKey, "Filter", 1, 120);
+    const categoryId = typeof data.categoryId === "string" && data.categoryId.length <= 60 ? data.categoryId : undefined;
+    signal = { type, categoryId }; scope = hash(filterKey);
+  } else if (type === "PROFILE_VIEW" || type === "SELLER_VIEW") {
+    const targetId = string(data.targetId, "Profile", 1, 128);
+    if (type === "SELLER_VIEW" && targetId === uid) return { accepted: false, reason: "own_profile" };
+    if (!(await getFirestore().collection("users").doc(targetId).get()).exists) throw new HttpsError("not-found", "Profile is unavailable.");
+    scope = targetId;
+  } else if (type === "RECOMMENDATION_IMPRESSION") {
+    if (!Array.isArray(data.listingIds) || data.listingIds.length < 1 || data.listingIds.length > 8 || data.listingIds.some((id) => typeof id !== "string" || id.length > 128 || id.length < 1)) throw new HttpsError("invalid-argument", "Impression batch must contain 1–8 listings.");
+    const ids = [...new Set(data.listingIds as string[])];
+    signal = { type, exposedListingIds: ids };
+    scope = ids.join(",");
+  } else throw new HttpsError("invalid-argument", "Unsupported event.");
+  const context = typeof data.context === "string" && ["home", "detail", "explore", "profile"].includes(data.context) ? data.context : undefined;
+  const candidateSource = typeof data.candidateSource === "string" && SOURCES.has(data.candidateSource as CandidateSource) ? data.candidateSource as CandidateSource : undefined;
+  const bucket = Math.floor(now.getTime() / eventWindowMs(type));
+  return recordMarketplaceSignal(uid, signal, `${type}|${scope}|${bucket}`, { source: "client", sellerId, context, candidateSource }, now);
+});
+
+export const onSavedListingCreated = onDocumentCreated("users/{uid}/saved/{listingId}", async (event) => {
+  const uid = event.params.uid;
+  const listingId = event.params.listingId;
+  const detail = await listingSignal(listingId, "SAVE_LISTING");
+  if (!detail || detail.sellerId === uid) return;
+  await recordMarketplaceSignal(uid, detail.signal, `saved-create|${event.id}`, { source: "saved", sellerId: detail.sellerId });
+});
+
+export const onSavedListingDeleted = onDocumentDeleted("users/{uid}/saved/{listingId}", async (event) => {
+  const uid = event.params.uid;
+  const listingId = event.params.listingId;
+  const detail = await listingSignal(listingId, "UNSAVE_LISTING");
+  await recordMarketplaceSignal(uid, detail?.signal ?? { type: "UNSAVE_LISTING", listingId }, `saved-delete|${event.id}`, { source: "saved", sellerId: detail?.sellerId });
+});
+
+export const onAuctionBidCreated = onDocumentCreated("listings/{listingId}/bids/{bidId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || typeof data.bidderId !== "string") return;
+  const detail = await listingSignal(event.params.listingId, "BID");
+  if (!detail || detail.sellerId === data.bidderId) return;
+  await recordMarketplaceSignal(data.bidderId, detail.signal, `bid|${event.params.bidId}`, { source: "bid", sellerId: detail.sellerId });
+});
+
+export const onConversationStarted = onDocumentCreated("conversations/{conversationId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || typeof data.buyerId !== "string" || typeof data.listingId !== "string") return;
+  const detail = await listingSignal(data.listingId, "MESSAGE_STARTED");
+  if (!detail || detail.sellerId !== data.sellerId) return;
+  await recordMarketplaceSignal(data.buyerId, detail.signal, `conversation|${event.params.conversationId}`, { source: "conversation", sellerId: detail.sellerId });
+});
+
+export const onConversationMessageCreated = onDocumentCreated("conversations/{conversationId}/messages/{messageId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || typeof data.senderId !== "string") return;
+  const conversation = (await getFirestore().collection("conversations").doc(event.params.conversationId).get()).data();
+  // A seller's replies are not evidence of the seller's interest in their own listing.
+  if (!conversation || data.senderId !== conversation.buyerId) return;
+  const detail = await listingSignal(String(conversation.listingId), "MESSAGE_SENT");
+  if (!detail) return;
+  await recordMarketplaceSignal(data.senderId, detail.signal, `message|${event.params.messageId}`, { source: "message", sellerId: detail.sellerId });
+});
+
+export const getMarketplaceRecommendations = onCall(async (request) => {
+  const db = getFirestore();
+  const uid = request.auth?.uid;
+  const now = new Date();
+  const profileSnapshot = uid ? await db.collection("userInterests").doc(uid).get() : null;
+  const profile = (profileSnapshot?.data() as InterestProfile | undefined) ?? null;
+  const personalized = hasPersonalization(profile, now);
+  const effectiveProfile = personalized ? profile : null;
+  const savedIds = new Set<string>();
+  if (uid) {
+    const saved = await db.collection("users").doc(uid).collection("saved").orderBy("savedAt", "desc").limit(12).get();
+    for (const entry of saved.docs) savedIds.add(entry.id);
+  }
+  const recent = await db.collection("listings").where("status", "==", "active").where("facetKeys", "array-contains", "*|*|*|*").orderBy("createdAt", "desc").limit(16).get();
+  const sources = new Map<string, Candidate>();
+  for (const item of recent.docs) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "recent", trendScore: 0 });
+  if (personalized && profile) {
+    const categories = Object.entries(profile.category).filter(([, score]) => score > 1).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const pages = await Promise.all(categories.map(([categoryId]) => db.collection("listings").where("status", "==", "active").where("facetKeys", "array-contains", `${categoryId}|*|*|*`).orderBy("createdAt", "desc").limit(8).get()));
+    for (const page of pages) for (const item of page.docs) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "personalized", trendScore: 0 });
+  }
+  const cutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const trends = await db.collection("listingTrends").where("updatedAt", ">=", cutoff).orderBy("updatedAt", "desc").limit(12).get();
+  const trendRefs = trends.docs.map((item) => db.collection("listings").doc(item.id));
+  if (trendRefs.length) {
+    const trendListings = await db.getAll(...trendRefs);
+    for (let index = 0; index < trendListings.length; index += 1) {
+      const listing = trendListings[index];
+      const trend = trends.docs[index];
+      if (!listing?.exists || !trend) continue;
+      const previous = sources.get(listing.id);
+      const score = decayedTrend(Number(trend.data().score ?? 0), String(trend.data().updatedAt ?? nowIso()), now);
+      sources.set(listing.id, { listing: previous?.listing ?? publicListing(listing.data()!, listing.id), source: previous?.source === "personalized" ? "personalized" : "trending", trendScore: score });
+    }
+  }
+  const eligible = [...sources.values()].filter((candidate) => !uid || candidate.listing.sellerId !== uid);
+  const ranked = rankCandidates(eligible, effectiveProfile, now, savedIds, 8);
+  return { version: RECOMMENDATION_VERSION, mode: personalized ? "personalized" : "discovery", items: ranked.map((candidate) => ({ listing: candidate.listing, candidateSource: candidate.source })) };
+});

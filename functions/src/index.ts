@@ -341,3 +341,13 @@ export const advanceAuctionLifecycle = onSchedule({ schedule: "every 1 minutes",
 });
 
 export const _test = { parseListingPayload, createSearchTokens, createFacetKeys, advanceListing, advanceDueAuctions };
+
+export {
+  trackMarketplaceEvent,
+  getMarketplaceRecommendations,
+  onSavedListingCreated,
+  onSavedListingDeleted,
+  onAuctionBidCreated,
+  onConversationStarted,
+  onConversationMessageCreated,
+} from "./intelligence";

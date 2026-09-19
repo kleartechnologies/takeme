@@ -21,7 +21,7 @@ These are product patterns, not HTML components. Reproduce their hierarchy and s
 
 ## Honest data and component states
 
-- Top Picks currently means recent active listings, not personalization.
+- Top Picks means discovery from recent and trending active listings. It becomes “Recommended for You” only after the server reports sufficient personalized interest; see [mobile intelligence](mobile-intelligence.md).
 - Nearby uses the seller's entered location text, not GPS or distance. Ask for a location before querying.
 - Auctions shows actual auction listings only. Free items remain an explanation state until zero-price listings are supported.
 - Loading uses listing-card skeletons. Empty states explain what is absent and offer a real Sell or Explore action. Errors use plain language and Retry; never show raw Firebase errors.

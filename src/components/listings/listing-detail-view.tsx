@@ -1,18 +1,20 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, MapPin, ShieldCheck, UserRound } from "lucide-react";
+import { CalendarDays, ChevronLeft, MapPin, Share2, ShieldCheck, UserRound } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { AuctionPanel } from "@/components/listings/auction-panel";
 import { SaveButton } from "@/components/saved/save-button";
 import { ListingSection } from "@/components/listings/listing-section";
+import { SimilarListings } from "@/components/listings/similar-listings";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { getCategoryName } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getListingsBySeller, subscribeToListing } from "@/lib/services/listings";
+import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { getUserProfile } from "@/lib/services/users";
 import { useCurrentTime } from "@/lib/use-current-time";
 import type { Listing, UserProfile } from "@/types/marketplace";
@@ -25,6 +27,27 @@ export function ListingDetailView({ id, created = false }: { id: string; created
   const { user } = useAuth();
   const [state, setState] = useState<{ loading: boolean; listing: Listing | null; seller: UserProfile | null; related: Listing[]; error: string }>({ loading: true, listing: null, seller: null, related: [], error: "" });
   const [selectedImage, setSelectedImage] = useState(0);
+  const [shareMessage, setShareMessage] = useState("");
+  const trackedView = useRef("");
+
+  useEffect(() => {
+    const listing = state.listing;
+    if (!user || !listing || listing.status !== "active") return;
+    const key = `${user.uid}:${listing.id}:${listing.listingType}`;
+    if (trackedView.current === key) return;
+    trackedView.current = key;
+    trackMarketplaceIntent({ type: listing.listingType === "buy_now" ? "VIEW_LISTING" : "AUCTION_VIEW", listingId: listing.id, context: "detail" });
+  }, [user, state.listing]);
+
+  async function share() {
+    if (!state.listing) return;
+    const url = window.location.origin + `/listings/${state.listing.id}`;
+    try {
+      if (navigator.share) await navigator.share({ title: state.listing.title, url });
+      else { await navigator.clipboard.writeText(url); setShareMessage("Link copied"); }
+      trackMarketplaceIntent({ type: "SHARE_LISTING", listingId: state.listing.id, context: "detail" });
+    } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) setShareMessage("Could not share this listing."); }
+  }
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -77,12 +100,15 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           {isAuction ? <AuctionPanel listing={listing} userId={user?.uid} owner={owner} /> : <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><strong>Purchasing is not available yet.</strong> This listing is for browsing only while checkout is being prepared. Do not send payment outside TAKEME.</div>}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
           {!owner && listing.status === "active" && <SaveButton listingId={listing.id} />}
+          <button type="button" onClick={() => void share()} className="button-secondary mt-3 min-h-12 w-full"><Share2 size={18} /> Share listing</button>
+          {shareMessage && <p role="status" className="mt-2 text-xs text-[var(--takeme-gray)]">{shareMessage}</p>}
           <Link href={`/sellers/${listing.sellerId}`} className="mt-6 flex items-center gap-3 border-t border-stone-100 pt-5"><span className="relative grid size-11 place-items-center overflow-hidden rounded-full bg-stone-100">{state.seller?.photoURL ? <Image src={state.seller.photoURL} alt="" fill sizes="44px" className="object-cover" /> : <UserRound size={20} />}</span><div><p className="text-sm font-bold">{state.seller?.displayName ?? "TAKEME seller"}</p><p className="text-xs text-stone-500">View seller profile</p></div></Link>
           <div className="mt-5 grid gap-2 text-xs leading-5 text-[var(--takeme-gray)]"><p className="flex gap-2"><ShieldCheck size={16} className="shrink-0 text-[var(--takeme-dark-green)]" /> {isAuction ? "Bids and results are validated by trusted server logic. Payment is not active yet." : "Checkout is not active yet. Never send payment based on this preview."}</p><p className="flex gap-2"><CalendarDays size={16} className="shrink-0" /> Listed {new Date(listing.createdAt).toLocaleDateString("en-MY")}</p></div>
         </aside>
         <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] sm:p-7 lg:col-start-1 lg:row-start-2"><h2 className="text-xl font-bold">About this item</h2><p className="mt-3 whitespace-pre-wrap leading-7 text-[var(--takeme-gray)]">{listing.description}</p><div className="mt-6 grid grid-cols-2 gap-5 border-t border-gray-100 pt-6 text-sm"><Fact label="Condition" value={listing.condition} /><Fact label="Category" value={getCategoryName(listing.categoryId)} /><Fact label="Listing type" value={isAuction ? "Auction" : "Fixed price"} /><Fact label="Status" value={listing.auctionStatus === "scheduled" ? "Scheduled" : listing.auctionStatus === "cancelled" ? "Cancelled" : listing.status === "active" ? "Live" : listing.status === "ended" ? "Ended" : listing.status === "removed" ? "Removed" : listing.status === "sold" ? "Sold" : "Draft"} /><Fact label="Published" value={new Date(listing.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })} /></div></section>
       </div>
       {state.related.length > 0 && <div className="mt-6"><ListingSection title="More from this seller" listings={state.related} /></div>}
+      {listing.status === "active" && <SimilarListings listing={listing} />}
     </main>
   );
 }

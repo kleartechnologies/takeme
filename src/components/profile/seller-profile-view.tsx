@@ -4,14 +4,17 @@ import { CalendarDays, MapPin, UserRound } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { ListingCard } from "@/components/listings/listing-card";
+import { useAuth } from "@/components/auth/auth-provider";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getListingsBySeller } from "@/lib/services/listings";
 import { getUserProfile } from "@/lib/services/users";
+import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import type { Listing, UserProfile } from "@/types/marketplace";
 
 export function SellerProfileView({ uid }: { uid: string }) {
+  const { user } = useAuth();
   const [state, setState] = useState<{ loading: boolean; profile: UserProfile | null; listings: Listing[]; error: string }>({ loading: true, profile: null, listings: [], error: "" });
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -19,6 +22,7 @@ export function SellerProfileView({ uid }: { uid: string }) {
     Promise.all([getUserProfile(uid), getListingsBySeller(uid)]).then(([profile, listings]) => { if (active) setState({ loading: false, profile, listings, error: "" }); }).catch((error: unknown) => { if (active) setState({ loading: false, profile: null, listings: [], error: error instanceof Error ? error.message : "Seller profile could not be loaded." }); });
     return () => { active = false; };
   }, [uid]);
+  useEffect(() => { if (user && user.uid !== uid && state.profile) trackMarketplaceIntent({ type: "SELLER_VIEW", targetId: uid, context: "profile" }); }, [user, uid, state.profile]);
 
   if (!isFirebaseConfigured) return <FirebaseSetupState />;
   if (state.loading) return <div><div className="min-h-56 animate-pulse rounded-3xl bg-stone-100" /><div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <ListingSkeleton key={index} />)}</div></div>;
