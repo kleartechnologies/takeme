@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -29,6 +30,7 @@ import {
   validateListingInput,
 } from "@/lib/listing-validation";
 import type { Listing, ListingInput } from "@/types/marketplace";
+import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
 
@@ -65,7 +67,12 @@ function toIso(value: unknown) {
   return new Date().toISOString();
 }
 
-function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { id: string; data(): DocumentData }): Listing {
+function toOptionalIso(value: unknown) {
+  if (value == null) return null;
+  return toIso(value);
+}
+
+export function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { id: string; data(): DocumentData }): Listing {
   const data = snapshot.data();
   return {
     id: snapshot.id,
@@ -83,6 +90,17 @@ function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { id: stri
     status: data.status,
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
+    auctionStartAt: data.auctionStartAt ? toIso(data.auctionStartAt) : undefined,
+    auctionEndAt: data.auctionEndAt ? toIso(data.auctionEndAt) : undefined,
+    startingBid: Number.isSafeInteger(data.startingBid) ? data.startingBid : undefined,
+    currentBid: Number.isSafeInteger(data.currentBid) ? data.currentBid : undefined,
+    currentBidderId: typeof data.currentBidderId === "string" ? data.currentBidderId : data.currentBidderId === null ? null : undefined,
+    bidCount: Number.isSafeInteger(data.bidCount) ? data.bidCount : undefined,
+    minimumBidIncrement: Number.isSafeInteger(data.minimumBidIncrement) ? data.minimumBidIncrement : undefined,
+    auctionStatus: data.auctionStatus,
+    winnerId: typeof data.winnerId === "string" ? data.winnerId : data.winnerId === null ? null : undefined,
+    finalBid: Number.isSafeInteger(data.finalBid) ? data.finalBid : data.finalBid === null ? null : undefined,
+    endedAt: toOptionalIso(data.endedAt),
     searchTokens: data.searchTokens,
     facetKeys: data.facetKeys,
     locationKey: data.locationKey,
@@ -126,6 +144,10 @@ export async function getListing(id: string) {
   return snapshot.exists() ? fromDocument(snapshot) : null;
 }
 
+export function subscribeToListing(id: string, onChange: (listing: Listing | null) => void, onError: (error: Error) => void) {
+  return onSnapshot(doc(requireDatabase(), "listings", id), (snapshot) => onChange(snapshot.exists() ? fromDocument(snapshot) : null), (error) => onError(new Error(error.message)));
+}
+
 export async function getListingsBySeller(sellerId: string, includeRemoved = false) {
   const constraints: QueryConstraint[] = [where("sellerId", "==", sellerId)];
   if (!includeRemoved) constraints.push(where("status", "==", "active"));
@@ -152,22 +174,24 @@ async function resizeImage(file: File) {
 async function uploadListingImages(uid: string, listingId: string, files: File[]) {
   const services = requireServices();
   const uploaded: { url: string; fullPath: string }[] = [];
-  for (const file of files) {
-    const processed = await resizeImage(file);
-    const filename = `${crypto.randomUUID()}.${processed.extension}`;
-    const objectRef = ref(services.storage, `users/${uid}/listings/${listingId}/${filename}`);
-    await uploadBytes(objectRef, processed.blob, { contentType: processed.contentType, cacheControl: "public,max-age=31536000,immutable" });
-    try {
-      uploaded.push({ url: await getDownloadURL(objectRef), fullPath: objectRef.fullPath });
-    } catch (error) {
-      await deleteObject(objectRef).catch(() => undefined);
-      throw error;
+  try {
+    for (const file of files) {
+      const processed = await resizeImage(file);
+      const filename = `${crypto.randomUUID()}.${processed.extension}`;
+      const objectRef = ref(services.storage, `users/${uid}/listings/${listingId}/${filename}`);
+      await uploadBytes(objectRef, processed.blob, { contentType: processed.contentType, cacheControl: "public,max-age=31536000,immutable" });
+      const entry = { url: "", fullPath: objectRef.fullPath };
+      uploaded.push(entry);
+      entry.url = await getDownloadURL(objectRef);
     }
+  } catch (error) {
+    await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
+    throw error;
   }
   return uploaded;
 }
 
-function prepareListing(input: ListingInput) {
+function prepareBuyNowListing(input: Extract<ListingInput, { listingType: "buy_now" }>) {
   return {
     title: input.title.trim(),
     description: input.description.trim(),
@@ -188,18 +212,32 @@ export async function createListing(input: ListingInput, files: File[]) {
   const services = requireServices();
   const errors = [...validateListingInput(input), ...validateImageFiles(files)];
   if (errors.length) throw new Error(errors[0]);
-  const listingRef = doc(collection(services.db, "listings"));
-  const data = prepareListing(input);
+  const listingRef = input.listingType === "auction" ? null : doc(collection(services.db, "listings"));
   const uploaded: { url: string; fullPath: string }[] = [];
+  let listingId = "";
 
   try {
-    await setDoc(listingRef, { id: listingRef.id, sellerId: services.user.uid, ...data, imageUrls: [], status: "draft", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-    uploaded.push(...await uploadListingImages(services.user.uid, listingRef.id, files));
-    await updateDoc(listingRef, { imageUrls: uploaded.map((item) => item.url), status: "active", updatedAt: serverTimestamp() });
-    return listingRef.id;
+    if (input.listingType === "auction") {
+      listingId = await createAuctionDraft(input);
+    } else {
+      listingId = listingRef!.id;
+      await setDoc(listingRef!, { id: listingId, sellerId: services.user.uid, ...prepareBuyNowListing(input), imageUrls: [], status: "draft", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    }
+    uploaded.push(...await uploadListingImages(services.user.uid, listingId, files));
+    const imageUrls = uploaded.map((item) => item.url);
+    if (input.listingType === "auction") await publishAuction(listingId, imageUrls);
+    else await updateDoc(listingRef!, { imageUrls, status: "active", updatedAt: serverTimestamp() });
+    return listingId;
   } catch (error) {
     await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
-    try { await deleteDoc(listingRef); } catch { await updateDoc(listingRef, { status: "removed", updatedAt: serverTimestamp() }).catch(() => undefined); }
+    if (listingId) {
+      if (input.listingType === "auction") {
+        await cancelAuctionListing(listingId).catch(() => undefined);
+      } else {
+        const failedRef = doc(services.db, "listings", listingId);
+        try { await deleteDoc(failedRef); } catch { await updateDoc(failedRef, { status: "removed", updatedAt: serverTimestamp() }).catch(() => undefined); }
+      }
+    }
     throw error;
   }
 }
@@ -222,7 +260,9 @@ export async function updateListing(id: string, input: ListingInput, retainedIma
 
   const uploaded = await uploadListingImages(services.user.uid, id, newFiles);
   try {
-    await updateDoc(doc(services.db, "listings", id), { ...prepareListing(input), imageUrls: [...retainedImageUrls, ...uploaded.map((item) => item.url)], updatedAt: serverTimestamp() });
+    const imageUrls = [...retainedImageUrls, ...uploaded.map((item) => item.url)];
+    if (input.listingType === "auction") await saveAuction(id, input, imageUrls);
+    else await updateDoc(doc(services.db, "listings", id), { ...prepareBuyNowListing(input), imageUrls, updatedAt: serverTimestamp() });
   } catch (error) {
     await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
     throw error;
@@ -240,5 +280,6 @@ export async function deleteListing(id: string) {
   const current = await getListing(id);
   if (!current) throw new Error("Listing not found.");
   if (current.sellerId !== services.user.uid) throw new Error("You are not allowed to remove this listing.");
-  await updateDoc(doc(services.db, "listings", id), { status: "removed", updatedAt: serverTimestamp() });
+  if (current.listingType === "auction" || current.listingType === "buy_now_and_auction") await cancelAuctionListing(id);
+  else await updateDoc(doc(services.db, "listings", id), { status: "removed", updatedAt: serverTimestamp() });
 }

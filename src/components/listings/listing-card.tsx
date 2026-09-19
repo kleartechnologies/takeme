@@ -8,7 +8,7 @@ import type { Listing } from "@/types/marketplace";
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 0 });
 
 export function ListingCard({ listing }: { listing: Listing }) {
-  const isAuction = listing.listingType === "auction";
+  const isAuction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[var(--takeme-shadow-sm)] transition duration-300 hover:-translate-y-1 hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]">
       <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
@@ -25,13 +25,13 @@ export function ListingCard({ listing }: { listing: Listing }) {
       </div>
       <Link href={`/listings/${listing.id}`} className="flex flex-1 flex-col p-4">
         <p className="line-clamp-2 min-h-10 font-semibold leading-5 tracking-[-0.01em] text-[var(--takeme-charcoal)]">{listing.title}</p>
-        <p className="mt-2 text-lg font-bold tracking-tight text-[var(--takeme-charcoal)]">{isAuction ? money.format(listing.currentBid ?? listing.price) : money.format(listing.price)}</p>
-        {isAuction && <p className="mt-0.5 text-xs font-medium text-[var(--takeme-dark-green)]">Current bid · {listing.bidCount} bids</p>}
+        <p className="mt-2 text-lg font-bold tracking-tight text-[var(--takeme-charcoal)]">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>
+        {isAuction && <p className="mt-0.5 text-xs font-medium text-[var(--takeme-dark-green)]">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} · {listing.bidCount ?? 0} bids</p>}
         <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs text-[var(--takeme-gray)]">
           <span className="flex min-w-0 items-center gap-1"><MapPin size={13} className="shrink-0" /><span className="truncate">{listing.location}</span></span>
           <span className="shrink-0 rounded-full bg-stone-100 px-2 py-1">{listing.condition}</span>
         </div>
-        {isAuction && <p className="mt-3 flex items-center gap-1 border-t border-stone-100 pt-3 text-xs font-semibold text-stone-600"><Clock3 size={13} /> Ends soon</p>}
+        {isAuction && <p className="mt-3 flex items-center gap-1 border-t border-stone-100 pt-3 text-xs font-semibold text-stone-600"><Clock3 size={13} /> {listing.auctionStatus === "scheduled" ? "Starts" : "Ends"} {listing.auctionStatus === "cancelled" ? "— cancelled" : listing.auctionEndAt ? new Date(listing.auctionStatus === "scheduled" ? listing.auctionStartAt! : listing.auctionEndAt).toLocaleString("en-MY", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "soon"}</p>}
       </Link>
     </article>
   );

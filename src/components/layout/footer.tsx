@@ -16,7 +16,7 @@ export function Footer() {
         </div>
         <div>
           <p className="text-sm font-bold text-white">Marketplace status</p>
-          <p className="mt-3 text-sm leading-6 text-gray-400">Real seller listings are live when Firebase is connected. Checkout and bidding are not available yet.</p>
+          <p className="mt-3 text-sm leading-6 text-gray-400">Buy-now listings and auctions are supported. Checkout and payments are not active yet.</p>
         </div>
       </div>
     </footer>

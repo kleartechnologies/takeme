@@ -10,6 +10,17 @@ service firebase.storage {
     function listing(listingId) {
       return firestore.get(/databases/(default)/documents/listings/$(listingId)).data;
     }
+    function canManageListingMedia(uid, listingId) {
+      return isOwner(uid)
+        && listing(listingId).sellerId == uid
+        && (
+          (listing(listingId).listingType == 'buy_now' && listing(listingId).status in ['draft', 'active'])
+          || (listing(listingId).listingType in ['auction', 'buy_now_and_auction']
+            && listing(listingId).bidCount == 0
+            && (listing(listingId).status == 'draft'
+              || (listing(listingId).auctionStatus == 'scheduled' && request.time < listing(listingId).auctionStartAt)))
+        );
+    }
 
     match /users/{uid}/profile/{fileName} {
       allow read: if true;
@@ -18,12 +29,9 @@ service firebase.storage {
     }
 
     match /users/{uid}/listings/{listingId}/{fileName} {
-      allow read: if listing(listingId).status == 'active' || (isOwner(uid) && listing(listingId).sellerId == uid);
-      allow create, update: if isOwner(uid)
-        && listing(listingId).sellerId == uid
-        && listing(listingId).status in ['draft', 'active']
-        && validImage();
-      allow delete: if isOwner(uid) && listing(listingId).sellerId == uid;
+      allow read: if listing(listingId).status in ['active', 'ended'] || (isOwner(uid) && listing(listingId).sellerId == uid);
+      allow create, update: if canManageListingMedia(uid, listingId) && validImage();
+      allow delete: if canManageListingMedia(uid, listingId);
     }
   }
 }

@@ -38,6 +38,14 @@
       { "fieldPath": "sellerId", "order": "ASCENDING" },
       { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "auctionStatus", "order": "ASCENDING" },
+      { "fieldPath": "auctionStartAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "auctionStatus", "order": "ASCENDING" },
+      { "fieldPath": "auctionEndAt", "order": "ASCENDING" }
     ]}
   ],
   "fieldOverrides": []

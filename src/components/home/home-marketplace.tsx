@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, MapPin, Sparkles } from "lucide-react";
+import { MapPin, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ListingSection } from "@/components/listings/listing-section";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
@@ -10,11 +10,11 @@ import { getActiveListings } from "@/lib/services/listings";
 import type { Listing } from "@/types/marketplace";
 
 export function HomeMarketplace() {
-  const [state, setState] = useState<{ loading: boolean; listings: Listing[]; error: string }>({ loading: true, listings: [], error: "" });
+  const [state, setState] = useState<{ loading: boolean; listings: Listing[]; auctions: Listing[]; error: string }>({ loading: true, listings: [], auctions: [], error: "" });
   useEffect(() => {
     if (!isFirebaseConfigured) return;
     let active = true;
-    getActiveListings({ sort: "newest", pageSize: 8 }).then((page) => { if (active) setState({ loading: false, listings: page.listings, error: "" }); }).catch((error: unknown) => { if (active) setState({ loading: false, listings: [], error: error instanceof Error ? error.message : "Listings could not be loaded." }); });
+    Promise.all([getActiveListings({ sort: "newest", pageSize: 8 }), getActiveListings({ listingType: "auction", pageSize: 4 })]).then(([page, auctions]) => { if (active) setState({ loading: false, listings: page.listings, auctions: auctions.listings, error: "" }); }).catch((error: unknown) => { if (active) setState({ loading: false, listings: [], auctions: [], error: error instanceof Error ? error.message : "Listings could not be loaded." }); });
     return () => { active = false; };
   }, []);
 
@@ -24,7 +24,8 @@ export function HomeMarketplace() {
 
   return <>
     {state.listings.length ? <ListingSection eyebrow="Fresh finds" title="Newly listed" description="The latest active listings from TAKEME sellers." listings={state.listings} /> : <section className="py-10"><p className="eyebrow">Fresh finds</p><h2 className="section-title mb-5">Newly listed</h2><EmptyState title="The marketplace is ready" description="No active listings have been published yet. Be the first seller to add one." /></section>}
-    <section className="grid gap-4 pb-12 md:grid-cols-3"><FutureState icon={<Sparkles size={20} />} title="Featured listings" text="No featured placements yet." /><FutureState icon={<Clock3 size={20} />} title="Ending soon" text="Auctions arrive in Phase 3." /><FutureState icon={<MapPin size={20} />} title="Near you" text="Location-aware discovery is planned." /></section>
+    {state.auctions.length > 0 && <ListingSection eyebrow="Bid on something good" title="Explore auctions" description="Live and upcoming auctions from TAKEME sellers." listings={state.auctions} />}
+    <section className="grid gap-4 pb-12 md:grid-cols-2"><FutureState icon={<Sparkles size={20} />} title="Featured listings" text="No featured placements yet." /><FutureState icon={<MapPin size={20} />} title="Near you" text="Location-aware discovery is planned." /></section>
   </>;
 }
 

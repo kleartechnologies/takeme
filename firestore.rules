@@ -4,6 +4,7 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
+    function parentListing(listingId) { return get(/databases/$(database)/documents/listings/$(listingId)).data; }
 
     function validPublicProfile(data, uid) {
       return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'location', 'createdAt', 'updatedAt'])
@@ -18,9 +19,9 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
-    function validListing(data, listingId) {
+    function validCommonListing(data, listingId) {
       return data.keys().hasAll(['id', 'sellerId', 'title', 'description', 'categoryId', 'condition', 'price', 'listingType', 'location', 'locationKey', 'imageUrls', 'searchTokens', 'facetKeys', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'sellerId', 'title', 'description', 'categoryId', 'condition', 'price', 'listingType', 'location', 'locationKey', 'latitude', 'longitude', 'imageUrls', 'searchTokens', 'facetKeys', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'sellerId', 'title', 'description', 'categoryId', 'condition', 'price', 'listingType', 'location', 'locationKey', 'latitude', 'longitude', 'imageUrls', 'searchTokens', 'facetKeys', 'status', 'createdAt', 'updatedAt', 'auctionStartAt', 'auctionEndAt', 'startingBid', 'currentBid', 'currentBidderId', 'bidCount', 'minimumBidIncrement', 'auctionStatus', 'winnerId', 'finalBid', 'endedAt'])
         && data.id == listingId
         && data.sellerId is string
         && data.title is string && data.title.size() >= 6 && data.title.size() <= 80
@@ -28,7 +29,7 @@ service cloud.firestore {
         && data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 60
         && data.condition in ['New', 'Like new', 'Good', 'Fair']
         && (data.price is int || data.price is float) && data.price > 0 && data.price <= 10000000
-        && data.listingType == 'buy_now'
+        && data.listingType in ['buy_now', 'auction', 'buy_now_and_auction']
         && data.location is string && data.location.size() >= 2 && data.location.size() <= 120
         && data.locationKey is string && data.locationKey.size() <= 120
         && (!data.keys().hasAny(['latitude']) || (data.latitude is int || data.latitude is float))
@@ -36,23 +37,56 @@ service cloud.firestore {
         && data.imageUrls is list && data.imageUrls.size() <= 8
         && data.searchTokens is list && data.searchTokens.size() <= 100
         && data.facetKeys is list && data.facetKeys.size() <= 16
-        && data.status in ['draft', 'active', 'removed']
+        && data.status in ['draft', 'active', 'sold', 'ended', 'removed']
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
-    function ownerUpdateAllowed() {
+    function hasAuctionFields(data) {
+      return data.keys().hasAll(['auctionStartAt', 'auctionEndAt', 'startingBid', 'currentBid', 'currentBidderId', 'bidCount', 'minimumBidIncrement', 'auctionStatus', 'winnerId', 'finalBid', 'endedAt']);
+    }
+
+    function validAuctionListing(data) {
+      return data.listingType in ['auction', 'buy_now_and_auction']
+        && hasAuctionFields(data)
+        && data.auctionStartAt is timestamp
+        && data.auctionEndAt is timestamp
+        && data.auctionEndAt > data.auctionStartAt
+        && data.startingBid is int && data.startingBid > 0 && data.startingBid <= 1000000000
+        && data.minimumBidIncrement is int && data.minimumBidIncrement > 0 && data.minimumBidIncrement <= 1000000000
+        && data.currentBid is int && data.currentBid >= 0 && data.currentBid <= 1000000000
+        && data.bidCount is int && data.bidCount >= 0
+        && (data.currentBidderId == null || data.currentBidderId is string)
+        && data.auctionStatus in ['scheduled', 'active', 'ended', 'cancelled']
+        && (data.winnerId == null || data.winnerId is string)
+        && (data.finalBid == null || (data.finalBid is int && data.finalBid > 0))
+        && (data.endedAt == null || data.endedAt is timestamp)
+        && ((data.bidCount == 0 && data.currentBid == 0 && data.currentBidderId == null)
+          || (data.bidCount > 0 && data.currentBid >= data.startingBid && data.currentBidderId is string));
+    }
+
+    function validBuyNowListing(data) {
+      return data.listingType == 'buy_now'
+        && !data.keys().hasAny(['auctionStartAt', 'auctionEndAt', 'startingBid', 'currentBid', 'currentBidderId', 'bidCount', 'minimumBidIncrement', 'auctionStatus', 'winnerId', 'finalBid', 'endedAt']);
+    }
+
+    function validListing(data, listingId) {
+      return validCommonListing(data, listingId)
+        && (validBuyNowListing(data) || validAuctionListing(data));
+    }
+
+    function buyNowOwnerUpdateAllowed() {
       return signedIn()
+        && resource.data.listingType == 'buy_now'
+        && request.resource.data.listingType == 'buy_now'
         && resource.data.sellerId == request.auth.uid
         && request.resource.data.sellerId == resource.data.sellerId
         && request.resource.data.id == resource.data.id
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'categoryId', 'condition', 'price', 'location', 'locationKey', 'latitude', 'longitude', 'imageUrls', 'searchTokens', 'facetKeys', 'status', 'updatedAt'])
-        && (
-          (resource.data.status == 'draft' && request.resource.data.status in ['draft', 'active', 'removed'])
+        && ((resource.data.status == 'draft' && request.resource.data.status in ['draft', 'active', 'removed'])
           || (resource.data.status == 'active' && request.resource.data.status in ['active', 'removed'])
-          || (resource.data.status == 'removed' && request.resource.data.status == 'removed')
-        )
+          || (resource.data.status == 'removed' && request.resource.data.status == 'removed'))
         && (request.resource.data.status != 'active' || request.resource.data.imageUrls.size() >= 1);
     }
 
@@ -68,16 +102,28 @@ service cloud.firestore {
     }
 
     match /listings/{listingId} {
-      allow read: if resource.data.status == 'active'
+      allow read: if resource.data.status in ['active', 'ended']
         || (signedIn() && resource.data.sellerId == request.auth.uid)
         || isAdmin();
       allow create: if signedIn()
+        && request.resource.data.listingType == 'buy_now'
         && request.resource.data.sellerId == request.auth.uid
         && request.resource.data.status == 'draft'
         && request.resource.data.imageUrls.size() == 0
         && validListing(request.resource.data, listingId);
-      allow update: if (ownerUpdateAllowed() && validListing(request.resource.data, listingId)) || isAdmin();
-      allow delete: if (signedIn() && resource.data.sellerId == request.auth.uid && resource.data.status == 'draft') || isAdmin();
+      allow update: if (buyNowOwnerUpdateAllowed() && validListing(request.resource.data, listingId)) || isAdmin();
+      allow delete: if signedIn()
+        && resource.data.sellerId == request.auth.uid
+        && resource.data.status == 'draft'
+        && (resource.data.listingType == 'buy_now' || resource.data.bidCount == 0)
+        || isAdmin();
+
+      match /bids/{bidId} {
+        allow read: if parentListing(listingId).status in ['active', 'ended']
+          || (signedIn() && parentListing(listingId).sellerId == request.auth.uid)
+          || isAdmin();
+        allow create, update, delete: if false;
+      }
     }
 
     match /categories/{categoryId} { allow read: if true; allow write: if isAdmin(); }
