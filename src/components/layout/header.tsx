@@ -24,9 +24,9 @@ function SearchForm() {
     const search = query.trim();
     router.push(search ? `/explore?q=${encodeURIComponent(search)}` : "/explore");
   }
-  return <form onSubmit={submit} role="search" className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm transition focus-within:border-[var(--takeme-green)] focus-within:ring-2 focus-within:ring-[var(--takeme-green)]/15 lg:max-w-lg">
-    <button type="submit" aria-label="Search TAKEME" className="grid size-10 shrink-0 place-items-center text-[var(--takeme-gray)]"><Search size={19} /></button>
-    <label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search TAKEME" className="h-10 w-full min-w-0 bg-transparent pr-3 text-sm text-[var(--takeme-charcoal)] outline-none placeholder:text-[var(--takeme-gray)]" /></label>
+  return <form onSubmit={submit} role="search" className="flex h-11 min-w-0 flex-1 items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm transition focus-within:border-[var(--takeme-green)] focus-within:ring-2 focus-within:ring-[var(--takeme-green)]/15 lg:max-w-lg">
+    <button type="submit" aria-label="Search TAKEME" className="grid size-11 shrink-0 place-items-center text-[var(--takeme-gray)]"><Search size={19} /></button>
+    <label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search TAKEME" className="h-11 w-full min-w-0 bg-transparent pr-3 text-sm text-[var(--takeme-charcoal)] outline-none placeholder:text-[var(--takeme-gray)]" /></label>
   </form>;
 }
 
