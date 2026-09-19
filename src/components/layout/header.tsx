@@ -12,7 +12,7 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
   { href: "/#categories", label: "Categories" },
-  { href: "/messages", label: "Messages" },
+  { href: "/explore?type=auction", label: "Auctions" },
 ];
 
 export function Header() {
@@ -25,8 +25,8 @@ export function Header() {
       <div className="page-shell flex h-[4.5rem] items-center justify-between gap-4">
         <Logo />
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
-          {links.slice(0, 3).map((link) => (
-            <Link key={link.href} href={link.href} className="nav-link" aria-current={pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href)) ? "page" : undefined}>{link.label}</Link>
+          {links.map((link) => (
+            <Link key={link.href} href={link.href} className="nav-link" aria-current={pathname === link.href ? "page" : undefined}>{link.label}</Link>
           ))}
         </nav>
         <div className="hidden min-w-0 flex-1 justify-center md:flex">
@@ -46,9 +46,9 @@ export function Header() {
             <Link href="/login" className="button-secondary h-11 px-4">Log in</Link>
           )}
         </div>
-        <button className="icon-button md:hidden" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Toggle menu">
+        <div className="md:hidden"><button className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Toggle menu">
           {open ? <X size={20} /> : <Menu size={21} />}
-        </button>
+        </button></div>
       </div>
       {open && (
         <div className="border-t border-gray-200 bg-white px-5 py-4 md:hidden">

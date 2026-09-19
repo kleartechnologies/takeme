@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { initializeApp, deleteApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
 import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
@@ -31,7 +32,7 @@ async function client(label, authenticated = true) {
 
 async function uploadFixture(owner, listingId, filename) {
   const object = ref(owner.storage, `users/${owner.auth.currentUser.uid}/listings/${listingId}/${filename}`);
-  await uploadBytes(object, new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { contentType: "image/png" });
+  await uploadBytes(object, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" });
   return getDownloadURL(object);
 }
 
@@ -57,7 +58,8 @@ await setDoc(buyNowRef, {
   createdAt: serverTimestamp(),
   updatedAt: serverTimestamp(),
 });
-await updateDoc(buyNowRef, { status: "active", imageUrls: ["https://example.test/legacy.webp"], updatedAt: serverTimestamp() });
+const buyNowImage = await uploadFixture(owner, buyNowRef.id, "buy-now.png");
+await updateDoc(buyNowRef, { status: "active", imageUrls: [buyNowImage], updatedAt: serverTimestamp() });
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", buyNowRef.id), { title: "Cross seller edit" }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { sellerId: bidderOne.auth.currentUser.uid }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { listingType: "auction" }), /permission/i);

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export function FirebaseSetupState() {
-  return <div className="grid min-h-72 place-items-center rounded-3xl border border-[var(--takeme-green)]/25 bg-[var(--takeme-light-green)] p-8 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={118} height={98} className="mx-auto h-24 w-auto object-contain" /><h2 className="mt-3 text-2xl font-bold">Connect Firebase to continue</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--takeme-dark-green)]/75">Add the Firebase web configuration to <code>.env.local</code>. TAKEME will not substitute sample listings for production data.</p></div></div>;
+  return <div className="grid min-h-72 place-items-center rounded-3xl border border-[var(--takeme-green)]/25 bg-[var(--takeme-light-green)] p-8 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={118} height={98} className="mx-auto h-24 w-auto object-contain" /><h2 className="mt-3 text-2xl font-bold">Marketplace temporarily unavailable</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--takeme-dark-green)]/75">We couldn’t connect to the marketplace right now. Please try again later.</p></div></div>;
 }
 
 export function SignInRequired({ message = "Log in to manage marketplace listings." }: { message?: string }) {

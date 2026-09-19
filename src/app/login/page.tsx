@@ -1,2 +1,3 @@
 import { AuthForm } from "@/components/auth/auth-form";
-export default function LoginPage() { return <main className="page-shell grid min-h-[72vh] place-items-center py-10"><AuthForm mode="login" /></main>; }
+import { Suspense } from "react";
+export default function LoginPage() { return <main className="page-shell grid min-h-[72vh] place-items-center py-10"><Suspense fallback={<div className="min-h-96 w-full max-w-md animate-pulse rounded-3xl bg-stone-100" />}><AuthForm mode="login" /></Suspense></main>; }

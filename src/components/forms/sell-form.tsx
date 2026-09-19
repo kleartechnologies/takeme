@@ -67,6 +67,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const [progress, setProgress] = useState("");
   const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<SellValues>({ defaultValues: defaults });
   const listingType = useWatch({ control, name: "listingType" });
+  const preview = useWatch({ control });
 
   if (!configured) return <FirebaseSetupState />;
   if (loading) return <div className="min-h-96 animate-pulse rounded-3xl bg-stone-100" />;
@@ -97,6 +98,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
       const start = new Date(values.auctionStartAt);
       const end = new Date(values.auctionEndAt);
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) { setSubmitError("Choose valid auction start and end times."); return; }
+      if (end.getTime() <= start.getTime()) { setSubmitError("Auction end time must be after its start time."); return; }
       input = {
         title: values.title,
         description: values.description,
@@ -123,7 +125,8 @@ export function SellForm({ listing }: { listing?: Listing }) {
         router.push(`/listings/${id}?created=1`);
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The listing could not be saved.");
+      const message = error instanceof Error ? error.message : "";
+      setSubmitError(/firebase|firestore|storage|permission-denied/i.test(message) ? "We couldn’t save this listing. Check your connection and try again." : message || "The listing could not be saved. Please try again.");
       setBusy(false); setProgress("");
     }
   }
@@ -152,11 +155,11 @@ export function SellForm({ listing }: { listing?: Listing }) {
             <Field label="Auction starts" error={errors.auctionStartAt?.message}><input type="datetime-local" {...register("auctionStartAt", { required: "Choose a start time." })} /></Field>
             <Field label="Auction ends" error={errors.auctionEndAt?.message}><input type="datetime-local" {...register("auctionEndAt", { required: "Choose an end time." })} /></Field>
             <div className="sm:col-span-2"><LocationField register={register} error={errors.location?.message} /></div>
-            <p className="sm:col-span-2 rounded-xl bg-[var(--takeme-light-green)] p-3 text-xs leading-5 text-[var(--takeme-dark-green)]">Auction amounts are stored as whole sen. Once bidding starts, the schedule, starting bid, increment, and listing type are locked.</p>
+            <p className="sm:col-span-2 rounded-xl bg-[var(--takeme-light-green)] p-3 text-xs leading-5 text-[var(--takeme-dark-green)]">The starting bid is the first bid buyers can place. Each later bid must rise by at least your minimum increment. Auctions are scheduled by default; once bidding starts, timing and bid settings are locked. Payment is not active yet.</p>
           </div>}
         </Section>
       </div>
-      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><div className="grid size-11 place-items-center rounded-2xl bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><Camera size={21} /></div><h2 className="mt-4 text-lg font-bold">Ready to publish?</h2><ul className="mt-4 grid gap-3 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and meetup location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Your account ID is applied securely. Auction bids and results are controlled by trusted server logic.</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
+      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Listing preview</p><div className="mt-3 overflow-hidden rounded-2xl border border-gray-200"><div className="relative aspect-[4/3] bg-stone-100">{photos[0] ? <Image src={photos[0].url} alt="Preview of your first listing photo" fill sizes="320px" className="object-cover" unoptimized={!photos[0].existing} /> : <div className="grid h-full place-items-center text-stone-400"><Camera size={32} /></div>}</div><div className="p-3"><p className="line-clamp-2 text-sm font-semibold">{preview.title?.trim() || "Your listing title"}</p><p className="mt-1 font-bold">{listingType === "auction" ? `Starting bid RM ${preview.startingBid || "0.00"}` : `RM ${preview.price || "0.00"}`}</p><p className="mt-1 truncate text-xs text-stone-500">{preview.location || "Your location"}</p></div></div><h2 className="mt-5 text-lg font-bold">Ready to publish?</h2><ul className="mt-3 grid gap-2 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Publishing makes this item visible to buyers. {listingType === "auction" ? "Scheduled auctions accept bids only after they start." : "Checkout is not available yet."}</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
     </form>
   );
 }

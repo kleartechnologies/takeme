@@ -39,6 +39,7 @@ export interface ListingQuery {
   categoryId?: string;
   condition?: string;
   listingType?: string;
+  auctionStatus?: "scheduled" | "active";
   location?: string;
   maxPrice?: number;
   sort?: ListingSort;
@@ -113,7 +114,8 @@ export async function getActiveListings(filters: ListingQuery = {}, cursor?: Que
   const constraints: QueryConstraint[] = [where("status", "==", "active")];
   const search = normalizeSearch(filters.search ?? "");
 
-  if (search.length >= 2) {
+  const searching = search.length >= 2;
+  if (searching) {
     constraints.push(where("searchTokens", "array-contains", search.slice(0, 40)));
   } else {
     constraints.push(where("facetKeys", "array-contains", createFacetKey({ categoryId: filters.categoryId, condition: filters.condition, listingType: filters.listingType, location: filters.location })));
@@ -130,13 +132,38 @@ export async function getActiveListings(filters: ListingQuery = {}, cursor?: Que
     constraints.push(orderBy("createdAt", "desc"));
   }
 
-  if (cursor) constraints.push(startAfter(cursor));
-  constraints.push(limit(pageSize + 1));
-  const snapshot = await getDocs(query(collection(database, "listings"), ...constraints));
-  const documents = snapshot.docs;
-  const hasMore = documents.length > pageSize;
-  const visible = documents.slice(0, pageSize);
-  return { listings: visible.map(fromDocument), cursor: visible.at(-1) ?? null, hasMore };
+  if (!searching && !filters.auctionStatus && !filters.maxPrice) {
+    if (cursor) constraints.push(startAfter(cursor));
+    const snapshot = await getDocs(query(collection(database, "listings"), ...constraints, limit(pageSize + 1)));
+    const visible = snapshot.docs.slice(0, pageSize);
+    return { listings: visible.map(fromDocument), cursor: visible.at(-1) ?? null, hasMore: snapshot.size > pageSize };
+  }
+
+  // Firestore permits only one array-contains filter here. Narrow title matches
+  // and auction status locally, advancing even when a batch has no matches.
+  const matches: Listing[] = [];
+  let lastRead = cursor ?? null;
+  let hasMore = false;
+  for (let batch = 0; batch < 4 && matches.length < pageSize; batch += 1) {
+    const pageConstraints = [...constraints, ...(lastRead ? [startAfter(lastRead)] : []), limit(pageSize + 1)];
+    const snapshot = await getDocs(query(collection(database, "listings"), ...pageConstraints));
+    const source = snapshot.docs.slice(0, pageSize);
+    hasMore = snapshot.size > pageSize;
+    for (const document of source) {
+      lastRead = document;
+      const listing = fromDocument(document);
+      if (filters.categoryId && listing.categoryId !== filters.categoryId) continue;
+      if (filters.condition && listing.condition !== filters.condition) continue;
+      if (filters.listingType && listing.listingType !== filters.listingType) continue;
+      if (filters.auctionStatus && listing.auctionStatus !== filters.auctionStatus) continue;
+      if (filters.location && !normalizeSearch(listing.location).includes(normalizeSearch(filters.location))) continue;
+      if (filters.maxPrice && listing.listingType !== "buy_now" && ((listing.bidCount ?? 0) > 0 ? (listing.currentBid ?? 0) / 100 : (listing.startingBid ?? 0) / 100) > filters.maxPrice) continue;
+      matches.push(listing);
+      if (matches.length === pageSize) break;
+    }
+    if (!hasMore) break;
+  }
+  return { listings: matches, cursor: lastRead, hasMore };
 }
 
 export async function getListing(id: string) {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
+import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
@@ -32,5 +33,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full"><AuthProvider><Header />{children}<Footer /><MobileNav /></AuthProvider></body></html>;
+  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full"><AuthProvider><Header />{children}<Footer /><Suspense fallback={null}><MobileNav /></Suspense></AuthProvider></body></html>;
 }
