@@ -154,11 +154,16 @@ assert.equal((await call(owner, "cancelAuction", { listingId: activeCancellation
 
 const adminRef = adminDb.collection("listings").doc(created.listingId);
 await adminRef.update({ auctionEndAt: Timestamp.fromMillis(Date.now() - 1_000) });
-await assert.rejects(() => call(bidderOne, "placeBid", { listingId: created.listingId, amount: auction.currentBid + 1_000 }), /ended/i);
-await adminDb.runTransaction(async (transaction) => {
-  const snapshot = await transaction.get(adminRef);
-  await _test.advanceListing(transaction, adminRef, snapshot.data(), Timestamp.now());
-});
+const [lateBid, finalization] = await Promise.allSettled([
+  call(bidderOne, "placeBid", { listingId: created.listingId, amount: auction.currentBid + 1_000 }),
+  adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(adminRef);
+    await _test.advanceListing(transaction, adminRef, snapshot.data(), Timestamp.now());
+  }),
+]);
+assert.equal(lateBid.status, "rejected", "A bid at or after expiry cannot outrun finalization.");
+assert.match(String(lateBid.reason), /ended/i);
+assert.equal(finalization.status, "fulfilled");
 const ended = (await adminRef.get()).data();
 assert.equal(ended.auctionStatus, "ended");
 assert.equal(ended.status, "ended");
@@ -166,5 +171,42 @@ assert.equal(ended.winnerId, auction.currentBidderId);
 assert.equal(ended.finalBid, auction.currentBid);
 assert.ok(ended.endedAt);
 
-console.log("Auction callables, concurrency, lifecycle, and direct-write security verified.");
+// More than one scheduler page of abandoned drafts must not hide published auctions.
+const floodNow = Timestamp.now();
+const floodBatch = adminDb.batch();
+for (let index = 0; index < 201; index += 1) {
+  floodBatch.set(adminDb.collection("listings").doc(), {
+    status: "draft", auctionStatus: "scheduled",
+    auctionStartAt: Timestamp.fromMillis(floodNow.toMillis() - 5 * 60_000),
+    auctionEndAt: Timestamp.fromMillis(floodNow.toMillis() + 10 * 60_000),
+  });
+  floodBatch.set(adminDb.collection("listings").doc(), {
+    status: "draft", auctionStatus: "active",
+    auctionStartAt: Timestamp.fromMillis(floodNow.toMillis() - 20 * 60_000),
+    auctionEndAt: Timestamp.fromMillis(floodNow.toMillis() - 5 * 60_000),
+  });
+}
+const dueStartRef = adminDb.collection("listings").doc();
+floodBatch.set(dueStartRef, {
+  status: "active", auctionStatus: "scheduled",
+  auctionStartAt: Timestamp.fromMillis(floodNow.toMillis() - 60_000),
+  auctionEndAt: Timestamp.fromMillis(floodNow.toMillis() + 10 * 60_000),
+});
+const dueEndRef = adminDb.collection("listings").doc();
+floodBatch.set(dueEndRef, {
+  status: "active", auctionStatus: "active", bidCount: 0, currentBidderId: null,
+  auctionStartAt: Timestamp.fromMillis(floodNow.toMillis() - 20 * 60_000),
+  auctionEndAt: Timestamp.fromMillis(floodNow.toMillis() - 60_000),
+});
+await floodBatch.commit();
+await _test.advanceDueAuctions(floodNow);
+assert.equal((await dueStartRef.get()).data().auctionStatus, "active", "A published auction starts despite more than 200 older drafts.");
+const dueEnded = (await dueEndRef.get()).data();
+assert.equal(dueEnded.auctionStatus, "ended", "A published auction ends despite more than 200 older drafts.");
+assert.equal(dueEnded.winnerId, null);
+assert.equal(dueEnded.finalBid, null);
+await _test.advanceDueAuctions(floodNow);
+assert.deepEqual((await dueEndRef.get()).data(), dueEnded, "Repeating the finalizer is idempotent.");
+
+console.log("Auction callables, concurrency, lifecycle, draft-starvation, idempotence, and direct-write security verified.");
 await Promise.all([owner, bidderOne, bidderTwo, guest].map(({ app }) => deleteApp(app)));

@@ -323,11 +323,10 @@ async function advanceListing(transaction: Transaction, listingRef: FirebaseFire
   }
 }
 
-export const advanceAuctionLifecycle = onSchedule({ schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: 120 }, async () => {
-  const now = Timestamp.now();
+async function advanceDueAuctions(now: Timestamp) {
   const [starting, ending] = await Promise.all([
-    db.collection(LISTINGS).where("auctionStatus", "==", "scheduled").where("auctionStartAt", "<=", now).limit(200).get(),
-    db.collection(LISTINGS).where("auctionStatus", "==", "active").where("auctionEndAt", "<=", now).limit(200).get(),
+    db.collection(LISTINGS).where("status", "==", "active").where("auctionStatus", "==", "scheduled").where("auctionStartAt", "<=", now).limit(200).get(),
+    db.collection(LISTINGS).where("status", "==", "active").where("auctionStatus", "==", "active").where("auctionEndAt", "<=", now).limit(200).get(),
   ]);
   const references = new Map<string, FirebaseFirestore.DocumentReference>();
   for (const snapshot of [...starting.docs, ...ending.docs]) references.set(snapshot.ref.path, snapshot.ref);
@@ -335,6 +334,10 @@ export const advanceAuctionLifecycle = onSchedule({ schedule: "every 1 minutes",
     const snapshot = await transaction.get(listingRef);
     if (snapshot.exists) await advanceListing(transaction, listingRef, snapshot.data()!, now);
   })));
+}
+
+export const advanceAuctionLifecycle = onSchedule({ schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: 120 }, async () => {
+  await advanceDueAuctions(Timestamp.now());
 });
 
-export const _test = { parseListingPayload, createSearchTokens, createFacetKeys, advanceListing };
+export const _test = { parseListingPayload, createSearchTokens, createFacetKeys, advanceListing, advanceDueAuctions };

@@ -72,7 +72,7 @@ The emulator integration test creates only demo-project accounts/listings/bids a
 
 Phase 3 source is **not deployed by this README**. Deploying only the UI or only the rules would break auctions. When Phase 3 is separately approved for production, deploy and verify the new Firestore/Storage rules, two lifecycle indexes, and six Cloud Functions before enabling the Phase 3 web build. Confirm the Firebase project and Blaze plan, Functions runtime `nodejs22`, regional availability, managed runtime permissions, App Check policy, and that all indexes have reached `READY`. Keep `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false` in Vercel and use the registered Firebase Web app's six `NEXT_PUBLIC_FIREBASE_*` values. Do not create fake production auctions or bids as smoke tests.
 
-The existing `firestore.indexes.json` retains the Phase 2 marketplace indexes and adds only two composite indexes for lifecycle queries: `(auctionStatus, auctionStartAt)` and `(auctionStatus, auctionEndAt)`. Bid history uses a single collection's `createdAt` ordering and needs no composite index.
+The existing `firestore.indexes.json` retains the Phase 2 marketplace indexes and adds only two composite indexes for lifecycle queries: `(status, auctionStatus, auctionStartAt)` and `(status, auctionStatus, auctionEndAt)`. The scheduler filters for published listings so abandoned drafts cannot starve the 200-document per-run limit. Bid history uses a single collection's `createdAt` ordering and needs no composite index.
 
 ## Project structure
 

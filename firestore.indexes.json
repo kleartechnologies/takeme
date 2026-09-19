@@ -40,10 +40,12 @@
       { "fieldPath": "createdAt", "order": "DESCENDING" }
     ]},
     { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "auctionStatus", "order": "ASCENDING" },
       { "fieldPath": "auctionStartAt", "order": "ASCENDING" }
     ]},
     { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
       { "fieldPath": "auctionStatus", "order": "ASCENDING" },
       { "fieldPath": "auctionEndAt", "order": "ASCENDING" }
     ]}
