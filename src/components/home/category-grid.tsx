@@ -5,13 +5,12 @@ import { categories } from "@/data/categories";
 
 export function CategoryGrid() {
   return (
-    <section id="categories" className="scroll-mt-24 py-10 md:py-14">
-      <p className="eyebrow">Browse your way</p>
-      <h2 className="section-title">Shop by category</h2>
-      <div className="mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3" role="region" aria-label="Categories; scroll horizontally for more" tabIndex={0}>
+    <section id="categories" className="scroll-mt-24 pt-5 pb-4 md:pt-8 md:pb-6">
+      <h2 className="text-lg font-bold tracking-tight sm:text-xl">Categories</h2>
+      <div className="mt-3 flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-2 sm:gap-3" role="region" aria-label="Categories; scroll horizontally for more" tabIndex={0}>
         {categories.map((category) => {
           const Fallback = category.icon === "Wrench" ? Wrench : Shapes;
-          return <Link key={category.id} href={`/explore?category=${category.id}`} className="group flex w-32 shrink-0 snap-start flex-col items-center rounded-2xl border border-gray-200 bg-white p-3 text-center shadow-[var(--takeme-shadow-sm)] transition hover:border-[var(--takeme-green)] focus-visible:border-[var(--takeme-green)] sm:w-36"><span className="grid size-24 place-items-center">{category.icon.startsWith("/") ? <Image src={category.icon} alt="" width={96} height={96} sizes="96px" loading="lazy" className="size-24 object-contain" /> : <span className="grid size-20 place-items-center rounded-full bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><Fallback size={34} /></span>}</span><span className="mt-2 flex min-h-10 items-center justify-center text-xs font-semibold leading-4 text-[var(--takeme-charcoal)] sm:text-sm">{category.name}</span></Link>;
+          return <Link key={category.id} href={`/explore?category=${category.id}`} aria-label={`Explore ${category.name}`} className="group flex w-[78px] shrink-0 snap-start flex-col items-center rounded-xl p-1 text-center transition hover:bg-white focus-visible:bg-white sm:w-24"><span className="grid size-[68px] place-items-center sm:size-[76px]">{category.icon.startsWith("/") ? <Image src={category.icon} alt="" width={76} height={76} sizes="(max-width: 640px) 68px, 76px" loading="lazy" className="size-[68px] object-contain transition group-hover:scale-105 sm:size-[76px]" /> : <span className="grid size-14 place-items-center rounded-full bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><Fallback size={26} /></span>}</span><span className="mt-1 flex min-h-8 items-start justify-center text-[10px] font-semibold leading-4 text-[var(--takeme-charcoal)] sm:text-xs">{category.name}</span></Link>;
         })}
       </div>
     </section>

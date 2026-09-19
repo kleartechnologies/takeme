@@ -1,70 +1,59 @@
 "use client";
 
-import { LogOut, Menu, Search, UserRound, X } from "lucide-react";
+import { Bell, LogOut, Menu, Search, UserRound, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logout } from "@/lib/firebase/auth";
 import { Logo } from "./logo";
 
-const links = [
+const menuLinks = [
   { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
   { href: "/#categories", label: "Categories" },
   { href: "/explore?type=auction", label: "Auctions" },
+  { href: "/sell", label: "Sell something" },
 ];
+
+function SearchForm() {
+  const [query, setQuery] = useState("");
+  const router = useRouter();
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const search = query.trim();
+    router.push(search ? `/explore?q=${encodeURIComponent(search)}` : "/explore");
+  }
+  return <form onSubmit={submit} role="search" className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm transition focus-within:border-[var(--takeme-green)] focus-within:ring-2 focus-within:ring-[var(--takeme-green)]/15 lg:max-w-lg">
+    <button type="submit" aria-label="Search TAKEME" className="grid size-10 shrink-0 place-items-center text-[var(--takeme-gray)]"><Search size={19} /></button>
+    <label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search TAKEME" className="h-10 w-full min-w-0 bg-transparent pr-3 text-sm text-[var(--takeme-charcoal)] outline-none placeholder:text-[var(--takeme-gray)]" /></label>
+  </form>;
+}
 
 export function Header() {
   const [open, setOpen] = useState(false);
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const pathname = usePathname();
+  const accountHref = user ? "/profile" : "/login?next=/profile";
 
-  return (
-    <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/92 backdrop-blur-xl">
-      <div className="page-shell flex h-[4.5rem] items-center justify-between gap-4">
-        <Logo />
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Main navigation">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} className="nav-link" aria-current={pathname === link.href ? "page" : undefined}>{link.label}</Link>
-          ))}
-        </nav>
-        <div className="hidden min-w-0 flex-1 justify-center md:flex">
-          <Link href="/explore" className="flex h-11 w-full max-w-sm items-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-sm text-[var(--takeme-gray)] shadow-xs transition hover:border-[var(--takeme-green)] hover:shadow-sm">
-            <Search size={17} />
-            <span>Search listings</span>
-          </Link>
-        </div>
-        <div className="hidden items-center gap-2 md:flex">
-          <Link href="/sell" className="button-primary h-11 px-5">Sell an item</Link>
-          {!loading && user ? (
-            <div className="flex items-center gap-1">
-              <Link href="/profile" className="icon-button" aria-label="Profile"><UserRound size={19} /></Link>
-              <button className="icon-button" aria-label="Sign out" onClick={() => void logout()}><LogOut size={18} /></button>
-            </div>
-          ) : (
-            <Link href="/login" className="button-secondary h-11 px-4">Log in</Link>
-          )}
-        </div>
-        <div className="md:hidden"><button className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Toggle menu">
-          {open ? <X size={20} /> : <Menu size={21} />}
-        </button></div>
-      </div>
-      {open && (
-        <div className="border-t border-gray-200 bg-white px-5 py-4 md:hidden">
-          <nav className="mx-auto grid max-w-7xl gap-1" aria-label="Mobile menu">
-            {links.map((link) => (
-            <Link key={link.href} href={link.href} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-[var(--takeme-charcoal)] hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]" onClick={() => setOpen(false)}>
-                {link.label}
-              </Link>
-            ))}
-            <Link href={user ? "/profile" : "/login"} className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--takeme-charcoal)] hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]" onClick={() => setOpen(false)}>
-              {user ? <UserRound size={17} /> : null}{user ? "Your profile" : "Log in or register"}
-            </Link>
-            {user && <button className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[var(--takeme-charcoal)] hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]" onClick={() => { setOpen(false); void logout(); }}><LogOut size={17} /> Log out</button>}
-          </nav>
-        </div>
-      )}
-    </header>
-  );
+  return <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl">
+    <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
+      <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>
+      <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
+      <SearchForm />
+      <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
+        <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>
+        <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
+        <button type="button" disabled title="Notifications are not available yet" aria-label="Notifications are not available yet" className="icon-button cursor-not-allowed opacity-50"><Bell size={19} /></button>
+        <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
+        {user && <button type="button" onClick={() => void logout()} aria-label="Sign out" className="icon-button"><LogOut size={18} /></button>}
+      </nav>
+      <div className="-mr-1 shrink-0 lg:hidden"><Link href={accountHref} aria-label={user ? "Your profile" : "Log in"} className="icon-button"><UserRound size={20} /></Link></div>
+    </div>
+    {open && <nav id="marketplace-menu" className="border-t border-gray-200 bg-white px-5 py-3 lg:hidden" aria-label="Mobile menu"><div className="mx-auto grid max-w-7xl gap-0.5">
+      {menuLinks.map((link) => <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{link.label}</Link>)}
+      <Link href={accountHref} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{user ? "My Listings" : "Log in or register"}</Link>
+      {user && <button type="button" onClick={() => { setOpen(false); void logout(); }} className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]"><LogOut size={17} /> Sign out</button>}
+    </div></nav>}
+  </header>;
 }

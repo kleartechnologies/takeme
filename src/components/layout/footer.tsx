@@ -3,7 +3,7 @@ import { Logo } from "./logo";
 
 export function Footer() {
   return (
-    <footer className="border-t border-gray-200 bg-[var(--takeme-charcoal)] pb-24 pt-12 text-gray-300 md:pb-10">
+    <footer className="border-t border-gray-200 bg-[var(--takeme-charcoal)] pb-24 pt-12 text-gray-300 lg:pb-10">
       <div className="page-shell grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
           <div className="inline-flex rounded-xl bg-white p-1.5"><Logo compact /></div>
