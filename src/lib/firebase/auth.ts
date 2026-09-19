@@ -22,14 +22,15 @@ async function createProfile(user: User, displayName?: string) {
   const services = requireFirebase();
   const profileRef = doc(services.db, "users", user.uid);
   const existing = await getDoc(profileRef);
+  if (existing.exists()) return;
   await setDoc(
     profileRef,
     {
       uid: user.uid,
-      displayName: displayName ?? user.displayName ?? "",
+      displayName: displayName || user.displayName || "TAKEME member",
       photoURL: user.photoURL ?? null,
-      location: existing.exists() ? existing.data().location ?? "" : "",
-      createdAt: existing.exists() && existing.data().createdAt ? existing.data().createdAt : serverTimestamp(),
+      location: "",
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
   );

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { AuctionPanel } from "@/components/listings/auction-panel";
+import { SaveButton } from "@/components/saved/save-button";
 import { ListingSection } from "@/components/listings/listing-section";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
@@ -75,6 +76,7 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           <p className="mt-5 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p>
           {isAuction ? <AuctionPanel listing={listing} userId={user?.uid} owner={owner} /> : <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><strong>Purchasing is not available yet.</strong> This listing is for browsing only while checkout is being prepared. Do not send payment outside TAKEME.</div>}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
+          {!owner && listing.status === "active" && <SaveButton listingId={listing.id} />}
           <Link href={`/sellers/${listing.sellerId}`} className="mt-6 flex items-center gap-3 border-t border-stone-100 pt-5"><span className="relative grid size-11 place-items-center overflow-hidden rounded-full bg-stone-100">{state.seller?.photoURL ? <Image src={state.seller.photoURL} alt="" fill sizes="44px" className="object-cover" /> : <UserRound size={20} />}</span><div><p className="text-sm font-bold">{state.seller?.displayName ?? "TAKEME seller"}</p><p className="text-xs text-stone-500">View seller profile</p></div></Link>
           <div className="mt-5 grid gap-2 text-xs leading-5 text-[var(--takeme-gray)]"><p className="flex gap-2"><ShieldCheck size={16} className="shrink-0 text-[var(--takeme-dark-green)]" /> {isAuction ? "Bids and results are validated by trusted server logic. Payment is not active yet." : "Checkout is not active yet. Never send payment based on this preview."}</p><p className="flex gap-2"><CalendarDays size={16} className="shrink-0" /> Listed {new Date(listing.createdAt).toLocaleDateString("en-MY")}</p></div>
         </aside>

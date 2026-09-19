@@ -76,11 +76,84 @@ export interface Category {
   icon: string;
 }
 
-export interface Favorite {
-  id: string;
-  userId: string;
+export interface SavedListing {
   listingId: string;
+  savedAt: string;
+  listing: Listing | null;
+}
+
+export type TransactionType = "buy_now" | "auction";
+export type TransactionStatus = "pending" | "completed" | "cancelled";
+
+export interface MarketplaceTransaction {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  sellerId: string;
+  type: TransactionType;
+  status: TransactionStatus;
+  agreedAmountSen: number;
+  currency: "MYR";
   createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface TransactionReview {
+  transactionId: string;
+  buyerId: string;
+  sellerId: string;
+  reviewerId: string;
+  reviewedUserId: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export interface TrustSummary {
+  userId: string;
+  verificationStatus: "unverified" | "verified";
+  completedSellerTransactions: number;
+  reviewCount: number;
+  ratingSum: number;
+  reputationLevel: "bronze" | "silver" | "gold" | "platinum" | null;
+  updatedAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  sellerId: string;
+  participants: [string, string];
+  latestMessage: { id: string; senderId: string; body: string; createdAt: string } | null;
+  unreadBy: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+}
+
+export type ReportReason = "spam" | "misleading" | "prohibited_item" | "harassment" | "fraud_concern" | "other";
+export type ReportTargetType = "listing" | "user";
+export type ReportStatus = "submitted" | "reviewing" | "resolved" | "dismissed";
+
+export interface MarketplaceReport {
+  id: string;
+  reporterId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: ReportReason;
+  details: string;
+  status: ReportStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Bid {
@@ -95,6 +168,5 @@ export interface MarketplaceEntityMap {
   users: UserProfile;
   listings: Listing;
   categories: Category;
-  favorites: Favorite;
   bids: Bid;
 }

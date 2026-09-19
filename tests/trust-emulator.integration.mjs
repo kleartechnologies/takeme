@@ -1,0 +1,114 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { initializeApp, deleteApp } from "firebase/app";
+import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
+import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where } from "firebase/firestore";
+
+const projectId = "demo-takeme";
+process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+const require = createRequire(new URL("../functions/package.json", import.meta.url));
+const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = require("firebase-admin/app");
+const { getFirestore: getAdminFirestore } = require("firebase-admin/firestore");
+const adminApp = initializeAdminApp({ projectId }, `trust-admin-${Date.now()}`);
+const admin = getAdminFirestore(adminApp);
+const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.com`, projectId, storageBucket: `${projectId}.firebasestorage.app`, appId: "1:123456789:web:demo" };
+
+async function client(label, signedIn = true) {
+  const app = initializeApp(config, `${label}-${suffix}`);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  if (signedIn) await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  return { app, auth, db, uid: auth.currentUser?.uid };
+}
+
+const [seller, buyer, stranger, guest] = await Promise.all([client("trust-seller"), client("trust-buyer"), client("trust-stranger"), client("trust-guest", false)]);
+const listingId = `trust-listing-${suffix}`;
+const sellerId = seller.uid;
+const buyerId = buyer.uid;
+await admin.doc(`listings/${listingId}`).set({ id: listingId, sellerId, status: "active", title: "Camera", listingType: "buy_now" });
+await setDoc(doc(seller.db, "users", sellerId), { uid: sellerId, displayName: "Seller", photoURL: null, location: "KL", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+await setDoc(doc(buyer.db, "users", buyerId), { uid: buyerId, displayName: "Buyer", photoURL: null, location: "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+await assert.rejects(() => updateDoc(doc(buyer.db, "users", sellerId), { displayName: "Impostor" }), /permission/i);
+await assert.rejects(() => updateDoc(doc(seller.db, "users", sellerId), { email: "secret@example.test" }), /permission/i);
+await updateDoc(doc(seller.db, "users", sellerId), { displayName: "Updated seller", updatedAt: serverTimestamp() });
+assert.equal((await getDoc(doc(guest.db, "users", sellerId))).data().email, undefined);
+
+const saved = doc(buyer.db, "users", buyerId, "saved", listingId);
+await setDoc(saved, { listingId, savedAt: serverTimestamp() });
+assert.equal((await getDoc(saved)).exists(), true);
+await assert.rejects(() => setDoc(saved, { listingId, savedAt: serverTimestamp() }), /permission/i);
+await assert.rejects(() => getDoc(doc(stranger.db, "users", buyerId, "saved", listingId)), /permission/i);
+await assert.rejects(() => deleteDoc(doc(stranger.db, "users", buyerId, "saved", listingId)), /permission/i);
+const extraId = `trust-listing-extra-${suffix}`;
+await admin.doc(`listings/${extraId}`).set({ id: extraId, sellerId, status: "active" });
+await setDoc(doc(buyer.db, "users", buyerId, "saved", extraId), { listingId: extraId, savedAt: serverTimestamp() });
+const pageOne = await getDocs(query(collection(buyer.db, "users", buyerId, "saved"), orderBy("savedAt", "desc"), limit(1)));
+assert.equal(pageOne.size, 1);
+const pageTwo = await getDocs(query(collection(buyer.db, "users", buyerId, "saved"), orderBy("savedAt", "desc"), startAfter(pageOne.docs[0]), limit(1)));
+assert.equal(pageTwo.size, 1);
+assert.notEqual(pageOne.docs[0].id, pageTwo.docs[0].id);
+await assert.rejects(() => getDocs(collection(buyer.db, "users", buyerId, "saved")), /permission/i);
+await admin.doc(`listings/${listingId}`).update({ status: "removed" });
+await assert.rejects(() => getDoc(doc(buyer.db, "listings", listingId)), /permission/i);
+assert.equal((await getDoc(saved)).exists(), true);
+await deleteDoc(saved);
+assert.equal((await getDoc(saved)).exists(), false);
+await assert.rejects(() => setDoc(saved, { listingId, savedAt: serverTimestamp() }), /permission/i);
+
+const transactionId = `trust-tx-${suffix}`;
+const transactionPath = `transactions/${transactionId}`;
+const transaction = { id: transactionId, listingId, buyerId, sellerId, type: "buy_now", status: "pending", agreedAmountSen: 10000, currency: "MYR", createdAt: new Date(), updatedAt: new Date(), completedAt: null, cancelledAt: null };
+await assert.rejects(() => setDoc(doc(buyer.db, transactionPath), transaction), /permission/i);
+await admin.doc(transactionPath).set(transaction);
+assert.equal((await getDoc(doc(buyer.db, transactionPath))).exists(), true);
+await assert.rejects(() => getDoc(doc(stranger.db, transactionPath)), /permission/i);
+await assert.rejects(() => updateDoc(doc(buyer.db, transactionPath), { status: "completed" }), /permission/i);
+const reviewPath = `${transactionPath}/reviews/${buyerId}`;
+const review = { transactionId, buyerId, sellerId, reviewerId: buyerId, reviewedUserId: sellerId, rating: 5, comment: "Good transaction", createdAt: serverTimestamp() };
+await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), review), /permission/i);
+await admin.doc(transactionPath).update({ status: "completed", completedAt: new Date() });
+await assert.rejects(() => setDoc(doc(stranger.db, `${transactionPath}/reviews/${stranger.uid}`), { ...review, reviewerId: stranger.uid }), /permission/i);
+await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), { ...review, reviewedUserId: buyerId }), /permission/i);
+await setDoc(doc(buyer.db, reviewPath), review);
+await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), review), /permission/i);
+await assert.rejects(() => updateDoc(doc(buyer.db, reviewPath), { rating: 1 }), /permission/i);
+const selfTransactionId = `trust-self-tx-${suffix}`;
+await admin.doc(`transactions/${selfTransactionId}`).set({ ...transaction, id: selfTransactionId, buyerId, sellerId: buyerId, status: "completed", completedAt: new Date() });
+await assert.rejects(() => setDoc(doc(buyer.db, `transactions/${selfTransactionId}/reviews/${buyerId}`), { ...review, transactionId: selfTransactionId, sellerId: buyerId, reviewedUserId: buyerId }), /permission/i);
+await assert.rejects(() => setDoc(doc(buyer.db, "trustSummaries", buyerId), { reputationLevel: "platinum" }), /permission/i);
+
+const conversationId = `${extraId}_${buyerId}`;
+const conversationPath = `conversations/${conversationId}`;
+const conversation = { id: conversationId, listingId: extraId, buyerId, sellerId, participants: [buyerId, sellerId], latestMessage: null, unreadBy: { [buyerId]: 0, [sellerId]: 0 }, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+await setDoc(doc(buyer.db, conversationPath), conversation);
+assert.equal((await getDoc(doc(seller.db, conversationPath))).exists(), true);
+assert.equal((await getDocs(query(collection(buyer.db, "conversations"), where("participants", "array-contains", buyerId), orderBy("updatedAt", "desc"), limit(20)))).size, 1);
+await assert.rejects(() => getDoc(doc(stranger.db, conversationPath)), /permission/i);
+await assert.rejects(() => setDoc(doc(stranger.db, `conversations/${extraId}_${stranger.uid}`), { ...conversation, id: `${extraId}_${stranger.uid}`, buyerId: stranger.uid, participants: [stranger.uid, sellerId], sellerId: stranger.uid }), /permission/i);
+const message = doc(collection(buyer.db, conversationPath, "messages"));
+await setDoc(message, { id: message.id, senderId: buyerId, body: "Is this available?", createdAt: serverTimestamp() });
+assert.equal((await getDoc(doc(seller.db, conversationPath, "messages", message.id))).exists(), true);
+await assert.rejects(() => getDoc(doc(stranger.db, conversationPath, "messages", message.id)), /permission/i);
+await assert.rejects(() => setDoc(doc(stranger.db, conversationPath, "messages", "fake"), { id: "fake", senderId: buyerId, body: "Hello", createdAt: serverTimestamp() }), /permission/i);
+await assert.rejects(() => setDoc(doc(buyer.db, conversationPath, "messages", "fake2"), { id: "fake2", senderId: sellerId, body: "Hello", createdAt: serverTimestamp() }), /permission/i);
+await assert.rejects(() => updateDoc(doc(buyer.db, conversationPath), { latestMessage: { body: "fake" } }), /permission/i);
+
+const report = doc(collection(buyer.db, "reports"));
+await setDoc(report, { id: report.id, reporterId: buyerId, targetType: "listing", targetId: extraId, reason: "misleading", details: "Incorrect condition", status: "submitted", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+assert.equal((await getDoc(report)).exists(), true);
+const userReport = doc(collection(buyer.db, "reports"));
+await setDoc(userReport, { id: userReport.id, reporterId: buyerId, targetType: "user", targetId: sellerId, reason: "harassment", details: "Concern about seller conduct", status: "submitted", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+assert.equal((await getDoc(userReport)).exists(), true);
+await assert.rejects(() => getDoc(doc(stranger.db, "reports", report.id)), /permission/i);
+await assert.rejects(() => updateDoc(report, { status: "resolved" }), /permission/i);
+await assert.rejects(() => deleteDoc(report), /permission/i);
+const fakeReport = doc(collection(buyer.db, "reports"));
+await assert.rejects(() => setDoc(fakeReport, { id: fakeReport.id, reporterId: buyerId, targetType: "listing", targetId: extraId, reason: "misleading", details: "Wrong", status: "resolved", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), /permission/i);
+await assert.rejects(() => setDoc(fakeReport, { id: fakeReport.id, reporterId: buyerId, targetType: "listing", targetId: extraId, reason: "arbitrary", details: "Wrong", status: "submitted", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), /permission/i);
+
+await Promise.all([seller, buyer, stranger, guest].map(({ app }) => deleteApp(app)));
+await deleteAdminApp(adminApp);
+console.log("Trust emulator integration passed: saves, profiles, transactions, reviews, conversations, reports.");

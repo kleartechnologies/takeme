@@ -17,7 +17,7 @@ These are product patterns, not HTML components. Reproduce their hierarchy and s
 3. Category carousel: horizontal swipe, a 68–76px icon with its name, one category source (`src/data/categories.ts`), tap to filtered Explore. Do not add a second circular backdrop to supplied images.
 4. Discovery tabs: horizontal, underlined selection, Top Picks / Nearby / Auctions / Free. A selected tab controls one feed; switching tabs does not imply a global realtime subscription.
 5. Listing feed: two columns on phones, three on medium screens, four on large screens. Cards use a 4:3 image, price, two-line title, available location and condition, and actual auction status. Use bounded pages and explicit Load more.
-6. Bottom navigation: Explore / Saved / Sell / Updates / Me, with Sell prominent. Home remains reachable from the menu. Unsupported Saved and Updates destinations stay disabled rather than opening fake screens.
+6. Bottom navigation: Explore / Saved / Sell / Updates / Me, with Sell prominent. Home remains reachable from the menu. Saved opens a real account-backed page; unsupported Updates stays disabled.
 
 ## Honest data and component states
 
@@ -26,3 +26,12 @@ These are product patterns, not HTML components. Reproduce their hierarchy and s
 - Auctions shows actual auction listings only. Free items remain an explanation state until zero-price listings are supported.
 - Loading uses listing-card skeletons. Empty states explain what is absent and offer a real Sell or Explore action. Errors use plain language and Retry; never show raw Firebase errors.
 - Filters remain a touch-friendly sheet on mobile. Listing detail, Sell, price, and auction status retain the same meaning across web and future native apps.
+
+## Saved and trust flow
+
+- A visible 44px heart on each listing card and a full-width action on detail toggle the same server-backed Saved record. The state updates immediately and rolls back with an error if the write fails. Guests go to sign-in, then return to the listing.
+- Saved is a two-column mobile grid with a bounded 10-item page and Load more. Removed/private items keep a neutral unavailable tile so the owner can unsave them without seeing private data. A native app should use the same state machine: auth required → loading → empty/content → error/retry.
+- Public profile shows name, photo, general location, member since and active listings. Only the owner can edit the public fields. Email stays in the owner's account view, never on seller profile or listing cards.
+- Trust badges appear only from verified server-computed summaries. Verification, earned reputation and paid promotion are separate. Until legitimate transactions and aggregation exist, no rating, sales count or level is displayed.
+- A future conversation is attached to one listing and has exactly a buyer and seller. Messages have bounded pages and explicit sender identity; a future trusted service must maintain unread counts and latest-message metadata before an inbox is enabled.
+- Transaction states are pending, completed and cancelled; auction end does not imply completed sale. Review submission is available only for a server-recorded completed transaction, once per participant. Keep checkout/review UI honest until those workflows exist.

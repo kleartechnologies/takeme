@@ -61,6 +61,7 @@ Verification:
 npm test
 npm run test:functions
 node tests/auction-emulator.integration.mjs # requires the four emulators above
+node tests/trust-emulator.integration.mjs # requires Auth + Firestore emulators
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -68,11 +69,19 @@ npm run build
 
 The emulator integration test creates only demo-project accounts/listings/bids and checks callable authorization, minimum bids, concurrency, immutable history, direct-write denial, cancellation, expiry, and winner finalization. It does not create production data.
 
+## Phase 5 trust and marketplace core
+
+Saved listings use owner-only `users/{uid}/saved/{listingId}` records, an immutable timestamp and bounded cursor pages. The public profile is `users/{uid}` (no email or roles), with owner edits to name, general location and photo. Sign-in creates a missing profile but never overwrites an existing edit. Details, security boundaries, lifecycle and Flutter mapping are in [the trust data model](docs/trust-data-model.md) and [mobile patterns](docs/mobile-marketplace-patterns.md).
+
+`transactions/{id}` and `trustSummaries/{uid}` are trusted-server-write-only. `transactions/{id}/reviews/{reviewerUid}` accepts one immutable review only for a server-recorded completed transaction between distinct participants. `conversations/{listingId}_{buyerUid}` and nested messages are participant-only; the conversation metadata is intentionally immutable until a trusted unread/latest-message fan-out exists, so no inbox UI is exposed. `reports/{id}` accepts controlled, immutable user submissions; moderation decisions require server authority. No Stripe, paid promotion, fabricated reputation, full messaging, or production data is part of Phase 5.
+
+Saved pagination and message ordering use Firestore's single-field indexes. Composite indexes were added for a future participant-scoped inbox and reporter-scoped report history. Run the new emulator test before any separately approved rules deployment. This local phase does not deploy Firebase or Vercel and does not push GitHub.
+
 ## Production deployment considerations
 
 Phase 3 source is **not deployed by this README**. Deploying only the UI or only the rules would break auctions. When Phase 3 is separately approved for production, deploy and verify the new Firestore/Storage rules, two lifecycle indexes, and six Cloud Functions before enabling the Phase 3 web build. Confirm the Firebase project and Blaze plan, Functions runtime `nodejs22`, regional availability, managed runtime permissions, App Check policy, and that all indexes have reached `READY`. Keep `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false` in Vercel and use the registered Firebase Web app's six `NEXT_PUBLIC_FIREBASE_*` values. Do not create fake production auctions or bids as smoke tests.
 
-The existing `firestore.indexes.json` retains the Phase 2 marketplace indexes and adds only two composite indexes for lifecycle queries: `(status, auctionStatus, auctionStartAt)` and `(status, auctionStatus, auctionEndAt)`. The scheduler filters for published listings so abandoned drafts cannot starve the 200-document per-run limit. Bid history uses a single collection's `createdAt` ordering and needs no composite index.
+The existing `firestore.indexes.json` retains the Phase 2 marketplace indexes and the two Phase 3 lifecycle indexes: `(status, auctionStatus, auctionStartAt)` and `(status, auctionStatus, auctionEndAt)`. The scheduler filters for published listings so abandoned drafts cannot starve the 200-document per-run limit. Bid history uses a single collection's `createdAt` ordering and needs no composite index. Phase 5 adds the two trust-foundation indexes described above.
 
 ## Project structure
 

@@ -4,10 +4,11 @@ import { Clock3, MapPin } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Listing } from "@/types/marketplace";
+import { SaveButton } from "@/components/saved/save-button";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" }: { listing: Listing; sizes?: string }) {
+export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", initialSaved, onSavedChange }: { listing: Listing; sizes?: string; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void }) {
   const isAuction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
   return (
     <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[var(--takeme-shadow-sm)] transition duration-300 hover:-translate-y-1 hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]">
@@ -18,6 +19,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
         <div className="absolute left-2 top-2 flex gap-2 sm:left-3 sm:top-3">
           <span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:text-[11px] ${isAuction ? "bg-[var(--takeme-dark-green)] text-white" : "bg-white/95 text-[var(--takeme-charcoal)]"}`}>{isAuction ? listing.auctionStatus === "scheduled" ? "Scheduled auction" : "Live auction" : "Fixed price"}</span>
         </div>
+        <div className="absolute right-2 top-2 sm:right-3 sm:top-3"><SaveButton listingId={listing.id} initialSaved={initialSaved} onChange={onSavedChange} compact /></div>
       </div>
       <Link href={`/listings/${listing.id}`} className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-4">
         <p className="text-base font-bold tracking-tight text-[var(--takeme-charcoal)] sm:text-lg">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>

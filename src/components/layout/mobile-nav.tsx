@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 
 const items = [
   { href: "/explore", label: "Explore", icon: Compass },
-  { href: "", label: "Saved", icon: Heart, unavailable: true },
+  { href: "/saved", label: "Saved", icon: Heart },
   { href: "/sell", label: "Sell", icon: Plus, featured: true },
   { href: "", label: "Updates", icon: Bell, unavailable: true },
   { href: "/profile", label: "Profile", icon: UserRound },

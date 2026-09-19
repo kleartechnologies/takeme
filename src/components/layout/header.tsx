@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, LogOut, Menu, Search, UserRound, X } from "lucide-react";
+import { Bell, Heart, LogOut, Menu, Search, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
@@ -14,6 +14,7 @@ const menuLinks = [
   { href: "/#categories", label: "Categories" },
   { href: "/explore?type=auction", label: "Auctions" },
   { href: "/sell", label: "Sell something" },
+  { href: "/saved", label: "Saved listings" },
 ];
 
 function SearchForm() {
@@ -43,6 +44,7 @@ export function Header() {
       <SearchForm />
       <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
         <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>
+        <Link href="/saved" className="icon-button" aria-label="Saved listings" aria-current={pathname === "/saved" ? "page" : undefined}><Heart size={20} /></Link>
         <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
         <button type="button" disabled title="Notifications are not available yet" aria-label="Notifications are not available yet" className="icon-button cursor-not-allowed opacity-50"><Bell size={19} /></button>
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>

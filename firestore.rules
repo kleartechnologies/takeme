@@ -5,13 +5,17 @@ service cloud.firestore {
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
     function parentListing(listingId) { return get(/databases/$(database)/documents/listings/$(listingId)).data; }
+    function transactionData(transactionId) { return get(/databases/$(database)/documents/transactions/$(transactionId)).data; }
+    function conversationData(conversationId) { return get(/databases/$(database)/documents/conversations/$(conversationId)).data; }
+    function transactionParticipant(data) { return signedIn() && request.auth.uid in [data.buyerId, data.sellerId]; }
+    function conversationParticipant(data) { return signedIn() && request.auth.uid in [data.buyerId, data.sellerId]; }
 
     function validPublicProfile(data, uid) {
       return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'location', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'location', 'createdAt', 'updatedAt'])
         && data.uid == uid
         && data.displayName is string
-        && data.displayName.size() <= 80
+        && data.displayName.size() >= 2 && data.displayName.size() <= 80
         && (data.photoURL == null || data.photoURL is string)
         && data.location is string
         && data.location.size() <= 120
@@ -99,6 +103,20 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt)
         || isAdmin();
       allow delete: if isAdmin();
+
+      match /saved/{listingId} {
+        allow get: if owns(uid);
+        allow list: if owns(uid) && request.query.limit <= 13;
+        allow create: if owns(uid)
+          && request.resource.data.keys().hasAll(['listingId', 'savedAt'])
+          && request.resource.data.keys().hasOnly(['listingId', 'savedAt'])
+          && request.resource.data.listingId == listingId
+          && request.resource.data.savedAt == request.time
+          && exists(/databases/$(database)/documents/listings/$(listingId))
+          && parentListing(listingId).status == 'active';
+        allow delete: if owns(uid);
+        allow update: if false;
+      }
     }
 
     match /listings/{listingId} {
@@ -127,10 +145,91 @@ service cloud.firestore {
     }
 
     match /categories/{categoryId} { allow read: if true; allow write: if isAdmin(); }
-    match /favorites/{favoriteId} {
-      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if false;
+    match /favorites/{favoriteId} { allow read, write: if false; }
+
+    match /transactions/{transactionId} {
+      allow get: if transactionParticipant(resource.data) || isAdmin();
+      allow list: if false;
+      allow create, update, delete: if false;
+      match /reviews/{reviewerUid} {
+        allow get, list: if transactionParticipant(transactionData(transactionId)) || isAdmin();
+        allow create: if owns(reviewerUid)
+          && transactionData(transactionId).status == 'completed'
+          && transactionData(transactionId).buyerId != transactionData(transactionId).sellerId
+          && transactionParticipant(transactionData(transactionId))
+          && request.resource.data.keys().hasAll(['transactionId', 'buyerId', 'sellerId', 'reviewerId', 'reviewedUserId', 'rating', 'comment', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['transactionId', 'buyerId', 'sellerId', 'reviewerId', 'reviewedUserId', 'rating', 'comment', 'createdAt'])
+          && request.resource.data.transactionId == transactionId
+          && request.resource.data.buyerId == transactionData(transactionId).buyerId
+          && request.resource.data.sellerId == transactionData(transactionId).sellerId
+          && request.resource.data.reviewerId == reviewerUid
+          && request.resource.data.reviewedUserId == (reviewerUid == transactionData(transactionId).buyerId ? transactionData(transactionId).sellerId : transactionData(transactionId).buyerId)
+          && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+          && request.resource.data.comment is string && request.resource.data.comment.size() <= 1000
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+    match /trustSummaries/{uid} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+    match /conversations/{conversationId} {
+      allow get: if conversationParticipant(resource.data) || isAdmin();
+      allow list: if (signedIn() && request.auth.uid in resource.data.participants || isAdmin()) && request.query.limit <= 20;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['id', 'listingId', 'buyerId', 'sellerId', 'participants', 'latestMessage', 'unreadBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['id', 'listingId', 'buyerId', 'sellerId', 'participants', 'latestMessage', 'unreadBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.id == conversationId
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerId != request.auth.uid
+        && request.resource.data.listingId is string
+        && conversationId == request.resource.data.listingId + '_' + request.auth.uid
+        && parentListing(request.resource.data.listingId).status == 'active'
+        && parentListing(request.resource.data.listingId).sellerId == request.resource.data.sellerId
+        && request.resource.data.participants == [request.auth.uid, request.resource.data.sellerId]
+        && request.resource.data.latestMessage == null
+        && request.resource.data.unreadBy is map
+        && request.resource.data.unreadBy.keys().hasAll([request.auth.uid, request.resource.data.sellerId])
+        && request.resource.data.unreadBy.keys().hasOnly([request.auth.uid, request.resource.data.sellerId])
+        && request.resource.data.unreadBy[request.auth.uid] == 0
+        && request.resource.data.unreadBy[request.resource.data.sellerId] == 0
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update, delete: if false;
+      match /messages/{messageId} {
+        allow get: if conversationParticipant(conversationData(conversationId)) || isAdmin();
+        allow list: if (conversationParticipant(conversationData(conversationId)) || isAdmin()) && request.query.limit <= 21;
+        allow create: if conversationParticipant(conversationData(conversationId))
+          && request.resource.data.keys().hasAll(['id', 'senderId', 'body', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['id', 'senderId', 'body', 'createdAt'])
+          && request.resource.data.id == messageId
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 1 && request.resource.data.body.size() <= 2000
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+    match /reports/{reportId} {
+      allow get: if (signedIn() && resource.data.reporterId == request.auth.uid) || isAdmin();
+      allow list: if ((signedIn() && resource.data.reporterId == request.auth.uid) || isAdmin()) && request.query.limit <= 20;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['id', 'reporterId', 'targetType', 'targetId', 'reason', 'details', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['id', 'reporterId', 'targetType', 'targetId', 'reason', 'details', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.id == reportId
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.targetType in ['listing', 'user']
+        && request.resource.data.targetId is string && request.resource.data.targetId.size() > 0
+        && (request.resource.data.targetType == 'listing' && exists(/databases/$(database)/documents/listings/$(request.resource.data.targetId))
+          || request.resource.data.targetType == 'user' && exists(/databases/$(database)/documents/users/$(request.resource.data.targetId)))
+        && request.resource.data.reason in ['spam', 'misleading', 'prohibited_item', 'harassment', 'fraud_concern', 'other']
+        && request.resource.data.details is string && request.resource.data.details.size() <= 1000
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update, delete: if false;
     }
 
     match /auctions/{id} { allow read, write: if false; }
@@ -138,7 +237,6 @@ service cloud.firestore {
     match /orders/{id} { allow read, write: if false; }
     match /reviews/{id} { allow read: if true; allow write: if false; }
     match /messages/{id} { allow read, write: if false; }
-    match /reports/{id} { allow read, write: if false; }
     match /boosts/{id} { allow read, write: if false; }
     match /featuredListings/{id} { allow read: if true; allow write: if false; }
     match /notifications/{id} { allow read, write: if false; }
