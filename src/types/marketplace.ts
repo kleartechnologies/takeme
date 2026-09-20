@@ -39,7 +39,6 @@ export interface Listing {
   winnerId?: string | null;
   finalBid?: number | null;
   endedAt?: string | null;
-  featured?: boolean;
   searchTokens?: string[];
   facetKeys?: string[];
   locationKey?: string;

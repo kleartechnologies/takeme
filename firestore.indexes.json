@@ -1,5 +1,29 @@
 {
   "indexes": [
+    { "collectionGroup": "promotions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "listingId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "promotions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "listingId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "paymentStatus", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "promotions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "type", "order": "ASCENDING" },
+      { "fieldPath": "paymentStatus", "order": "ASCENDING" },
+      { "fieldPath": "endAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "promotions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "endAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "promotionId", "order": "ASCENDING" },
+      { "fieldPath": "eventType", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
     { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "eventType", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }

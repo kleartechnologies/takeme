@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, MapPin, Share2, ShieldCheck, UserRound } from "lucide-react";
+import { CalendarDays, ChevronLeft, MapPin, Share2, ShieldCheck, Sparkles, Star, UserRound } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -99,6 +99,7 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           <p className="mt-5 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p>
           {isAuction ? <AuctionPanel listing={listing} userId={user?.uid} owner={owner} /> : <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><strong>Purchasing is not available yet.</strong> This listing is for browsing only while checkout is being prepared. Do not send payment outside TAKEME.</div>}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
+          {owner && listing.status === "active" && (!isAuction || (now > 0 && ["active", "scheduled"].includes(listing.auctionStatus ?? "") && Boolean(listing.auctionEndAt && new Date(listing.auctionEndAt).getTime() > now))) && <div className="mt-3 grid grid-cols-2 gap-2"><Link href={`/listings/${listing.id}/promote?type=boost`} className="button-secondary min-h-12 px-3 text-xs"><Sparkles size={16} /> Boost listing</Link><Link href={`/listings/${listing.id}/promote?type=featured`} className="button-secondary min-h-12 px-3 text-xs"><Star size={16} /> Featured</Link></div>}
           {!owner && listing.status === "active" && <SaveButton listingId={listing.id} />}
           <button type="button" onClick={() => void share()} className="button-secondary mt-3 min-h-12 w-full"><Share2 size={18} /> Share listing</button>
           {shareMessage && <p role="status" className="mt-2 text-xs text-[var(--takeme-gray)]">{shareMessage}</p>}

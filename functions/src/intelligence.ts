@@ -36,7 +36,7 @@ function eventWindowMs(type: MarketplaceEventType) {
   return 60 * 60_000;
 }
 
-interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource }
+interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource; promotionId?: string }
 
 export async function recordMarketplaceSignal(uid: string, signal: Signal, dedupeKey: string, envelope: EventEnvelope, now = new Date()) {
   const db = getFirestore();
@@ -46,25 +46,40 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
   const trendRef = signal.listingId && EVENT_WEIGHTS[signal.type] > 0 ? db.collection("listingTrends").doc(signal.listingId) : null;
   const day = now.toISOString().slice(0, 10).replaceAll("-", "");
   const quotaRef = envelope.source === "client" ? db.collection("intelligenceQuotas").doc(`${uid}_${day}`) : null;
+  const promotionRef = envelope.promotionId ? db.collection("promotions").doc(envelope.promotionId) : null;
+  const promotionListingRef = promotionRef && signal.listingId ? db.collection("listings").doc(signal.listingId) : null;
   return db.runTransaction(async (transaction) => {
-    const [existing, interest, trend, quota] = await Promise.all([
+    const [existing, interest, trend, quota, promotion, promotionListing] = await Promise.all([
       transaction.get(eventRef), transaction.get(interestRef), trendRef ? transaction.get(trendRef) : null, quotaRef ? transaction.get(quotaRef) : null,
+      promotionRef ? transaction.get(promotionRef) : null, promotionListingRef ? transaction.get(promotionListingRef) : null,
     ]);
     if (existing.exists) return { accepted: false, reason: "duplicate" as const };
     if (quotaRef && Number(quota?.data()?.count ?? 0) >= dailyClientCap) return { accepted: false, reason: "daily_limit" as const };
+    if (promotionRef) {
+      const data = promotion?.data();
+      const listing = promotionListing?.data();
+      if (!data || !listing || data.listingId !== signal.listingId || data.sellerId === uid || listing.sellerId !== data.sellerId
+        || data.status !== "active" || data.paymentStatus !== "paid" || listing.status !== "active"
+        || !(data.startAt instanceof Timestamp) || !(data.endAt instanceof Timestamp)
+        || data.startAt.toMillis() > now.getTime() || data.endAt.toMillis() <= now.getTime()
+        || (listing.listingType !== "buy_now" && (!["active", "scheduled"].includes(listing.auctionStatus) || !(listing.auctionEndAt instanceof Timestamp) || listing.auctionEndAt.toMillis() <= now.getTime()))) {
+        return { accepted: false, reason: "promotion_unavailable" as const };
+      }
+    }
     const profile = applyInterestSignal((interest.data() as InterestProfile | undefined) ?? null, signal, now);
     const timestamp = Timestamp.fromDate(now);
     transaction.create(eventRef, {
       userId: uid, eventType: signal.type, source: envelope.source,
       ...(signal.listingId ? { listingId: signal.listingId } : {}),
-      ...(signal.categoryId ? { categoryId: signal.categoryId } : {}),
-      ...(envelope.sellerId ? { sellerId: envelope.sellerId } : {}),
+      ...(signal.categoryId || promotionListing?.data()?.categoryId ? { categoryId: signal.categoryId ?? promotionListing?.data()?.categoryId } : {}),
+      ...(envelope.sellerId || promotion?.data()?.sellerId ? { sellerId: envelope.sellerId ?? promotion?.data()?.sellerId } : {}),
       ...(signal.query ? { query: signal.query } : {}),
       ...(signal.price !== undefined ? { price: signal.price } : {}),
       ...(signal.listingType ? { listingType: signal.listingType, auction: signal.listingType !== "buy_now" } : {}),
       ...(signal.exposedListingIds ? { exposedListingIds: signal.exposedListingIds } : {}),
       ...(envelope.context ? { context: envelope.context } : {}),
       ...(envelope.candidateSource ? { candidateSource: envelope.candidateSource } : {}),
+      ...(envelope.promotionId ? { promotionId: envelope.promotionId } : {}),
       createdAt: timestamp, expiresAt: Timestamp.fromMillis(now.getTime() + 90 * 86_400_000),
     });
     transaction.set(interestRef, { ...profile, userId: uid });
@@ -74,11 +89,12 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
       transaction.set(trendRef, { listingId: signal.listingId, score: Math.min(100, priorScore + Math.min(8, EVENT_WEIGHTS[signal.type])), updatedAt: now.toISOString(), eventCount: Math.min(1_000_000, Number(prior?.eventCount ?? 0) + 1) });
     }
     if (quotaRef) transaction.set(quotaRef, { userId: uid, day, count: Number(quota?.data()?.count ?? 0) + 1, expiresAt: Timestamp.fromMillis(now.getTime() + 3 * 86_400_000) });
+    if (promotionRef && promotion) transaction.update(promotionRef, { [signal.type === "PROMOTION_IMPRESSION" ? "impressions" : "clicks"]: Math.min(1_000_000_000, Number(promotion.data()?.[signal.type === "PROMOTION_IMPRESSION" ? "impressions" : "clicks"] ?? 0) + 1) });
     return { accepted: true, reason: "recorded" as const };
   });
 }
 
-function publicListing(data: DocumentData, id: string): RankableListing & Record<string, unknown> {
+export function publicListing(data: DocumentData, id: string): RankableListing & Record<string, unknown> {
   const iso = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : typeof value === "string" ? value : null;
   return {
     id, sellerId: String(data.sellerId ?? ""), title: String(data.title ?? ""), description: String(data.description ?? ""), categoryId: String(data.categoryId ?? ""),

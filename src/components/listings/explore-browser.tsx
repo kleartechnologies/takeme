@@ -9,6 +9,8 @@ import { categories } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type ListingPage, type ListingSort } from "@/lib/services/listings";
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
+import { getPromotionPlacements, type PromotionBadge } from "@/lib/services/promotions";
+import type { Listing } from "@/types/marketplace";
 import { ListingCard } from "./listing-card";
 
 type Filters = { q: string; category: string; condition: string; type: string; auction: string; price: string; location: string; sort: ListingSort };
@@ -27,6 +29,7 @@ export function ExploreBrowser() {
   const [open, setOpen] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [state, setState] = useState<{ key: string; page: ListingPage; error: string }>({ key: "", page: emptyPage, error: "" });
+  const [placement, setPlacement] = useState<{ key: string; orderIds: string[]; badges: Record<string, PromotionBadge> }>({ key: "", orderIds: [], badges: {} });
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
@@ -77,8 +80,22 @@ export function ExploreBrowser() {
     return () => { active = false; };
   }, [request, requestKey]);
 
+  const listingIdsKey = state.page.listings.map((item) => item.id).join(",");
+  const placementKey = `${requestKey}:${listingIdsKey}`;
+  useEffect(() => {
+    if (state.key !== requestKey || !listingIdsKey) return;
+    let active = true;
+    getPromotionPlacements(state.page.listings, { categoryId: filters.category, search: filters.q }).then((result) => {
+      if (active) setPlacement({ key: placementKey, ...result });
+    }).catch(() => { if (active) setPlacement({ key: placementKey, orderIds: [], badges: {} }); });
+    return () => { active = false; };
+  }, [placementKey, listingIdsKey, requestKey, state.key, state.page.listings, filters.category, filters.q]);
+
   if (!isFirebaseConfigured) return <FirebaseSetupState />;
   const loading = state.key !== requestKey;
+  const activePlacement = placement.key === placementKey ? placement : null;
+  const listingById = new Map(state.page.listings.map((item) => [item.id, item]));
+  const displayedListings = activePlacement?.orderIds.length ? activePlacement.orderIds.map((id) => listingById.get(id)).filter((item): item is Listing => Boolean(item)) : state.page.listings;
   const activeCount = [filters.q, filters.category, filters.condition, filters.type, filters.auction, filters.price, filters.location].filter(Boolean).length;
   const reset = () => { update(defaults); setQueryInput(""); setSearchError(""); };
   const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); if (value.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: value, context: "explore" }); update({ q: value }); };
@@ -110,7 +127,7 @@ export function ExploreBrowser() {
       <aside className="sticky top-24 hidden h-fit rounded-2xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:block"><div className="flex items-center justify-between"><p className="flex items-center gap-2 font-semibold"><SlidersHorizontal size={17} /> Filters</p><button onClick={reset} className="min-h-11 text-xs font-semibold text-[var(--takeme-dark-green)]">Clear all</button></div><div className="filter-stack">{filterFields}</div></aside>
       <div><div className="mb-5 flex items-center justify-between gap-3"><p className="text-sm text-stone-600"><strong className="text-stone-950">{loading ? "…" : state.page.listings.length}</strong> listings loaded</p>{activeCount > 0 && <button onClick={reset} className="flex min-h-11 items-center gap-1 text-xs font-bold text-stone-600"><X size={14} /> Clear filters</button>}</div>
         {state.error && <ErrorState message={state.error} />}
-        {loading ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <ListingSkeleton key={index} />)}</div> : !state.error && state.page.listings.length ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{state.page.listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div> : !state.error ? <EmptyState title={activeCount ? "No matches in this set" : "No active listings yet"} description={activeCount ? "Try a different title or clear a filter to see more items." : "Be the first to publish an item."} /> : null}
+        {loading ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <ListingSkeleton key={index} />)}</div> : !state.error && displayedListings.length ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{displayedListings.map((listing) => <ListingCard key={listing.id} listing={listing} promotion={activePlacement?.badges[listing.id]} />)}</div> : !state.error ? <EmptyState title={activeCount ? "No matches in this set" : "No active listings yet"} description={activeCount ? "Try a different title or clear a filter to see more items." : "Be the first to publish an item."} /> : null}
         {!loading && !state.error && state.page.hasMore && <div className="mt-8 text-center"><button disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-12 px-6">{loadingMore && <LoaderCircle size={17} className="animate-spin" />}Load more listings</button></div>}
       </div>
     </div>

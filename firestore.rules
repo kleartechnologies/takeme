@@ -193,6 +193,19 @@ service cloud.firestore {
     match /intelligenceQuotas/{quotaId} {
       allow read, write: if false;
     }
+    match /promotionPackages/{packageId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin() && request.query.limit <= 20;
+      allow create, update, delete: if isAdmin();
+    }
+    match /promotions/{promotionId} {
+      allow get: if isAdmin() || (signedIn() && resource.data.sellerId == request.auth.uid);
+      allow list: if isAdmin() && request.query.limit <= 100;
+      allow create, update, delete: if false;
+    }
+    match /promotionLocks/{listingId} {
+      allow read, write: if false;
+    }
     match /conversations/{conversationId} {
       allow get: if conversationParticipant(resource.data) || isAdmin();
       allow list: if (signedIn() && request.auth.uid in resource.data.participants || isAdmin()) && request.query.limit <= 20;

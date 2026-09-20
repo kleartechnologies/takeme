@@ -351,3 +351,15 @@ export {
   onConversationStarted,
   onConversationMessageCreated,
 } from "./intelligence";
+
+export {
+  getPromotionPackages,
+  createPromotionRequest,
+  cancelPromotionRequest,
+  getMyPromotionRequests,
+  getPromotionPlacements,
+  getFeaturedPromotions,
+  trackPromotionEngagement,
+  expirePromotions,
+  onPromotedListingUpdated,
+} from "./promotions";

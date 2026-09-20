@@ -83,6 +83,10 @@ Marketplace intent now flows through authenticated callable tracking, with autho
 
 For local Phase 6 integration verification with Auth, Firestore and Functions emulators running on the demo project, run `node tests/intelligence-emulator.integration.mjs` in addition to the existing test commands above. Production rollout needs the new Functions and Firestore rules/indexes together, plus TTL setup noted in the document.
 
+## Phase 7 optional visibility foundation
+
+Sellers can review example Boost and Featured packages and save or cancel an **unpaid** promotion request for an eligible active listing. There is no Stripe integration, checkout or activation path yet: requests remain `pending_payment`, no charge is taken, no revenue is claimed and no public paid placement appears. A separately gated placement service accepts only trusted active/paid promotions without changing organic recommendations. The lifecycle, security, cost limits, analytics, Flutter contract and required later payment work are in [mobile monetization](docs/mobile-monetization.md). With the demo emulators running, verify with `node tests/promotions-emulator.integration.mjs`. This local phase does not deploy or push.
+
 ## Production deployment considerations
 
 Phase 3 source is **not deployed by this README**. Deploying only the UI or only the rules would break auctions. When Phase 3 is separately approved for production, deploy and verify the new Firestore/Storage rules, two lifecycle indexes, and six Cloud Functions before enabling the Phase 3 web build. Confirm the Firebase project and Blaze plan, Functions runtime `nodejs22`, regional availability, managed runtime permissions, App Check policy, and that all indexes have reached `READY`. Keep `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false` in Vercel and use the registered Firebase Web app's six `NEXT_PUBLIC_FIREBASE_*` values. Do not create fake production auctions or bids as smoke tests.
