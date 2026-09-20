@@ -81,22 +81,50 @@ export interface SavedListing {
   listing: Listing | null;
 }
 
-export type TransactionType = "buy_now" | "auction";
-export type TransactionStatus = "pending" | "completed" | "cancelled";
+export type TransactionType = "buy_now" | "offer" | "auction";
+export type TransactionStatus = "in_progress" | "completed" | "cancelled" | "disputed";
+export type PaymentMethod = "cod" | "bank_transfer" | "external" | "other";
+export type OfferStatus = "submitted" | "countered" | "accepted" | "rejected" | "withdrawn" | "expired";
 
-export interface MarketplaceTransaction {
+export interface MarketplaceOffer {
   id: string;
   listingId: string;
   buyerId: string;
   sellerId: string;
+  type: "buy_now" | "offer";
+  status: OfferStatus;
+  proposedAmountSen: number;
+  quotedAmountSen: number;
+  paymentMethod: PaymentMethod;
+  createdAt: string;
+  expiresAt: string;
+  updatedAt: string;
+  transactionId: string | null;
+}
+
+export interface MarketplaceTransaction {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  buyerId: string;
+  sellerId: string;
   type: TransactionType;
+  sourceId: string;
   status: TransactionStatus;
-  agreedAmountSen: number;
+  amountSen: number;
   currency: "MYR";
+  paymentMethod: PaymentMethod;
+  buyerConfirmedAt: string | null;
+  sellerConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
   cancelledAt: string | null;
+  reviewWindowEndAt: string | null;
+  reviewsVisibleAt: string | null;
+  cancellationRequestedBy: string | null;
+  cancellationReason: string | null;
+  disputeReason: string | null;
 }
 
 export interface TransactionReview {
@@ -105,18 +133,37 @@ export interface TransactionReview {
   sellerId: string;
   reviewerId: string;
   reviewedUserId: string;
+  reviewerRole: "buyer" | "seller";
   rating: number;
+  tags: string[];
   comment: string;
   createdAt: string;
+}
+
+export interface PublicReview {
+  id: string;
+  reviewerRole: "buyer" | "seller";
+  rating: number;
+  tags: string[];
+  comment: string;
+  createdAt: string;
+}
+
+export type ReputationTier = "bronze" | "silver" | "gold" | "platinum";
+export interface RoleReputation {
+  completedCount: number;
+  tier: ReputationTier | null;
+  reviewCount: number;
+  ratingSum: number;
+  averageRating: number | null;
+  ratingDistribution: Record<string, number>;
 }
 
 export interface TrustSummary {
   userId: string;
   verificationStatus: "unverified" | "verified";
-  completedSellerTransactions: number;
-  reviewCount: number;
-  ratingSum: number;
-  reputationLevel: "bronze" | "silver" | "gold" | "platinum" | null;
+  buyer: RoleReputation;
+  seller: RoleReputation;
   updatedAt: string;
 }
 

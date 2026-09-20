@@ -363,3 +363,22 @@ export {
   expirePromotions,
   onPromotedListingUpdated,
 } from "./promotions";
+
+export {
+  getReputationPolicy,
+  submitOffer,
+  respondToOffer,
+  expireOffers,
+  onAuctionWonCreateTransaction,
+  confirmTransactionCompletion,
+  requestTransactionCancellation,
+  declineTransactionCancellation,
+  disputeTransaction,
+  getListingDealState,
+  getMyTransactions,
+  getTransactionDetail,
+  submitTransactionReview,
+  releaseExpiredReviews,
+  getPublicReviews,
+  reportPublicReview,
+} from "./transactions";

@@ -60,7 +60,7 @@ await assert.rejects(() => setDoc(saved, { listingId, savedAt: serverTimestamp()
 
 const transactionId = `trust-tx-${suffix}`;
 const transactionPath = `transactions/${transactionId}`;
-const transaction = { id: transactionId, listingId, buyerId, sellerId, type: "buy_now", status: "pending", agreedAmountSen: 10000, currency: "MYR", createdAt: new Date(), updatedAt: new Date(), completedAt: null, cancelledAt: null };
+const transaction = { id: transactionId, listingId, listingTitle: "Camera", buyerId, sellerId, type: "buy_now", sourceId: "trust-rule-test", status: "in_progress", amountSen: 10000, currency: "MYR", paymentMethod: "cod", buyerConfirmedAt: null, sellerConfirmedAt: null, createdAt: new Date(), updatedAt: new Date(), completedAt: null, cancelledAt: null, reviewWindowEndAt: null, reviewsVisibleAt: null };
 await assert.rejects(() => setDoc(doc(buyer.db, transactionPath), transaction), /permission/i);
 await admin.doc(transactionPath).set(transaction);
 assert.equal((await getDoc(doc(buyer.db, transactionPath))).exists(), true);
@@ -72,7 +72,8 @@ await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), review), /permissio
 await admin.doc(transactionPath).update({ status: "completed", completedAt: new Date() });
 await assert.rejects(() => setDoc(doc(stranger.db, `${transactionPath}/reviews/${stranger.uid}`), { ...review, reviewerId: stranger.uid }), /permission/i);
 await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), { ...review, reviewedUserId: buyerId }), /permission/i);
-await setDoc(doc(buyer.db, reviewPath), review);
+await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), review), /permission/i);
+await admin.doc(reviewPath).set({ ...review, createdAt: new Date() });
 await assert.rejects(() => setDoc(doc(buyer.db, reviewPath), review), /permission/i);
 await assert.rejects(() => updateDoc(doc(buyer.db, reviewPath), { rating: 1 }), /permission/i);
 const selfTransactionId = `trust-self-tx-${suffix}`;

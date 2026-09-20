@@ -12,11 +12,11 @@ export function Footer() {
         </div>
         <div>
           <p className="text-sm font-bold text-white">Marketplace</p>
-          <div className="mt-3 grid gap-2 text-sm"><Link href="/explore">Explore</Link><Link href="/sell">Sell an item</Link><Link href="/profile">Your profile</Link></div>
+          <div className="mt-3 grid gap-2 text-sm"><Link href="/explore">Explore</Link><Link href="/sell">Sell an item</Link><Link href="/profile">Your profile</Link><Link href="/help/tiers">How tiers work</Link></div>
         </div>
         <div>
           <p className="text-sm font-bold text-white">Marketplace status</p>
-          <p className="mt-3 text-sm leading-6 text-gray-400">Buy-now listings and auctions are supported. Checkout and payments are not active yet.</p>
+          <p className="mt-3 text-sm leading-6 text-gray-400">Buy-now requests, offers and auctions can form agreed deals. Buyer-to-seller checkout and payments are not processed by TAKEME yet.</p>
         </div>
       </div>
     </footer>

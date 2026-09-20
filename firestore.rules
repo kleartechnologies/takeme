@@ -120,7 +120,10 @@ service cloud.firestore {
     }
 
     match /listings/{listingId} {
-      allow read: if resource.data.status in ['active', 'ended']
+      allow get: if resource.data.status in ['active', 'ended', 'sold']
+        || (signedIn() && resource.data.sellerId == request.auth.uid)
+        || isAdmin();
+      allow list: if resource.data.status in ['active', 'ended']
         || (signedIn() && resource.data.sellerId == request.auth.uid)
         || isAdmin();
       allow create: if signedIn()
@@ -152,24 +155,15 @@ service cloud.firestore {
       allow list: if false;
       allow create, update, delete: if false;
       match /reviews/{reviewerUid} {
-        allow get, list: if transactionParticipant(transactionData(transactionId)) || isAdmin();
-        allow create: if owns(reviewerUid)
-          && transactionData(transactionId).status == 'completed'
-          && transactionData(transactionId).buyerId != transactionData(transactionId).sellerId
-          && transactionParticipant(transactionData(transactionId))
-          && request.resource.data.keys().hasAll(['transactionId', 'buyerId', 'sellerId', 'reviewerId', 'reviewedUserId', 'rating', 'comment', 'createdAt'])
-          && request.resource.data.keys().hasOnly(['transactionId', 'buyerId', 'sellerId', 'reviewerId', 'reviewedUserId', 'rating', 'comment', 'createdAt'])
-          && request.resource.data.transactionId == transactionId
-          && request.resource.data.buyerId == transactionData(transactionId).buyerId
-          && request.resource.data.sellerId == transactionData(transactionId).sellerId
-          && request.resource.data.reviewerId == reviewerUid
-          && request.resource.data.reviewedUserId == (reviewerUid == transactionData(transactionId).buyerId ? transactionData(transactionId).sellerId : transactionData(transactionId).buyerId)
-          && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
-          && request.resource.data.comment is string && request.resource.data.comment.size() <= 1000
-          && request.resource.data.createdAt == request.time;
-        allow update, delete: if false;
+        allow get: if isAdmin() || (owns(reviewerUid) && transactionParticipant(transactionData(transactionId)));
+        allow list: if false;
+        allow create, update, delete: if false;
       }
     }
+    match /offers/{offerId} { allow read, write: if false; }
+    match /offerLocks/{lockId} { allow read, write: if false; }
+    match /listingDeals/{listingId} { allow read, write: if false; }
+    match /publicReviews/{reviewId} { allow read, write: if false; }
     match /trustSummaries/{uid} {
       allow get: if true;
       allow list: if false;

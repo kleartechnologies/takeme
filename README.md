@@ -1,6 +1,6 @@
-# TAKEME — Phase 3 auctions
+# TAKEME — mobile-first marketplace
 
-TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. Phase 3 adds server-authoritative auction listings and bidding while preserving the Phase 2 buy-now marketplace and the official TAKEME brand.
+TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. The local source includes buy-now listings, server-authoritative auctions, discovery, trust, optional unpaid promotion requests, and Phase 8 transactions and reputation.
 
 Brand: **Same Stuff. A Brighter Tomorrow.** · **Buy. Sell. Give. Reuse.** · Poppins · `#00C853`, `#006233`, `#E8F5E9`, `#1F2937`, `#6B7280`, `#FAFAFA`.
 
@@ -25,7 +25,7 @@ The browser uses Firebase v2 callable functions in `asia-southeast1`; it never u
 5. `cancelAuction` allows scheduled or active auctions to be cancelled only while no bids exist.
 6. `advanceAuctionLifecycle` runs once per minute, changing scheduled → active and scheduled/active → ended. At end it records `winnerId`, `finalBid`, and `endedAt` from the authoritative listing state, or `null` winner/final bid when no bids exist.
 
-The callable operation's Firestore timestamp is authoritative. The browser countdown is presentation only and disables its own bid form at zero. Even if the scheduled finalizer has not run yet, `placeBid` rejects requests after `auctionEndAt` or before `auctionStartAt`. A listing that ends with no bids remains publicly visible as ended history; there is no automatic conversion to buy-now. Payments, checkout, orders, notifications, messaging, reviews, and fraud scoring remain out of scope.
+The callable operation's Firestore timestamp is authoritative. The browser countdown is presentation only and disables its own bid form at zero. Even if the scheduled finalizer has not run yet, `placeBid` rejects requests after `auctionEndAt` or before `auctionStartAt`. A listing that ends with no bids remains publicly visible as ended history; there is no automatic conversion to buy-now. Payments, checkout, notifications, and automated fraud scoring remain out of scope. Later phases add participant messaging and double-blind transaction reviews.
 
 ## Security
 
@@ -73,7 +73,7 @@ The emulator integration test creates only demo-project accounts/listings/bids a
 
 Saved listings use owner-only `users/{uid}/saved/{listingId}` records, an immutable timestamp and bounded cursor pages. The public profile is `users/{uid}` (no email or roles), with owner edits to name, general location and photo. Sign-in creates a missing profile but never overwrites an existing edit. Details, security boundaries, lifecycle and Flutter mapping are in [the trust data model](docs/trust-data-model.md) and [mobile patterns](docs/mobile-marketplace-patterns.md).
 
-`transactions/{id}` and `trustSummaries/{uid}` are trusted-server-write-only. `transactions/{id}/reviews/{reviewerUid}` accepts one immutable review only for a server-recorded completed transaction between distinct participants. `conversations/{listingId}_{buyerUid}` and nested messages are participant-only; the conversation metadata is intentionally immutable until a trusted unread/latest-message fan-out exists, so no inbox UI is exposed. `reports/{id}` accepts controlled, immutable user submissions; moderation decisions require server authority. No Stripe, paid promotion, fabricated reputation, full messaging, or production data is part of Phase 5.
+`transactions/{id}` and `trustSummaries/{uid}` are trusted-server-write-only. Phase 8 replaced the original direct-client review-creation rule with an authoritative callable and double-blind release; see [mobile transactions](docs/mobile-transactions.md). `conversations/{listingId}_{buyerUid}` and nested messages are participant-only; the conversation metadata is intentionally immutable until a trusted unread/latest-message fan-out exists, so no inbox UI is exposed. `reports/{id}` accepts controlled, immutable user submissions; moderation decisions require server authority.
 
 Saved pagination and message ordering use Firestore's single-field indexes. Composite indexes were added for a future participant-scoped inbox and reporter-scoped report history. Run the new emulator test before any separately approved rules deployment. This local phase does not deploy Firebase or Vercel and does not push GitHub.
 
@@ -86,6 +86,10 @@ For local Phase 6 integration verification with Auth, Firestore and Functions em
 ## Phase 7 optional visibility foundation
 
 Sellers can review example Boost and Featured packages and save or cancel an **unpaid** promotion request for an eligible active listing. There is no Stripe integration, checkout or activation path yet: requests remain `pending_payment`, no charge is taken, no revenue is claimed and no public paid placement appears. A separately gated placement service accepts only trusted active/paid promotions without changing organic recommendations. The lifecycle, security, cost limits, analytics, Flutter contract and required later payment work are in [mobile monetization](docs/mobile-monetization.md). With the demo emulators running, verify with `node tests/promotions-emulator.integration.mjs`. This local phase does not deploy or push.
+
+## Phase 8 transactions and reputation
+
+Buy Now requests and offers are distinct from transactions. Seller acceptance (or buyer acceptance of a counter) creates an in-progress deal; trusted auction finalization creates an in-progress winner deal. Only dual buyer/seller confirmation completes it, once, and advances separate buyer/seller counts and tiers. Reviews are immutable and double-blind until both submit or the 14-day window closes. The server owns tier thresholds and role-specific ratings. No buyer-to-seller payment is processed, no pending deal counts toward GMV, and Boost/Featured never change trust. See [mobile transactions](docs/mobile-transactions.md) and [trust data model](docs/trust-data-model.md). Use `node tests/transactions-emulator.integration.mjs` against the demo emulators. The four supplied tier badges are web-sized in `public/brand/tiers/`. No production deployment or push is performed in this phase.
 
 ## Production deployment considerations
 
