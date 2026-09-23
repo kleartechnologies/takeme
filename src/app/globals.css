@@ -33,6 +33,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
   font-weight: 400;
+  overflow-x: clip;
 }
 button, a, input, select, textarea { outline-color: var(--takeme-green); }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -102,6 +103,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (max-width: 640px) { .page-shell { width: min(100% - 1.25rem, 80rem); } }
+@media (max-width: 1023px) { body { padding-bottom: max(4.5rem, env(safe-area-inset-bottom)); } }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }

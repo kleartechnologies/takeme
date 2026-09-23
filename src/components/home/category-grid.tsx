@@ -9,7 +9,7 @@ import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 export function CategoryGrid() {
   return (
     <section id="categories" className="scroll-mt-24 pt-5 pb-4 md:pt-8 md:pb-6">
-      <h2 className="text-lg font-bold tracking-tight sm:text-xl">Categories</h2>
+      <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold tracking-tight sm:text-xl">Browse categories</h2><Link href="/categories" className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">See all</Link></div>
       <div className="mt-3 flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-2 sm:gap-3" role="region" aria-label="Categories; scroll horizontally for more" tabIndex={0}>
         {categories.map((category) => {
           const Fallback = category.icon === "Wrench" ? Wrench : Shapes;

@@ -10,15 +10,16 @@ import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { Logo } from "./logo";
 
 const menuLinks = [
-  { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
-  { href: "/#categories", label: "Categories" },
+  { href: "/for-you", label: "For You" },
+  { href: "/categories", label: "Categories" },
   { href: "/explore?type=auction", label: "Auctions" },
   { href: "/sell", label: "Sell something" },
   { href: "/saved", label: "Saved listings" },
+  { href: "/updates", label: "Updates" },
 ];
 
-function SearchForm() {
+function SearchForm({ hideOnMobile = false }: { hideOnMobile?: boolean }) {
   const [query, setQuery] = useState("");
   const router = useRouter();
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -27,7 +28,7 @@ function SearchForm() {
     if (search.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: search, context: "home" });
     router.push(search ? `/explore?q=${encodeURIComponent(search)}` : "/explore");
   }
-  return <form onSubmit={submit} role="search" className="flex h-11 min-w-0 flex-1 items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm transition focus-within:border-[var(--takeme-green)] focus-within:ring-2 focus-within:ring-[var(--takeme-green)]/15 lg:max-w-lg">
+  return <form onSubmit={submit} role="search" className={`${hideOnMobile ? "hidden lg:flex" : "flex"} h-11 min-w-0 flex-1 items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm transition focus-within:border-[var(--takeme-green)] focus-within:ring-2 focus-within:ring-[var(--takeme-green)]/15 lg:max-w-lg`}>
     <button type="submit" aria-label="Search TAKEME" className="grid size-11 shrink-0 place-items-center text-[var(--takeme-gray)]"><Search size={19} /></button>
     <label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search TAKEME" className="h-11 w-full min-w-0 bg-transparent pr-3 text-sm text-[var(--takeme-charcoal)] outline-none placeholder:text-[var(--takeme-gray)]" /></label>
   </form>;
@@ -44,12 +45,14 @@ export function Header() {
     <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
       <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>
       <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
-      <SearchForm />
+      {pathname === "/explore" && <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>}
+      <SearchForm hideOnMobile={pathname === "/explore"} />
       <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
         <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>
+        <Link href="/for-you" className="nav-link" aria-current={pathname === "/for-you" ? "page" : undefined}>For You</Link>
         <Link href="/saved" className="icon-button" aria-label="Saved listings" aria-current={pathname === "/saved" ? "page" : undefined}><Heart size={20} /></Link>
         <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
-        <button type="button" disabled title="Notifications are not available yet" aria-label="Notifications are not available yet" className="icon-button cursor-not-allowed opacity-50"><Bell size={19} /></button>
+        <Link href="/updates" className="icon-button" aria-label="Updates" aria-current={pathname === "/updates" ? "page" : undefined}><Bell size={19} /></Link>
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
         {user && <button type="button" onClick={() => void logout()} aria-label="Sign out" className="icon-button"><LogOut size={18} /></button>}
       </nav>

@@ -14,9 +14,9 @@ const reportReasons = [
   ["spam", "Spam"], ["personal_information", "Personal information"], ["unrelated", "Unrelated to transaction"], ["other", "Other"],
 ] as const;
 
-export function ReputationView({ uid, compact = false }: { uid: string; compact?: boolean }) {
+export function ReputationView({ uid, compact = false, initialSummary }: { uid: string; compact?: boolean; initialSummary?: TrustSummary | null }) {
   const { user } = useAuth();
-  const [summary, setSummary] = useState<TrustSummary | null>(null);
+  const [summary, setSummary] = useState<TrustSummary | null>(initialSummary ?? null);
   const [policy, setPolicy] = useState<ReputationPolicy | null>(null);
   const [reviews, setReviews] = useState<PublicReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,11 +27,11 @@ export function ReputationView({ uid, compact = false }: { uid: string; compact?
   const [reportNotice, setReportNotice] = useState("");
   useEffect(() => {
     let active = true;
-    Promise.all([getTrustSummary(uid), getReputationPolicy(), compact ? Promise.resolve([]) : getPublicReviews(uid)])
+    Promise.all([initialSummary !== undefined ? Promise.resolve(initialSummary) : getTrustSummary(uid), getReputationPolicy(), compact ? Promise.resolve([]) : getPublicReviews(uid)])
       .then(([nextSummary, nextPolicy, nextReviews]) => { if (active) { setSummary(nextSummary); setPolicy(nextPolicy); setReviews(nextReviews); setLoading(false); } })
       .catch(() => { if (active) { setError("Reputation is unavailable right now."); setLoading(false); } });
     return () => { active = false; };
-  }, [uid, compact]);
+  }, [uid, compact, initialSummary]);
   async function submitReport(reviewId: string) {
     setReportNotice("");
     try { await reportPublicReview(reviewId, reason, details); setReportNotice("Review report submitted for moderation."); setReporting(""); setDetails(""); }

@@ -3,6 +3,8 @@
 import { Filter, LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CategoryGrid } from "@/components/home/category-grid";
+import { HeroBannerCarousel } from "@/components/home/hero-banner-carousel";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { categories } from "@/data/categories";
@@ -99,6 +101,11 @@ export function ExploreBrowser() {
   const activeCount = [filters.q, filters.category, filters.condition, filters.type, filters.auction, filters.price, filters.location].filter(Boolean).length;
   const reset = () => { update(defaults); setQueryInput(""); setSearchError(""); };
   const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); if (value.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: value, context: "explore" }); update({ q: value }); };
+  const openNearby = () => {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      document.querySelector<HTMLInputElement>('[data-desktop-filters] input[placeholder="e.g. Kuala Lumpur"]')?.focus();
+    } else setOpen(true);
+  };
 
   async function loadMore() {
     if (!state.page.cursor) return;
@@ -120,12 +127,19 @@ export function ExploreBrowser() {
   </>;
 
   return <div>
-    <form onSubmit={submitSearch} className="flex flex-wrap gap-3"><label className="input-shell min-w-[180px] flex-1"><Search size={19} /><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Search listing titles..." /></label><button className="button-primary h-12 px-5" type="submit">Search</button><button type="button" onClick={() => setOpen(true)} className="button-secondary h-12 px-5 lg:hidden" aria-expanded={open} aria-controls="mobile-filters"><Filter size={18} /> Filters{activeCount > 0 ? ` (${activeCount})` : ""}</button><label className="select-label w-full sm:w-52"><span className="sr-only">Sort listings</span><select value={filters.sort} onChange={(event) => update({ sort: event.target.value as ListingSort })}><option value="newest" disabled={Boolean(filters.price)}>Newest first</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></label></form>
+    <form onSubmit={submitSearch} role="search" aria-label="Search marketplace listings" className="flex flex-wrap gap-2 sm:gap-3"><label className="input-shell h-12 min-w-[180px] flex-1 rounded-full bg-white shadow-sm"><Search size={20} /><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="What are you looking for?" /></label><button className="button-primary h-12 px-5" type="submit">Search</button><button type="button" onClick={() => setOpen(true)} className="button-secondary h-12 px-4 lg:hidden" aria-expanded={open} aria-controls="mobile-filters"><Filter size={18} /> Filters{activeCount > 0 ? ` (${activeCount})` : ""}</button><label className="select-label w-full sm:w-52"><span className="sr-only">Sort listings</span><select value={filters.sort} onChange={(event) => update({ sort: event.target.value as ListingSort })}><option value="newest" disabled={Boolean(filters.price)}>Newest first</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></label></form>
     <p className="mt-2 text-xs leading-5 text-stone-500">Search matches title words or prefixes. Filters can be combined; a price cap sorts by price.</p>
     {searchError && <p className="field-error mt-2" role="alert">{searchError}</p>}
+    {activeCount === 0 && <div className="mt-5"><HeroBannerCarousel /><CategoryGrid /></div>}
+    <div className="banner-track mt-5 flex gap-2 overflow-x-auto border-b border-gray-200" role="tablist" aria-label="Marketplace discovery">
+      <button type="button" role="tab" aria-selected={!filters.type && !filters.location} onClick={() => update({ type: "", auction: "", location: "" })} className={`relative min-h-12 shrink-0 px-2 text-sm font-semibold ${!filters.type && !filters.location ? "text-[var(--takeme-dark-green)] after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[var(--takeme-green)]" : "text-[var(--takeme-gray)]"}`}>Top Picks</button>
+      <button type="button" role="tab" aria-selected={Boolean(filters.location)} onClick={openNearby} className={`relative min-h-12 shrink-0 px-2 text-sm font-semibold ${filters.location ? "text-[var(--takeme-dark-green)] after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[var(--takeme-green)]" : "text-[var(--takeme-gray)]"}`}>Nearby</button>
+      <button type="button" role="tab" aria-selected={filters.type === "auction"} onClick={() => update({ type: "auction" })} className={`relative min-h-12 shrink-0 px-2 text-sm font-semibold ${filters.type === "auction" ? "text-[var(--takeme-dark-green)] after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[var(--takeme-green)]" : "text-[var(--takeme-gray)]"}`}>Auctions</button>
+      <button type="button" role="tab" aria-selected="false" aria-disabled="true" title="Free listings are not supported yet" className="min-h-12 shrink-0 cursor-not-allowed px-2 text-sm font-semibold text-gray-400">Free</button>
+    </div>
     <div className="mt-6 grid gap-7 lg:grid-cols-[240px_1fr]">
-      <aside className="sticky top-24 hidden h-fit rounded-2xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:block"><div className="flex items-center justify-between"><p className="flex items-center gap-2 font-semibold"><SlidersHorizontal size={17} /> Filters</p><button onClick={reset} className="min-h-11 text-xs font-semibold text-[var(--takeme-dark-green)]">Clear all</button></div><div className="filter-stack">{filterFields}</div></aside>
-      <div><div className="mb-5 flex items-center justify-between gap-3"><p className="text-sm text-stone-600"><strong className="text-stone-950">{loading ? "…" : state.page.listings.length}</strong> listings loaded</p>{activeCount > 0 && <button onClick={reset} className="flex min-h-11 items-center gap-1 text-xs font-bold text-stone-600"><X size={14} /> Clear filters</button>}</div>
+      <aside data-desktop-filters className="sticky top-24 hidden h-fit rounded-2xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:block"><div className="flex items-center justify-between"><p className="flex items-center gap-2 font-semibold"><SlidersHorizontal size={17} /> Filters</p><button onClick={reset} className="min-h-11 text-xs font-semibold text-[var(--takeme-dark-green)]">Clear all</button></div><div className="filter-stack">{filterFields}</div></aside>
+      <div><div className="mb-5 flex items-end justify-between gap-3"><div>{filters.q && <h2 className="text-lg font-bold tracking-tight sm:text-xl">Search results for “{filters.q}”</h2>}<p className={`${filters.q ? "mt-1" : ""} text-sm text-stone-600`}><strong className="text-stone-950">{loading ? "…" : state.page.listings.length}</strong> listings loaded</p></div>{activeCount > 0 && <button onClick={reset} className="flex min-h-11 shrink-0 items-center gap-1 text-xs font-bold text-stone-600"><X size={14} /> Clear filters</button>}</div>
         {state.error && <ErrorState message={state.error} />}
         {loading ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <ListingSkeleton key={index} />)}</div> : !state.error && displayedListings.length ? <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 xl:grid-cols-3">{displayedListings.map((listing) => <ListingCard key={listing.id} listing={listing} promotion={activePlacement?.badges[listing.id]} />)}</div> : !state.error ? <EmptyState title={activeCount ? "No matches in this set" : "No active listings yet"} description={activeCount ? "Try a different title or clear a filter to see more items." : "Be the first to publish an item."} /> : null}
         {!loading && !state.error && state.page.hasMore && <div className="mt-8 text-center"><button disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-12 px-6">{loadingMore && <LoaderCircle size={17} className="animate-spin" />}Load more listings</button></div>}
