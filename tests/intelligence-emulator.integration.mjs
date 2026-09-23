@@ -57,6 +57,27 @@ const cold = await call(buyer, "getMarketplaceRecommendations", {});
 assert.equal(cold.mode, "discovery");
 assert.ok(cold.items.length > 0 && cold.items.length <= 8);
 assert.ok(cold.items.every((item) => item.listing.status === "active"));
+const coldDiscovery = await call(buyer, "getMarketplaceDiscovery", {});
+assert.equal(coldDiscovery.metadata.personalized, false);
+assert.equal(coldDiscovery.sections[0].id, "for_you");
+assert.ok(coldDiscovery.sections.every((section) => section.listings.length <= 4));
+assert.ok(coldDiscovery.sessionId);
+assert.equal(coldDiscovery.sections.some((section) => section.id === "trending_near_you"), false, "no local lane without a profile location");
+await assert.rejects(() => call(buyer, "getMarketplaceDiscovery", { sectionId: "for_you", cursor: "1000000" }), /invalid|cursor/i);
+if (coldDiscovery.sections[0].nextCursor) {
+  const nextPage = await call(buyer, "getMarketplaceDiscovery", { sectionId: coldDiscovery.sections[0].id, cursor: coldDiscovery.sections[0].nextCursor });
+  assert.ok(nextPage.sections[0].listings.length <= 4);
+  assert.ok(nextPage.sections[0].listings.every((item) => !coldDiscovery.sections[0].listings.some((first) => first.listing.id === item.listing.id)));
+}
+await assert.rejects(() => call(buyer, "trackMarketplaceEvent", { type: "RECOMMENDATION_IMPRESSION", listingIds: [cameraId] }), /permission|session/i);
+await assert.rejects(() => call(buyer, "trackMarketplaceEvent", { type: "RECOMMENDATION_CLICK", listingId: "not-served", sessionId: coldDiscovery.sessionId }), /permission|session/i);
+const servedId = cameraId;
+assert.ok(coldDiscovery.sections.some((section) => section.listings.some((item) => item.listing.id === servedId)));
+const servedSectionId = coldDiscovery.sections.find((section) => section.listings.some((item) => item.listing.id === servedId)).id;
+assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "RECOMMENDATION_IMPRESSION", listingIds: [servedId], sessionId: coldDiscovery.sessionId })).accepted, true);
+assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "RECOMMENDATION_CLICK", listingId: servedId, sessionId: coldDiscovery.sessionId })).accepted, true);
+await assert.rejects(() => setDoc(doc(buyer.db, "discoverySessions", "forged"), { userId: buyer.uid, listings: [cameraId] }), /permission/i);
+await assert.rejects(() => setDoc(doc(buyer.db, "discoveryAttributions", "forged"), { sectionId: "for_you" }), /permission/i);
 const sellerDiscovery = await call(seller, "getMarketplaceRecommendations", {});
 assert.ok(sellerDiscovery.items.every((item) => item.listing.sellerId !== seller.uid));
 
@@ -70,6 +91,13 @@ await call(buyer, "trackMarketplaceEvent", { type: "SEARCH", query: "vintage cam
 const personalized = await call(buyer, "getMarketplaceRecommendations", {});
 assert.equal(personalized.mode, "personalized");
 assert.ok(personalized.items.some((item) => item.listing.id === cameraId));
+const personalizedDiscovery = await call(buyer, "getMarketplaceDiscovery", {});
+assert.equal(personalizedDiscovery.metadata.personalized, true);
+assert.ok(personalizedDiscovery.sections.some((section) => section.id === "because_you_like"));
+assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "NOT_INTERESTED", listingId: cameraId })).accepted, true);
+assert.ok((await call(buyer, "getMarketplaceDiscovery", {})).sections.every((section) => section.listings.every((item) => item.listing.id !== cameraId)));
+assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "INTEREST_RESTORED", listingId: cameraId })).accepted, true);
+assert.ok((await call(buyer, "getMarketplaceDiscovery", {})).sections.some((section) => section.listings.some((item) => item.listing.id === cameraId)));
 
 await assert.rejects(() => getDoc(doc(stranger.db, "userInterests", buyer.uid)), /permission/i);
 await assert.rejects(() => getDoc(doc(stranger.db, "listingTrends", cameraId)), /permission/i);
@@ -82,6 +110,19 @@ await setDoc(doc(buyer.db, "users", buyer.uid, "saved", cameraId), { listingId: 
 await eventually(async () => (await admin.collection("marketplaceEvents").where("userId", "==", buyer.uid).where("eventType", "==", "SAVE_LISTING").limit(1).get()).size === 1, "authoritative Saved event");
 const savedProfile = await admin.doc(`userInterests/${buyer.uid}`).get();
 assert.ok(savedProfile.data().category.electronics > 2);
+const attributedSave = await admin.collection("marketplaceEvents").where("userId", "==", buyer.uid).where("eventType", "==", "SAVE_LISTING").limit(1).get();
+assert.equal(attributedSave.docs[0].data().sectionId, servedSectionId);
+
+const pendingId = `intelligence-pending-${suffix}`;
+await admin.doc(`transactions/${pendingId}`).set({ status: "in_progress", buyerId: buyer.uid, sellerId: seller.uid, listingId: fashionId, categoryId: "fashion", amountSen: 25000, type: "buy_now" });
+await admin.doc(`marketplaceEvents/transaction-completed-${pendingId}`).set({ eventType: "TRANSACTION_COMPLETED", source: "transaction", transactionId: pendingId, userId: buyer.uid, listingId: fashionId, categoryId: "fashion", createdAt: new Date() });
+await new Promise((resolve) => setTimeout(resolve, 500));
+assert.equal((await admin.doc(`intelligenceCompletions/${pendingId}`).get()).exists, false);
+const completedId = `intelligence-completed-${suffix}`;
+await admin.doc(`transactions/${completedId}`).set({ status: "completed", buyerId: buyer.uid, sellerId: seller.uid, listingId: fashionId, categoryId: "fashion", amountSen: 25000, type: "buy_now" });
+await admin.doc(`marketplaceEvents/transaction-completed-${completedId}`).set({ eventType: "TRANSACTION_COMPLETED", source: "transaction", transactionId: completedId, userId: buyer.uid, listingId: fashionId, categoryId: "fashion", createdAt: new Date() });
+await eventually(async () => (await admin.doc(`intelligenceCompletions/${completedId}`).get()).exists, "trusted completed transaction interest");
+assert.ok((await admin.doc(`userInterests/${buyer.uid}`).get()).data().category.fashion > 0);
 
 await getAdminAuth(adminApp).setCustomUserClaims(stranger.uid, { admin: true });
 await stranger.auth.currentUser.getIdToken(true);
@@ -90,4 +131,4 @@ assert.equal((await getDoc(doc(stranger.db, "userInterests", buyer.uid))).exists
 
 await Promise.all([seller, buyer, stranger, guest].map(({ app }) => deleteApp(app)));
 await deleteAdminApp(adminApp);
-console.log("Intelligence emulator integration passed: auth, validation, dedupe, personalization, authoritative Saved signal, private analytics, admin access.");
+console.log("Intelligence emulator integration passed: discovery, served impressions, negative preferences, trusted saves/completions, private analytics, admin access.");

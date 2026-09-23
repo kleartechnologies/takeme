@@ -16,12 +16,12 @@ These are product patterns, not HTML components. Reproduce their hierarchy and s
 2. Promotional banner carousel: roughly `16:7` on mobile, horizontal swipe, four original TAKEME promotions, visible pagination and large CTA targets. Content is stored in `src/data/promotions.ts`; platform presentation may differ.
 3. Category carousel: horizontal swipe, a 68–76px icon with its name, one category source (`src/data/categories.ts`), tap to filtered Explore. Do not add a second circular backdrop to supplied images.
 4. Discovery tabs: horizontal, underlined selection, Top Picks / Nearby / Auctions / Free. A selected tab controls one feed; switching tabs does not imply a global realtime subscription.
-5. Listing feed: two columns on phones, three on medium screens, four on large screens. Cards use a 4:3 image, price, two-line title, available location and condition, and actual auction status. Use bounded pages and explicit Load more.
-6. Bottom navigation: Explore / Saved / Sell / Updates / Me, with Sell prominent. Home remains reachable from the menu. Saved opens a real account-backed page; unsupported Updates stays disabled.
+5. Listing feed: two columns on phones, three on medium screens, four on large screens. Discovery 2.0 also uses horizontal swipe rails on phones. Cards use a 4:3 image, price, two-line title, available location and condition, and actual auction status. Use bounded pages and explicit Show more.
+6. Bottom navigation: Explore / For You / Sell / Updates / Me, with Sell prominent. Home remains reachable from the menu. Saved opens a real account-backed page; unsupported Updates stays disabled.
 
 ## Honest data and component states
 
-- Top Picks means discovery from recent and trending active listings. It becomes “Recommended for You” only after the server reports sufficient personalized interest; see [mobile intelligence](mobile-intelligence.md).
+- Top Picks means discovery from recent and trending active listings. For You uses server-ranked sections and becomes personalized only after the server reports sufficient interest; see [mobile intelligence](mobile-intelligence.md).
 - Nearby uses the seller's entered location text, not GPS or distance. Ask for a location before querying.
 - Auctions shows actual auction listings only. Free items remain an explanation state until zero-price listings are supported.
 - Loading uses listing-card skeletons. Empty states explain what is absent and offer a real Sell or Explore action. Errors use plain language and Retry; never show raw Firebase errors.

@@ -20,10 +20,11 @@ function auctionLabel(listing: Listing) {
   return "Live auction";
 }
 
-export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", initialSaved, onSavedChange, recommendationSource, recommendationContext = "home", promotion, promotionContext = "explore" }: { listing: Listing; sizes?: string; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationContext?: "home" | "detail"; promotion?: PromotionBadge; promotionContext?: "home" | "explore" }) {
+export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", initialSaved, onSavedChange, recommendationSource, recommendationSessionId, promotion, promotionContext = "explore" }: { listing: Listing; sizes?: string; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationSessionId?: string | null; promotion?: PromotionBadge; promotionContext?: "home" | "explore" }) {
   const { user } = useAuth();
   const card = useRef<HTMLElement>(null);
   const impression = useRef("");
+  const recommendationImpression = useRef("");
   const isAuction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
   useEffect(() => {
     if (!promotion || !user || impression.current === promotion.promotionId || !card.current || typeof IntersectionObserver === "undefined") return;
@@ -36,8 +37,21 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
     observer.observe(card.current);
     return () => observer.disconnect();
   }, [listing.id, promotion, promotionContext, user]);
+  useEffect(() => {
+    if (!recommendationSessionId || !user || !card.current || typeof IntersectionObserver === "undefined") return;
+    const key = `${recommendationSessionId}:${listing.id}`;
+    if (recommendationImpression.current === key) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting) || recommendationImpression.current === key) return;
+      recommendationImpression.current = key;
+      trackMarketplaceIntent({ type: "RECOMMENDATION_IMPRESSION", listingIds: [listing.id], sessionId: recommendationSessionId });
+      observer.disconnect();
+    }, { threshold: 0.35 });
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, [listing.id, recommendationSessionId, user]);
   const recordClick = () => {
-    if (recommendationSource) trackMarketplaceIntent({ type: "RECOMMENDATION_CLICK", listingId: listing.id, candidateSource: recommendationSource, context: recommendationContext });
+    if (recommendationSource && recommendationSessionId) trackMarketplaceIntent({ type: "RECOMMENDATION_CLICK", listingId: listing.id, sessionId: recommendationSessionId });
     if (promotion) trackPromotionIntent("PROMOTION_CLICK", promotion, listing.id, promotionContext);
   };
   return (

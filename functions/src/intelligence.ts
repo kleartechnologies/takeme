@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { createDiscoverySession, verifyDiscoverySession } from "./discovery-session";
 import {
   applyInterestSignal,
   decayedTrend,
@@ -17,9 +18,8 @@ import {
   type Signal,
 } from "./intelligence-domain";
 
-const CLIENT_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SEARCH", "CATEGORY_VIEW", "FILTER_APPLIED", "SHARE_LISTING", "PROFILE_VIEW", "SELLER_VIEW", "RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "NOT_INTERESTED"]);
-const LISTING_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SHARE_LISTING", "RECOMMENDATION_CLICK", "NOT_INTERESTED"]);
-const SOURCES = new Set<CandidateSource>(["personalized", "trending", "recent", "similar", "nearby"]);
+const CLIENT_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SEARCH", "CATEGORY_VIEW", "FILTER_APPLIED", "SHARE_LISTING", "PROFILE_VIEW", "SELLER_VIEW", "RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "NOT_INTERESTED", "INTEREST_RESTORED"]);
+const LISTING_TYPES = new Set<MarketplaceEventType>(["VIEW_LISTING", "AUCTION_VIEW", "SHARE_LISTING", "RECOMMENDATION_CLICK", "NOT_INTERESTED", "INTEREST_RESTORED"]);
 const dailyClientCap = 100;
 const nowIso = () => new Date().toISOString();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -31,12 +31,13 @@ function string(value: unknown, field: string, min: number, max: number) {
 }
 
 function eventWindowMs(type: MarketplaceEventType) {
+  if (type === "NOT_INTERESTED" || type === "INTEREST_RESTORED") return 1;
   if (type === "VIEW_LISTING" || type === "AUCTION_VIEW") return 30 * 60_000;
   if (type === "RECOMMENDATION_CLICK") return 10 * 60_000;
   return 60 * 60_000;
 }
 
-interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource; promotionId?: string }
+interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource; sectionId?: string; reasonId?: string; promotionId?: string }
 
 export async function recordMarketplaceSignal(uid: string, signal: Signal, dedupeKey: string, envelope: EventEnvelope, now = new Date()) {
   const db = getFirestore();
@@ -47,6 +48,8 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
   const day = now.toISOString().slice(0, 10).replaceAll("-", "");
   const quotaRef = envelope.source === "client" ? db.collection("intelligenceQuotas").doc(`${uid}_${day}`) : null;
   const promotionRef = envelope.promotionId ? db.collection("promotions").doc(envelope.promotionId) : null;
+  const attributionRef = signal.type === "RECOMMENDATION_CLICK" && signal.listingId && envelope.sectionId
+    ? db.collection("discoveryAttributions").doc(hash(`${uid}|${signal.listingId}`)) : null;
   const promotionListingRef = promotionRef && signal.listingId ? db.collection("listings").doc(signal.listingId) : null;
   return db.runTransaction(async (transaction) => {
     const [existing, interest, trend, quota, promotion, promotionListing] = await Promise.all([
@@ -79,6 +82,8 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
       ...(signal.exposedListingIds ? { exposedListingIds: signal.exposedListingIds } : {}),
       ...(envelope.context ? { context: envelope.context } : {}),
       ...(envelope.candidateSource ? { candidateSource: envelope.candidateSource } : {}),
+      ...(envelope.sectionId ? { sectionId: envelope.sectionId } : {}),
+      ...(envelope.reasonId ? { reasonId: envelope.reasonId } : {}),
       ...(envelope.promotionId ? { promotionId: envelope.promotionId } : {}),
       createdAt: timestamp, expiresAt: Timestamp.fromMillis(now.getTime() + 90 * 86_400_000),
     });
@@ -89,6 +94,9 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
       transaction.set(trendRef, { listingId: signal.listingId, score: Math.min(100, priorScore + Math.min(8, EVENT_WEIGHTS[signal.type])), updatedAt: now.toISOString(), eventCount: Math.min(1_000_000, Number(prior?.eventCount ?? 0) + 1) });
     }
     if (quotaRef) transaction.set(quotaRef, { userId: uid, day, count: Number(quota?.data()?.count ?? 0) + 1, expiresAt: Timestamp.fromMillis(now.getTime() + 3 * 86_400_000) });
+    if (attributionRef) transaction.set(attributionRef, { userId: uid, listingId: signal.listingId, sectionId: envelope.sectionId,
+      reasonId: envelope.reasonId, candidateSource: envelope.candidateSource, clickedAt: timestamp,
+      expiresAt: Timestamp.fromMillis(now.getTime() + 7 * 86_400_000) });
     if (promotionRef && promotion) transaction.update(promotionRef, { [signal.type === "PROMOTION_IMPRESSION" ? "impressions" : "clicks"]: Math.min(1_000_000_000, Number(promotion.data()?.[signal.type === "PROMOTION_IMPRESSION" ? "impressions" : "clicks"] ?? 0) + 1) });
     return { accepted: true, reason: "recorded" as const };
   });
@@ -122,13 +130,15 @@ export const trackMarketplaceEvent = onCall(async (request) => {
   const data = input as Record<string, unknown>;
   const type = data.type as MarketplaceEventType;
   if (!CLIENT_TYPES.has(type)) throw new HttpsError("permission-denied", "This event must come from an authoritative marketplace record.");
-  if (Object.keys(data).some((key) => !["type", "listingId", "categoryId", "query", "targetId", "context", "candidateSource", "listingIds", "filterKey"].includes(key))) throw new HttpsError("invalid-argument", "Unexpected event field.");
+  if (Object.keys(data).some((key) => !["type", "listingId", "categoryId", "query", "targetId", "context", "listingIds", "filterKey", "sessionId"].includes(key))) throw new HttpsError("invalid-argument", "Unexpected event field.");
   const now = new Date();
   let signal: Signal = { type };
   let sellerId: string | undefined;
   let scope: string;
+  let served: Awaited<ReturnType<typeof verifyDiscoverySession>> = [];
   if (LISTING_TYPES.has(type)) {
     const listingId = string(data.listingId, "Listing", 1, 128);
+    if (type === "RECOMMENDATION_CLICK") served = await verifyDiscoverySession(uid, data.sessionId, [listingId], now);
     const detail = await listingSignal(listingId, type);
     if (!detail || (type !== "NOT_INTERESTED" && detail.signal.type === "AUCTION_VIEW" && detail.signal.listingType === "buy_now")) throw new HttpsError("failed-precondition", "Listing is unavailable for this event.");
     if (detail.sellerId === uid) return { accepted: false, reason: "own_listing" };
@@ -150,15 +160,17 @@ export const trackMarketplaceEvent = onCall(async (request) => {
     if (!(await getFirestore().collection("users").doc(targetId).get()).exists) throw new HttpsError("not-found", "Profile is unavailable.");
     scope = targetId;
   } else if (type === "RECOMMENDATION_IMPRESSION") {
-    if (!Array.isArray(data.listingIds) || data.listingIds.length < 1 || data.listingIds.length > 8 || data.listingIds.some((id) => typeof id !== "string" || id.length > 128 || id.length < 1)) throw new HttpsError("invalid-argument", "Impression batch must contain 1–8 listings.");
+    if (!Array.isArray(data.listingIds) || data.listingIds.length !== 1 || data.listingIds.some((id) => typeof id !== "string" || id.length > 128 || id.length < 1)) throw new HttpsError("invalid-argument", "A card impression must contain one listing.");
     const ids = [...new Set(data.listingIds as string[])];
-    signal = { type, exposedListingIds: ids };
+    served = await verifyDiscoverySession(uid, data.sessionId, ids, now);
+    signal = { type, exposedListingIds: ids, ...(ids.length === 1 ? { listingId: ids[0] } : {}) };
     scope = ids.join(",");
   } else throw new HttpsError("invalid-argument", "Unsupported event.");
   const context = typeof data.context === "string" && ["home", "detail", "explore", "profile"].includes(data.context) ? data.context : undefined;
-  const candidateSource = typeof data.candidateSource === "string" && SOURCES.has(data.candidateSource as CandidateSource) ? data.candidateSource as CandidateSource : undefined;
+  const attribution = served.length === 1 ? served[0] : undefined;
+  const candidateSource = attribution?.source;
   const bucket = Math.floor(now.getTime() / eventWindowMs(type));
-  return recordMarketplaceSignal(uid, signal, `${type}|${scope}|${bucket}`, { source: "client", sellerId, context, candidateSource }, now);
+  return recordMarketplaceSignal(uid, signal, `${type}|${scope}|${bucket}`, { source: "client", sellerId, context: attribution ? "discovery" : context, candidateSource, sectionId: attribution?.sectionId, reasonId: attribution?.reasonId }, now);
 });
 
 export const onSavedListingCreated = onDocumentCreated("users/{uid}/saved/{listingId}", async (event) => {
@@ -166,7 +178,11 @@ export const onSavedListingCreated = onDocumentCreated("users/{uid}/saved/{listi
   const listingId = event.params.listingId;
   const detail = await listingSignal(listingId, "SAVE_LISTING");
   if (!detail || detail.sellerId === uid) return;
-  await recordMarketplaceSignal(uid, detail.signal, `saved-create|${event.id}`, { source: "saved", sellerId: detail.sellerId });
+  const attribution = (await getFirestore().collection("discoveryAttributions").doc(hash(`${uid}|${listingId}`)).get()).data();
+  const valid = attribution?.userId === uid && attribution?.listingId === listingId && attribution?.expiresAt instanceof Timestamp
+    && attribution.expiresAt.toMillis() > Date.now();
+  await recordMarketplaceSignal(uid, detail.signal, `saved-create|${event.id}`, { source: "saved", sellerId: detail.sellerId,
+    ...(valid ? { sectionId: attribution.sectionId, reasonId: attribution.reasonId, candidateSource: attribution.candidateSource } : {}) });
 });
 
 export const onSavedListingDeleted = onDocumentDeleted("users/{uid}/saved/{listingId}", async (event) => {
@@ -201,6 +217,29 @@ export const onConversationMessageCreated = onDocumentCreated("conversations/{co
   const detail = await listingSignal(String(conversation.listingId), "MESSAGE_SENT");
   if (!detail) return;
   await recordMarketplaceSignal(data.senderId, detail.signal, `message|${event.params.messageId}`, { source: "message", sellerId: detail.sellerId });
+});
+
+/** Transaction completion is minted by the transaction callable, never by the browser. */
+export const onCompletedTransactionInterest = onDocumentCreated("marketplaceEvents/{eventId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.eventType !== "TRANSACTION_COMPLETED" || data.source !== "transaction"
+    || typeof data.transactionId !== "string" || typeof data.userId !== "string") return;
+  const db = getFirestore();
+  const transactionRef = db.collection("transactions").doc(data.transactionId);
+  const ledgerRef = db.collection("intelligenceCompletions").doc(data.transactionId);
+  const interestRef = db.collection("userInterests").doc(data.userId);
+  await db.runTransaction(async (tx) => {
+    const [transaction, ledger, interest] = await Promise.all([tx.get(transactionRef), tx.get(ledgerRef), tx.get(interestRef)]);
+    const deal = transaction.data();
+    if (ledger.exists || !deal || deal.status !== "completed" || deal.buyerId !== data.userId
+      || deal.listingId !== data.listingId || deal.categoryId !== data.categoryId || !Number.isSafeInteger(deal.amountSen)) return;
+    const now = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
+    const profile = applyInterestSignal((interest.data() as InterestProfile | undefined) ?? null,
+      { type: "TRANSACTION_COMPLETED", listingId: deal.listingId, categoryId: deal.categoryId, price: deal.amountSen / 100,
+        listingType: deal.type === "auction" ? "auction" : "buy_now" }, now);
+    tx.set(interestRef, { ...profile, userId: data.userId });
+    tx.create(ledgerRef, { transactionId: data.transactionId, userId: data.userId, createdAt: Timestamp.fromDate(now) });
+  });
 });
 
 export const getMarketplaceRecommendations = onCall(async (request) => {
@@ -238,7 +277,9 @@ export const getMarketplaceRecommendations = onCall(async (request) => {
       sources.set(listing.id, { listing: previous?.listing ?? publicListing(listing.data()!, listing.id), source: previous?.source === "personalized" ? "personalized" : "trending", trendScore: score });
     }
   }
-  const eligible = [...sources.values()].filter((candidate) => !uid || candidate.listing.sellerId !== uid);
+  const eligible = [...sources.values()].filter((candidate) => (!uid || candidate.listing.sellerId !== uid)
+    && (!profile?.hiddenListings?.[candidate.listing.id] || now.getTime() - Date.parse(profile.hiddenListings[candidate.listing.id]!) >= 30 * 86_400_000));
   const ranked = rankCandidates(eligible, effectiveProfile, now, savedIds, 8);
-  return { version: RECOMMENDATION_VERSION, mode: personalized ? "personalized" : "discovery", items: ranked.map((candidate) => ({ listing: candidate.listing, candidateSource: candidate.source })) };
+  const sessionId = uid ? await createDiscoverySession(uid, ranked.map((candidate) => ({ id: candidate.listing.id, source: candidate.source, sectionId: "home", reasonId: personalized ? "for_you" : "cold_start" })), now) : null;
+  return { version: RECOMMENDATION_VERSION, mode: personalized ? "personalized" : "discovery", sessionId, items: ranked.map((candidate) => ({ listing: candidate.listing, candidateSource: candidate.source })) };
 });

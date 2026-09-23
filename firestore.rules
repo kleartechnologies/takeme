@@ -199,6 +199,15 @@ service cloud.firestore {
     match /intelligenceQuotas/{quotaId} {
       allow read, write: if false;
     }
+    match /discoverySessions/{sessionId} {
+      allow read, write: if false;
+    }
+    match /intelligenceCompletions/{transactionId} {
+      allow read, write: if false;
+    }
+    match /discoveryAttributions/{attributionId} {
+      allow read, write: if false;
+    }
     match /promotionPackages/{packageId} {
       allow get: if isAdmin();
       allow list: if isAdmin() && request.query.limit <= 20;

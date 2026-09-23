@@ -1,7 +1,7 @@
 /** Pure, deterministic intelligence policy. No Firestore or UI dependencies. */
 export const INTEREST_HALF_LIFE_DAYS = 30;
 export const TREND_HALF_LIFE_DAYS = 7;
-export const RECOMMENDATION_VERSION = "v1";
+export const RECOMMENDATION_VERSION = "v2";
 export const MIN_PERSONALIZATION_EVENTS = 3;
 export const MIN_MEANINGFUL_EVENTS = 1;
 
@@ -30,6 +30,7 @@ export const EVENT_WEIGHTS = {
   FEATURED_STARTED: 0,
   FEATURED_EXPIRED: 0,
   NOT_INTERESTED: -4,
+  INTEREST_RESTORED: 0,
   TRANSACTION_COMPLETED: 12,
   REVIEW_SUBMITTED: 0,
   PURCHASE: 0,
@@ -37,7 +38,7 @@ export const EVENT_WEIGHTS = {
   FEATURED_PURCHASED: 0,
 } as const;
 export type MarketplaceEventType = keyof typeof EVENT_WEIGHTS;
-export type CandidateSource = "personalized" | "trending" | "recent" | "similar" | "nearby";
+export type CandidateSource = "personalized" | "trending" | "recent" | "similar" | "nearby" | "auction" | "viewed";
 
 export interface InterestProfile {
   category: Record<string, number>;
@@ -47,6 +48,8 @@ export interface InterestProfile {
   condition: Record<string, number>;
   recentQueries: string[];
   exposureCount: Record<string, number>;
+  hiddenListings: Record<string, string>;
+  recentlyViewed: string[];
   eventCount: number;
   meaningfulEventCount: number;
   updatedAt: string;
@@ -77,6 +80,8 @@ export interface RankableListing {
   imageUrls: string[];
   status: string;
   createdAt: string;
+  auctionStatus?: string | null;
+  auctionEndAt?: string | null;
 }
 
 export interface Candidate {
@@ -107,7 +112,7 @@ export function priceBand(price: number) {
 }
 
 export function emptyInterest(now: Date): InterestProfile {
-  return { category: {}, priceBand: {}, location: {}, listingType: {}, condition: {}, recentQueries: [], exposureCount: {}, eventCount: 0, meaningfulEventCount: 0, updatedAt: now.toISOString() };
+  return { category: {}, priceBand: {}, location: {}, listingType: {}, condition: {}, recentQueries: [], exposureCount: {}, hiddenListings: {}, recentlyViewed: [], eventCount: 0, meaningfulEventCount: 0, updatedAt: now.toISOString() };
 }
 
 function decayMap(input: Record<string, number>, factorMs: number) {
@@ -130,7 +135,14 @@ export function applyInterestSignal(previous: InterestProfile | null, signal: Si
   const base = previous ?? emptyInterest(now);
   const elapsed = Math.max(0, now.getTime() - Date.parse(base.updatedAt));
   const weight = EVENT_WEIGHTS[signal.type];
-  const score = Math.min(8, Math.max(-8, weight));
+  // A listing-level dismissal must not suppress every item in its category.
+  const score = signal.type === "NOT_INTERESTED" ? 0 : Math.min(8, Math.max(-8, weight));
+  const hiddenListings = Object.fromEntries(Object.entries(base.hiddenListings ?? {}).filter(([, date]) => now.getTime() - Date.parse(date) < 30 * dayMs && Date.parse(date) <= now.getTime()).slice(-32));
+  if (signal.type === "NOT_INTERESTED" && signal.listingId) hiddenListings[signal.listingId] = now.toISOString();
+  if (signal.type === "INTEREST_RESTORED" && signal.listingId) delete hiddenListings[signal.listingId];
+  const recentlyViewed = (signal.listingId && ["VIEW_LISTING", "AUCTION_VIEW"].includes(signal.type)
+    ? [signal.listingId, ...(base.recentlyViewed ?? []).filter((id) => id !== signal.listingId)]
+    : (base.recentlyViewed ?? [])).slice(0, 12);
   const exposureCount: Record<string, number> = {};
   for (const [id, count] of Object.entries(base.exposureCount ?? {})) {
     const recent = decay(count, elapsed, INTEREST_HALF_LIFE_DAYS);
@@ -150,8 +162,10 @@ export function applyInterestSignal(previous: InterestProfile | null, signal: Si
     condition: add(decayMap(base.condition ?? {}, elapsed), signal.condition, score, 4),
     recentQueries: query ? [query, ...base.recentQueries.filter((item) => item !== query)].slice(0, 5) : base.recentQueries.slice(0, 5),
     exposureCount: Object.fromEntries(exposureEntries),
-    eventCount: Math.min(1_000_000, base.eventCount + (score === 0 ? 0 : 1)),
-    meaningfulEventCount: Math.min(1_000_000, base.meaningfulEventCount + (["SEARCH", "SAVE_LISTING", "BID", "MESSAGE_STARTED", "RECOMMENDATION_CLICK"].includes(signal.type) ? 1 : 0)),
+    hiddenListings: Object.fromEntries(Object.entries(hiddenListings).slice(-32)),
+    recentlyViewed,
+    eventCount: Math.min(1_000_000, base.eventCount + (score === 0 && signal.type !== "NOT_INTERESTED" ? 0 : 1)),
+    meaningfulEventCount: Math.min(1_000_000, base.meaningfulEventCount + (["SEARCH", "SAVE_LISTING", "BID", "MESSAGE_STARTED", "RECOMMENDATION_CLICK", "TRANSACTION_COMPLETED"].includes(signal.type) ? 1 : 0)),
     updatedAt: now.toISOString(),
   };
 }
@@ -168,7 +182,9 @@ export function decayedTrend(score: number, updatedAt: string, now: Date) {
 
 export function scoreCandidate(candidate: Candidate, profile: InterestProfile | null, now: Date, savedIds: ReadonlySet<string>, ownedId?: string): RankedCandidate | null {
   const listing = candidate.listing;
-  if (listing.status !== "active" || listing.id === ownedId || !Number.isFinite(listing.price) || listing.price <= 0) return null;
+  if (listing.status !== "active" || listing.id === ownedId || !Number.isFinite(listing.price) || listing.price <= 0
+    || (listing.listingType !== "buy_now" && (listing.auctionStatus !== "active" || !listing.auctionEndAt || Date.parse(listing.auctionEndAt) <= now.getTime()))
+    || (profile?.hiddenListings?.[listing.id] && now.getTime() - Date.parse(profile.hiddenListings[listing.id]!) < 30 * dayMs)) return null;
   const ageDays = Math.max(0, (now.getTime() - Date.parse(listing.createdAt)) / dayMs);
   const profileAge = profile ? Math.max(0, now.getTime() - Date.parse(profile.updatedAt)) : 0;
   const affinity = (values: Record<string, number> | undefined, key: string) => decay(values?.[key] ?? 0, profileAge, INTEREST_HALF_LIFE_DAYS);
@@ -193,9 +209,14 @@ export function rankCandidates(candidates: Candidate[], profile: InterestProfile
   const remaining = candidates.map((candidate) => scoreCandidate(candidate, profile, now, savedIds)).filter((candidate): candidate is RankedCandidate => candidate !== null);
   const output: RankedCandidate[] = [];
   const categoryCount = new Map<string, number>();
+  const sellerCount = new Map<string, number>();
   while (remaining.length && output.length < maxResults) {
     const hasAlternative = remaining.some((item) => (categoryCount.get(item.listing.categoryId) ?? 0) < 2);
-    const eligible = hasAlternative ? remaining.filter((item) => (categoryCount.get(item.listing.categoryId) ?? 0) < 2) : remaining;
+    const hasSellerAlternative = remaining.some((item) => (sellerCount.get(item.listing.sellerId) ?? 0) < 2);
+    let eligible = remaining.filter((item) => (!hasAlternative || (categoryCount.get(item.listing.categoryId) ?? 0) < 2)
+      && (!hasSellerAlternative || (sellerCount.get(item.listing.sellerId) ?? 0) < 2));
+    if (!eligible.length) eligible = hasAlternative ? remaining.filter((item) => (categoryCount.get(item.listing.categoryId) ?? 0) < 2) : remaining;
+    if (!eligible.length) eligible = remaining;
     eligible.sort((a, b) => {
       const aAdjusted = a.score - Math.min(8, (categoryCount.get(a.listing.categoryId) ?? 0) * 4);
       const bAdjusted = b.score - Math.min(8, (categoryCount.get(b.listing.categoryId) ?? 0) * 4);
@@ -205,12 +226,14 @@ export function rankCandidates(candidates: Candidate[], profile: InterestProfile
     remaining.splice(remaining.indexOf(next), 1);
     output.push(next);
     categoryCount.set(next.listing.categoryId, (categoryCount.get(next.listing.categoryId) ?? 0) + 1);
+    sellerCount.set(next.listing.sellerId, (sellerCount.get(next.listing.sellerId) ?? 0) + 1);
   }
   return output;
 }
 
-export function similarityScore(reference: RankableListing, candidate: RankableListing): number {
-  if (candidate.status !== "active" || candidate.id === reference.id) return Number.NEGATIVE_INFINITY;
+export function similarityScore(reference: RankableListing, candidate: RankableListing, now = new Date()): number {
+  if (candidate.status !== "active" || candidate.id === reference.id || candidate.sellerId === reference.sellerId
+    || (candidate.listingType !== "buy_now" && (candidate.auctionStatus !== "active" || !candidate.auctionEndAt || Date.parse(candidate.auctionEndAt) <= now.getTime()))) return Number.NEGATIVE_INFINITY;
   const category = candidate.categoryId === reference.categoryId ? 20 : 0;
   const priceRatio = Math.abs(Math.log(Math.max(1, candidate.price) / Math.max(1, reference.price)));
   const price = clamp(8 - priceRatio * 5, 0, 8);

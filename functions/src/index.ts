@@ -350,7 +350,10 @@ export {
   onAuctionBidCreated,
   onConversationStarted,
   onConversationMessageCreated,
+  onCompletedTransactionInterest,
 } from "./intelligence";
+
+export { getMarketplaceDiscovery, getMarketplaceSimilar } from "./discovery";
 
 export {
   getPromotionPackages,

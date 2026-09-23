@@ -25,8 +25,12 @@ test("interest signals accumulate with bounded positive scores and time decay", 
 test("negative and repeated-exposure signals are gradual and bounded", () => {
   let profile = emptyInterest(now);
   profile = applyInterestSignal(profile, { type: "SAVE_LISTING", categoryId: "electronics" }, now);
-  profile = applyInterestSignal(profile, { type: "NOT_INTERESTED", categoryId: "electronics" }, now);
-  assert.equal(profile.category.electronics, 2);
+  profile = applyInterestSignal(profile, { type: "NOT_INTERESTED", listingId: "a", categoryId: "electronics" }, now);
+  assert.equal(profile.category.electronics, 6, "listing dismissal must not poison its category");
+  assert.equal(scoreCandidate(candidate(listing("a")), profile, now, new Set()), null);
+  assert.ok(scoreCandidate(candidate(listing("b")), profile, now, new Set()));
+  profile = applyInterestSignal(profile, { type: "INTEREST_RESTORED", listingId: "a" }, now);
+  assert.ok(scoreCandidate(candidate(listing("a")), profile, now, new Set()));
   for (let index = 0; index < 10; index += 1) profile = applyInterestSignal(profile, { type: "RECOMMENDATION_IMPRESSION", exposedListingIds: ["a"] }, now);
   assert.equal(profile.exposureCount.a, 5);
   const result = scoreCandidate(candidate(listing("a")), profile, now, new Set());
@@ -49,6 +53,9 @@ test("ranking is deterministic, bounded, relevant, fresh, diverse and excludes i
   assert.equal(ranked.length, 4);
   assert.ok(ranked.findIndex((item) => item.listing.categoryId === "fashion") <= 2);
   assert.deepEqual(rankCandidates(inventory, profile, now, new Set(), 4).map((item) => item.listing.id), ranked.map((item) => item.listing.id));
+  const sellerInventory = [candidate(listing("s1")), candidate(listing("s2")), candidate(listing("s3")), candidate(listing("other", { sellerId: "another", categoryId: "fashion" }))];
+  assert.ok(rankCandidates(sellerInventory, profile, now, new Set(), 4).findIndex((item) => item.listing.id === "other") <= 2);
+  assert.equal(rankCandidates(sellerInventory, profile, now, new Set(), 4).length, 4);
 });
 
 test("cold start favors fresh quality and recent trends decay", () => {
@@ -63,8 +70,19 @@ test("cold start favors fresh quality and recent trends decay", () => {
 test("similarity uses category, price and title while excluding current listing", () => {
   const reference = listing("camera");
   assert.equal(similarityScore(reference, reference), Number.NEGATIVE_INFINITY);
-  const close = similarityScore(reference, listing("close", { title: "Vintage camera lens", price: 270 }));
-  const distant = similarityScore(reference, listing("distant", { title: "Running shoes", categoryId: "fashion", price: 2500 }));
+  assert.equal(similarityScore(reference, listing("same-seller")), Number.NEGATIVE_INFINITY);
+  const close = similarityScore(reference, listing("close", { sellerId: "another", title: "Vintage camera lens", price: 270 }));
+  const distant = similarityScore(reference, listing("distant", { sellerId: "another", title: "Running shoes", categoryId: "fashion", price: 2500 }));
   assert.ok(close > distant);
   assert.equal(similarityScore(reference, listing("removed", { status: "removed" })), Number.NEGATIVE_INFINITY);
+});
+
+test("recent views are bounded and only live auctions rank", () => {
+  let profile = emptyInterest(now);
+  for (let index = 0; index < 20; index += 1) profile = applyInterestSignal(profile, { type: "VIEW_LISTING", listingId: `item-${index}` }, now);
+  assert.equal(profile.recentlyViewed.length, 12);
+  assert.equal(profile.recentlyViewed[0], "item-19");
+  const auction = { listingType: "auction", auctionStatus: "active", auctionEndAt: "2026-09-21T00:00:00.000Z" };
+  assert.ok(scoreCandidate(candidate(listing("live", { ...auction, sellerId: "other" })), profile, now, new Set()));
+  assert.equal(scoreCandidate(candidate(listing("ended", { ...auction, auctionEndAt: "2026-09-19T00:00:00.000Z" })), profile, now, new Set()), null);
 });

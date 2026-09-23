@@ -40,6 +40,9 @@
       { "fieldPath": "listingId", "order": "ASCENDING" }, { "fieldPath": "eventType", "order": "ASCENDING" }
     ]},
     { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "eventType", "order": "ASCENDING" }, { "fieldPath": "sectionId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "eventType", "order": "ASCENDING" }, { "fieldPath": "categoryId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
     ]},
     { "collectionGroup": "offers", "queryScope": "COLLECTION", "fields": [

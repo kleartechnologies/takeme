@@ -144,15 +144,20 @@ async function promotionMetrics(range: AdminRange): Promise<Metrics> {
 async function intelligenceMetrics(range: AdminRange): Promise<Metrics> {
   const result = base("intelligence", range);
   const events = db.collection("marketplaceEvents");
-  const types = ["VIEW_LISTING", "AUCTION_VIEW", "SEARCH", "CATEGORY_VIEW", "SAVE_LISTING", "BID", "MESSAGE_STARTED", "MESSAGE_SENT", "SHARE_LISTING", "SELLER_VIEW", "PROFILE_VIEW", "RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "NOT_INTERESTED"];
-  const [counts, categories] = await Promise.all([
+  const types = ["VIEW_LISTING", "AUCTION_VIEW", "SEARCH", "CATEGORY_VIEW", "SAVE_LISTING", "BID", "MESSAGE_STARTED", "MESSAGE_SENT", "SHARE_LISTING", "SELLER_VIEW", "PROFILE_VIEW", "RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "NOT_INTERESTED", "INTEREST_RESTORED", "TRANSACTION_COMPLETED"];
+  const sections = ["home", "for_you", "because_you_like", "trending_near_you", "popular", "just_listed", "auctions", "recently_viewed", "more_like_this"];
+  const [counts, categories, sectionCounts] = await Promise.all([
     Promise.all(types.map((type) => count(dated(events.where("eventType", "==", type), "createdAt", range)))),
     Promise.all(CATEGORIES.map((category) => count(dated(events.where("eventType", "==", "CATEGORY_VIEW").where("categoryId", "==", category), "createdAt", range)))),
+    Promise.all(sections.map(async (sectionId) => Promise.all(["RECOMMENDATION_IMPRESSION", "RECOMMENDATION_CLICK", "SAVE_LISTING"].map((type) => count(dated(events.where("eventType", "==", type).where("sectionId", "==", sectionId), "createdAt", range)))))),
   ]);
   result.cards = types.map((type, index) => card(type.replaceAll("_", " ").toLowerCase(), counts[index] ?? 0, "period"));
   result.breakdowns = [{ label: "Recorded event types · selected period", items: types.map((label, index) => ({ label, count: counts[index] ?? 0 })).sort((a, b) => b.count - a.count) },
-    { label: "Category views · selected period", items: CATEGORIES.map((label, index) => ({ label, count: categories[index] ?? 0 })).sort((a, b) => b.count - a.count) }];
-  result.unavailable.push("Recommendation CTR is unavailable: impressions are recorded in batches of up to eight listings, while clicks are per listing.", "Top searches, exact top viewed/saved listings and post-recommendation conversion require server-owned group aggregates.", "Raw events have a 90-day TTL policy; older activity is not an all-time total.");
+    { label: "Category views · selected period", items: CATEGORIES.map((label, index) => ({ label, count: categories[index] ?? 0 })).sort((a, b) => b.count - a.count) },
+    { label: "Discovery card impressions · selected period", items: sections.map((label, index) => ({ label, count: sectionCounts[index]?.[0] ?? 0 })) },
+    { label: "Discovery listing clicks · selected period", items: sections.map((label, index) => ({ label, count: sectionCounts[index]?.[1] ?? 0 })) },
+    { label: "Saves after a discovery click · selected period", items: sections.map((label, index) => ({ label, count: sectionCounts[index]?.[2] ?? 0 })) }];
+  result.unavailable.push("Discovery counts are accepted events, not unique people or a proven end-to-end conversion funnel. A click can occur before an impression is recorded.", "Top searches, exact top viewed/saved listings and post-recommendation transaction conversion require server-owned group aggregates.", "Raw events have a 90-day TTL policy; older activity is not an all-time total.");
   return result;
 }
 

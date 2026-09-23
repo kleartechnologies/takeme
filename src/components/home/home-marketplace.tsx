@@ -9,7 +9,7 @@ import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type ListingPage, type ListingQuery } from "@/lib/services/listings";
-import { getHomeRecommendations, trackMarketplaceIntent, type CandidateSource } from "@/lib/services/intelligence";
+import { getHomeRecommendations, type CandidateSource } from "@/lib/services/intelligence";
 
 type Tab = "top" | "nearby" | "auctions" | "free";
 const tabs: { id: Tab; label: string }[] = [
@@ -30,10 +30,10 @@ export function HomeMarketplace() {
   const [locationInput, setLocationInput] = useState("");
   const [location, setLocation] = useState("");
   const [retry, setRetry] = useState(0);
-  const [state, setState] = useState<{ key: string; page: ListingPage; loading: boolean; error: string; personalized: boolean; sources: Record<string, CandidateSource> }>({ key: "", page: emptyPage, loading: true, error: "", personalized: false, sources: {} });
+  const [state, setState] = useState<{ key: string; page: ListingPage; loading: boolean; error: string; personalized: boolean; sources: Record<string, CandidateSource>; sessionId: string | null }>({ key: "", page: emptyPage, loading: true, error: "", personalized: false, sources: {}, sessionId: null });
   const [loadingMore, setLoadingMore] = useState(false);
-  const cache = useRef(new Map<string, { page: ListingPage; personalized: boolean; sources: Record<string, CandidateSource> }>());
-  const impressed = useRef(new Set<string>());
+  const cache = useRef(new Map<string, { page: ListingPage; personalized: boolean; sources: Record<string, CandidateSource>; sessionId: string | null }>());
+  const cacheFetchedAt = useRef(new Map<string, number>());
   const key = tab === "nearby" ? `nearby:${location}` : tab === "top" ? `top:${user?.uid ?? "guest"}` : tab;
   const currentKey = useRef(key);
 
@@ -42,45 +42,27 @@ export function HomeMarketplace() {
     if (!isFirebaseConfigured || tab === "free" || (tab === "nearby" && !location)) return;
     let active = true;
     const cached = cache.current.get(key);
-    if (cached) {
+    if (cached && (!cached.sessionId || Date.now() - (cacheFetchedAt.current.get(key) ?? 0) < 90 * 60_000)) {
       setState({ key, ...cached, loading: false, error: "" });
       return;
     }
-    setState({ key, page: emptyPage, loading: true, error: "", personalized: false, sources: {} });
+    setState({ key, page: emptyPage, loading: true, error: "", personalized: false, sources: {}, sessionId: null });
     const load = async () => {
       if (tab === "top" && user) {
         try {
           const recommended = await getHomeRecommendations();
-          return { page: { listings: recommended.listings, cursor: null, hasMore: false }, personalized: recommended.personalized, sources: recommended.candidateSources };
+          return { page: { listings: recommended.listings, cursor: null, hasMore: false }, personalized: recommended.personalized, sources: recommended.candidateSources, sessionId: recommended.sessionId };
         } catch { /* Keep recent discovery when the new callable is not yet deployed. */ }
       }
-      return { page: await getActiveListings(requestFor(tab, location)), personalized: false, sources: {} };
+      return { page: await getActiveListings(requestFor(tab, location)), personalized: false, sources: {}, sessionId: null };
     };
     load().then((result) => {
       cache.current.set(key, result);
+      cacheFetchedAt.current.set(key, Date.now());
       if (active) setState({ key, ...result, loading: false, error: "" });
-    }).catch(() => { if (active) setState({ key, page: emptyPage, loading: false, error: "We couldn’t load the marketplace right now. Please try again.", personalized: false, sources: {} }); });
+    }).catch(() => { if (active) setState({ key, page: emptyPage, loading: false, error: "We couldn’t load the marketplace right now. Please try again.", personalized: false, sources: {}, sessionId: null }); });
     return () => { active = false; };
   }, [key, tab, location, retry, user]);
-
-  useEffect(() => {
-    if (tab !== "top" || !user || !Object.keys(state.sources).length || state.key !== key || !state.page.listings.length || impressed.current.has(key)) return;
-    const target = document.getElementById("discovery");
-    if (!target || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting) || impressed.current.has(key)) return;
-      impressed.current.add(key);
-      const bySource = new Map<CandidateSource, string[]>();
-      for (const item of state.page.listings.slice(0, 8)) {
-        const source = state.sources[item.id];
-        if (source) bySource.set(source, [...(bySource.get(source) ?? []), item.id]);
-      }
-      for (const [candidateSource, listingIds] of bySource) trackMarketplaceIntent({ type: "RECOMMENDATION_IMPRESSION", listingIds, context: "home", candidateSource });
-      observer.disconnect();
-    }, { threshold: 0.25 });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [key, state.key, state.page.listings, state.sources, tab, user]);
 
   function selectTab(next: Tab) { setTab(next); setLoadingMore(false); }
   function keyboardTab(event: KeyboardEvent<HTMLButtonElement>) {
@@ -101,8 +83,8 @@ export function HomeMarketplace() {
     try {
       const page = await getActiveListings(requestFor(tab, location), state.page.cursor);
       const combined = { listings: [...state.page.listings, ...page.listings], cursor: page.cursor, hasMore: page.hasMore };
-      cache.current.set(key, { page: combined, personalized: false, sources: {} });
-      if (currentKey.current === key) setState({ key, page: combined, loading: false, error: "", personalized: false, sources: {} });
+      cache.current.set(key, { page: combined, personalized: false, sources: {}, sessionId: null });
+      if (currentKey.current === key) setState({ key, page: combined, loading: false, error: "", personalized: false, sources: {}, sessionId: null });
     } catch { if (currentKey.current === key) setState((previous) => ({ ...previous, error: "More listings couldn’t be loaded. Please try again." })); }
     finally { setLoadingMore(false); }
   }
@@ -122,7 +104,7 @@ export function HomeMarketplace() {
         : !isFirebaseConfigured ? <FirebaseSetupState />
         : state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => { cache.current.delete(key); setRetry((value) => value + 1); }} className="button-secondary mt-4 h-11 px-5">Retry</button></div>
         : loading ? <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <ListingSkeleton key={index} />)}</div>
-        : state.page.listings.length ? <><div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{state.page.listings.map((listing) => <ListingCard key={listing.id} listing={listing} recommendationSource={tab === "top" ? state.sources[listing.id] : undefined} sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw" />)}</div>{state.page.hasMore && <div className="mt-7 text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-11 px-5">{loadingMore && <LoaderCircle size={16} className="animate-spin" />}Load more</button></div>}</>
+        : state.page.listings.length ? <><div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{state.page.listings.map((listing) => <ListingCard key={listing.id} listing={listing} recommendationSource={tab === "top" ? state.sources[listing.id] : undefined} recommendationSessionId={tab === "top" ? state.sessionId : null} sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw" />)}</div>{state.page.hasMore && <div className="mt-7 text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="button-secondary h-11 px-5">{loadingMore && <LoaderCircle size={16} className="animate-spin" />}Load more</button></div>}</>
         : <div><EmptyState title="Nothing here yet" description={tab === "nearby" ? "No active listings match that seller location. Try another location or browse all items." : "Be the first to list something."} /><Link href="/sell" className="button-primary mt-4 h-11 px-5">Sell Something</Link></div>}
     </div>
   </section>;
