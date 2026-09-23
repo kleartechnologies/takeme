@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
-import type { MarketplaceOffer, MarketplaceTransaction, PaymentMethod, PublicReview, ReputationTier } from "@/types/marketplace";
+import type { MarketplaceOffer, MarketplaceTransaction, PaymentMethod, ProtectedTransactionDetail, PublicReview, ReputationTier, SellerPaymentOnboarding } from "@/types/marketplace";
 
 function service(authenticated = true) {
   if (!functions) throw new Error("Transaction service is not configured.");
@@ -22,7 +22,7 @@ export const submitOffer = (listingId: string, type: "buy_now" | "offer", paymen
 export const respondToOffer = (offerId: string, action: "accept" | "reject" | "counter" | "withdraw", amountSen?: number) => invoke<{ status: string; transactionId?: string }>("respondToOffer", { offerId, action, ...(amountSen === undefined ? {} : { amountSen }) });
 export const getListingDealState = (listingId: string) => invoke<{ offers: MarketplaceOffer[]; transaction: MarketplaceTransaction | null }>("getListingDealState", { listingId });
 export const getMyTransactions = () => invoke<{ transactions: MarketplaceTransaction[] }>("getMyTransactions").then((data) => data.transactions);
-export const getTransactionDetail = (transactionId: string) => invoke<{ transaction: MarketplaceTransaction; reviewed: boolean }>("getTransactionDetail", { transactionId });
+export const getTransactionDetail = (transactionId: string) => invoke<{ transaction: MarketplaceTransaction; reviewed: boolean } & ProtectedTransactionDetail>("getTransactionDetail", { transactionId });
 export const confirmTransactionCompletion = (transactionId: string) => invoke<{ status: string; alreadyConfirmed: boolean }>("confirmTransactionCompletion", { transactionId });
 export const requestTransactionCancellation = (transactionId: string, reason: string) => invoke<{ status: string }>("requestTransactionCancellation", { transactionId, reason });
 export const declineTransactionCancellation = (transactionId: string) => invoke<{ status: string }>("declineTransactionCancellation", { transactionId });
@@ -30,3 +30,8 @@ export const disputeTransaction = (transactionId: string, reason: string) => inv
 export const submitTransactionReview = (transactionId: string, rating: number, tags: string[], comment: string) => invoke<{ submitted: boolean; visible: boolean }>("submitTransactionReview", { transactionId, rating, tags, comment });
 export const getPublicReviews = (userId: string) => invoke<{ reviews: PublicReview[] }>("getPublicReviews", { userId }, false).then((data) => data.reviews);
 export const reportPublicReview = (reviewId: string, reason: string, details: string) => invoke<{ submitted: boolean }>("reportPublicReview", { reviewId, reason, details });
+export const getProtectedPaymentPolicy = () => invoke<{ enabled: false; provider: "stripe_connect"; implementationReady: false; message: string; legalNotice: string }>("getProtectedPaymentPolicy", {}, false);
+export const getSellerPaymentOnboarding = () => invoke<SellerPaymentOnboarding>("getSellerPaymentOnboarding");
+export const createProtectedPayment = (transactionId: string) => invoke<never>("createProtectedPayment", { transactionId });
+export const respondToProtectedDispute = (transactionId: string, response: string) => invoke<{ status: string; alreadyRecorded: boolean }>("respondToProtectedDispute", { transactionId, response });
+export const addProtectedDisputeEvidence = (transactionId: string, note: string, idempotencyKey: string) => invoke<{ evidenceId: string; alreadyRecorded: boolean }>("addProtectedDisputeEvidence", { transactionId, note, idempotencyKey });

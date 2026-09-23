@@ -386,3 +386,11 @@ export {
 export { getAdminMetrics, getAdminPage, getAdminRecord } from "./admin";
 
 export { getPublicSellerSummaries } from "./public-sellers";
+
+export {
+  getProtectedPaymentPolicy,
+  getSellerPaymentOnboarding,
+  createProtectedPayment,
+  respondToProtectedDispute,
+  addProtectedDisputeEvidence,
+} from "./protected-transactions";

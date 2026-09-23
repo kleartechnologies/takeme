@@ -83,7 +83,13 @@ export interface SavedListing {
 
 export type TransactionType = "buy_now" | "offer" | "auction";
 export type TransactionStatus = "in_progress" | "completed" | "cancelled" | "disputed";
-export type PaymentMethod = "cod" | "bank_transfer" | "external" | "other";
+export type PaymentMethod = "cod" | "bank_transfer" | "external" | "other" | "protected";
+export type SettlementMode = "standard" | "protected";
+export type ProtectedPaymentStatus = "not_required" | "pending" | "requires_action" | "authorized" | "protected" | "failed" | "refunded" | "partially_refunded" | "released" | "cancelled";
+export type PayoutStatus = "not_eligible" | "eligible" | "processing" | "paid" | "failed" | "reversed";
+export type RefundStatus = "none" | "requested" | "pending" | "approved" | "processing" | "refunded" | "failed" | "partially_refunded" | "cancelled";
+export type SellerOnboardingStatus = "not_started" | "pending" | "restricted" | "active" | "disabled";
+export type ProtectedDisputeStatus = "open" | "awaiting_buyer" | "awaiting_seller" | "under_review" | "resolved_buyer" | "resolved_seller" | "partially_resolved" | "cancelled";
 export type OfferStatus = "submitted" | "countered" | "accepted" | "rejected" | "withdrawn" | "expired";
 
 export interface MarketplaceOffer {
@@ -114,6 +120,8 @@ export interface MarketplaceTransaction {
   amountSen: number;
   currency: "MYR";
   paymentMethod: PaymentMethod;
+  settlementMode: SettlementMode;
+  paymentProvider: "none" | "stripe_connect";
   buyerConfirmedAt: string | null;
   sellerConfirmedAt: string | null;
   createdAt: string;
@@ -125,6 +133,40 @@ export interface MarketplaceTransaction {
   cancellationRequestedBy: string | null;
   cancellationReason: string | null;
   disputeReason: string | null;
+}
+
+export interface ProtectedPaymentSummary {
+  provider: "stripe_connect";
+  status: ProtectedPaymentStatus;
+  protectedAmountSen: number;
+  currency: "MYR";
+  platformFeeSen: number | null;
+  sellerNetAmountSen: number | null;
+  paidAt: string | null;
+  protectedAt: string | null;
+  releasedAt: string | null;
+  refundedAt: string | null;
+}
+
+export interface ProtectedPayoutSummary { status: PayoutStatus; amountSen: number | null; eligibleAt: string | null; paidAt: string | null }
+export interface ProtectedRefundSummary { id: string; status: RefundStatus; amountSen: number; reason: string; requestedAt: string | null; refundedAt: string | null }
+export interface ProtectedDisputeSummary {
+  id: string; status: ProtectedDisputeStatus; reason: string; description: string; openedBy: string; openedAt: string | null;
+  sellerResponse: string | null; resolution: string | null; resolvedAt: string | null; refundAmountSen: number | null;
+  evidence: { id: string; actorRole: "buyer" | "seller"; note: string; createdAt: string | null }[];
+}
+export interface ProtectedTimelineEvent { id: string; eventType: string; actorType: "buyer" | "seller" | "admin" | "provider" | "system"; createdAt: string | null; metadata: Record<string, string | number | boolean | null> }
+export interface ProtectedTransactionDetail {
+  payment: ProtectedPaymentSummary | null;
+  payout: ProtectedPayoutSummary | null;
+  refunds: ProtectedRefundSummary[];
+  dispute: ProtectedDisputeSummary | null;
+  timeline: ProtectedTimelineEvent[];
+}
+
+export interface SellerPaymentOnboarding {
+  enabled: boolean; provider: "stripe_connect"; status: SellerOnboardingStatus; chargesEnabled: boolean; payoutsEnabled: boolean;
+  requirementsStatus: string; lastCheckedAt: string | null; message: string;
 }
 
 export interface TransactionReview {

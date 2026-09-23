@@ -1,6 +1,6 @@
 # TAKEME — mobile-first marketplace
 
-TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. The local source includes buy-now listings, server-authoritative auctions, discovery, trust, optional unpaid promotion requests, and Phase 8 transactions and reputation.
+TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. The local source includes buy-now listings, server-authoritative auctions, discovery, trust, optional unpaid promotion requests, transactions and reputation, and a disabled architecture for future protected transactions.
 
 Brand: **Same Stuff. A Brighter Tomorrow.** · **Buy. Sell. Give. Reuse.** · Poppins · `#00C853`, `#006233`, `#E8F5E9`, `#1F2937`, `#6B7280`, `#FAFAFA`.
 
@@ -96,6 +96,12 @@ Discovery seller trust is served by one bounded public callable that joins publi
 ## Phase 9 admin operations
 
 The claim-gated, read-only `/admin` dashboard uses server-side aggregate queries and bounded paginated records for marketplace operations. It reports completed-only GMV, current listings, roles, tiers, published reviews, accepted intelligence events and reports. Promotion requests are **not** purchases; verified promotion revenue is unavailable. See [admin analytics](docs/admin-analytics.md) for definitions, authorization, cost limits and deployment prerequisites. Local verification uses `node tests/admin-emulator.integration.mjs` on the demo emulators. This phase is local-only and does not grant any production admin claim or deploy services.
+
+## Phase 11 protected transaction architecture
+
+Standard COD, bank-transfer, external-payment and other agreements continue to use mutual confirmation and never claim that TAKEME processed money. A separate, server-owned model now represents future protected payment, payout, refund, seller-onboarding, dispute and immutable audit states. The intended provider is behind a replaceable `PaymentProvider` interface; the Stripe Connect implementation is a safe stub with no Stripe SDK, credentials, checkout, connected-account creation, payout, refund or webhook endpoint. The buyer sees an honest disabled “Protected payments coming soon” choice and sellers see the same onboarding status.
+
+**REAL PAYMENT MOVEMENT NOT ENABLED.** `PROTECTED_PAYMENTS_ENABLED=false` is documented for future server configuration, while the current implementation remains disabled even if that environment value is changed. See [protected transaction architecture](docs/protected-transactions.md) and the [platform-neutral mobile contract](docs/mobile-protected-transactions.md). Local architecture verification uses `node tests/protected-transactions-emulator.integration.mjs` against `demo-takeme`; do not seed protected payment fixtures in production.
 
 ## Production deployment considerations
 

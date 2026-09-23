@@ -4,6 +4,8 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { BUYER_TO_SELLER_TAGS, OFFER_WINDOW_DAYS, REVIEW_WINDOW_DAYS, SELLER_TO_BUYER_TAGS, TIER_THRESHOLDS, nextRatingSummary, ringgitToSen, tierFor, validSen, validTags, type PaymentMethod } from "./transaction-domain";
+import { standardPaymentFields } from "./protected-transaction-domain";
+import { openProtectedDispute, protectedTransactionDetail } from "./protected-transactions";
 
 const db = getFirestore();
 const id = (value: unknown, label: string) => {
@@ -33,6 +35,7 @@ export const getReputationPolicy = onCall(async () => ({ thresholds: TIER_THRESH
 function publicDeal(documentId: string, data: DocumentData) {
   return { id: documentId, listingId: data.listingId, listingTitle: data.listingTitle, buyerId: data.buyerId, sellerId: data.sellerId,
     type: data.type, sourceId: data.sourceId, status: data.status, amountSen: data.amountSen, currency: data.currency, paymentMethod: data.paymentMethod,
+    settlementMode: data.settlementMode === "protected" ? "protected" : "standard", paymentProvider: data.paymentProvider ?? "none",
     buyerConfirmedAt: iso(data.buyerConfirmedAt), sellerConfirmedAt: iso(data.sellerConfirmedAt), createdAt: iso(data.createdAt), updatedAt: iso(data.updatedAt),
     completedAt: iso(data.completedAt), cancelledAt: iso(data.cancelledAt), reviewWindowEndAt: iso(data.reviewWindowEndAt), reviewsVisibleAt: iso(data.reviewsVisibleAt),
     cancellationRequestedBy: data.cancellationRequestedBy ?? null, cancellationReason: data.cancellationReason ?? null, disputeReason: data.disputeReason ?? null };
@@ -105,6 +108,7 @@ export const respondToOffer = onCall(async (request) => {
       if (!validSen(data.quotedAmountSen)) throw new HttpsError("failed-precondition", "The agreed amount is invalid.");
       tx.create(txRef, { listingId: data.listingId, listingTitle: listing!.data()!.title, categoryId: listing!.data()!.categoryId,
         buyerId: data.buyerId, sellerId: data.sellerId, type: data.type, sourceId: offerId, status: "in_progress", amountSen: data.quotedAmountSen, currency: "MYR", paymentMethod: data.paymentMethod,
+        ...standardPaymentFields(),
         buyerConfirmedAt: null, sellerConfirmedAt: null, cancellationRequestedBy: null, cancellationReason: null, disputeReason: null,
         reviewCount: 0, reviewsVisibleAt: null, reviewWindowEndAt: null, createdAt: now, updatedAt: now, completedAt: null, cancelledAt: null });
       tx.set(dealLockRef, { transactionId: txRef.id, status: "in_progress", updatedAt: now });
@@ -163,6 +167,7 @@ export const onAuctionWonCreateTransaction = onDocumentUpdated("listings/{listin
     const now = Timestamp.now();
     tx.create(ref, { listingId, listingTitle: data.title, categoryId: data.categoryId, buyerId: data.winnerId, sellerId: data.sellerId,
       type: "auction", sourceId: listingId, status: "in_progress", amountSen: data.finalBid, currency: "MYR", paymentMethod: "other",
+      ...standardPaymentFields(),
       buyerConfirmedAt: null, sellerConfirmedAt: null, cancellationRequestedBy: null, cancellationReason: null, disputeReason: null,
       reviewCount: 0, reviewsVisibleAt: null, reviewWindowEndAt: null, createdAt: now, updatedAt: now, completedAt: null, cancelledAt: null });
     tx.set(lock, { transactionId: ref.id, status: "in_progress", updatedAt: now });
@@ -180,6 +185,7 @@ export const confirmTransactionCompletion = onCall(async (request) => {
     const data = deal.data()!;
     if (data.status === "completed") return { status: "completed", alreadyConfirmed: true };
     if (data.status !== "in_progress") throw new HttpsError("failed-precondition", "A cancelled or disputed transaction cannot be completed here.");
+    if (data.settlementMode === "protected") throw new HttpsError("failed-precondition", "Protected transactions require provider-confirmed payment and payout settlement before completion.");
     if (data.cancellationRequestedBy) throw new HttpsError("failed-precondition", "Resolve the pending cancellation request before completing this transaction.");
     const buyer = data.buyerId === userId;
     const ownField = buyer ? "buyerConfirmedAt" : "sellerConfirmedAt";
@@ -220,6 +226,7 @@ export const requestTransactionCancellation = onCall(async (request) => {
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
     if (data.status !== "in_progress") throw new HttpsError("failed-precondition", "Only an in-progress transaction can be cancelled.");
+    if (data.settlementMode === "protected") throw new HttpsError("failed-precondition", "Protected transactions must use the dispute and provider refund workflow.");
     if (data.cancellationRequestedBy && data.cancellationRequestedBy !== userId) {
       const lock = lockRef(data.listingId);
       const listing = db.collection("listings").doc(data.listingId);
@@ -258,11 +265,22 @@ export const disputeTransaction = onCall(async (request) => {
   return db.runTransaction(async (tx) => {
     const deal = await tx.get(ref);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
-    if (deal.data()!.status !== "in_progress") throw new HttpsError("failed-precondition", "Only an in-progress transaction can be disputed.");
+    const data = deal.data()!;
+    if (data.settlementMode === "protected" && data.status === "disputed") {
+      const existing = await tx.get(db.collection("transactionDisputes").doc(transactionId));
+      if (existing.exists && existing.data()?.openedBy === userId && existing.data()?.description === reason) return { status: "disputed", alreadyOpened: true };
+    }
+    if (data.status !== "in_progress") throw new HttpsError("failed-precondition", "Only an in-progress transaction can be disputed.");
     const now = Timestamp.now();
-    tx.update(ref, { status: "disputed", disputeOpenedBy: userId, disputeReason: reason, updatedAt: now });
-    tx.set(lockRef(deal.data()!.listingId), { transactionId, status: "disputed", updatedAt: now });
-    return { status: "disputed" };
+    if (data.settlementMode === "protected") {
+      if (data.buyerId !== userId) throw new HttpsError("permission-denied", "Only the buyer can open a protected transaction dispute.");
+      const payment = await tx.get(db.collection("protectedPayments").doc(transactionId));
+      if (!payment.exists || !["authorized", "protected"].includes(String(payment.data()?.status))) throw new HttpsError("failed-precondition", "This protected payment is not eligible for a dispute.");
+      openProtectedDispute(tx, transactionId, data, userId, reason, now);
+    }
+    tx.update(ref, { status: "disputed", disputeOpenedBy: userId, disputeReason: reason, disputedAt: now, updatedAt: now });
+    tx.set(lockRef(data.listingId), { transactionId, status: "disputed", updatedAt: now });
+    return { status: "disputed", alreadyOpened: false };
   });
 });
 
@@ -299,7 +317,8 @@ export const getTransactionDetail = onCall(async (request) => {
   const deal = await dealRef(transactionId).get();
   if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
   const ownReview = await deal.ref.collection("reviews").doc(userId).get();
-  return { transaction: publicDeal(deal.id, deal.data()!), reviewed: ownReview.exists };
+  const protectedDetail = deal.data()!.settlementMode === "protected" ? await protectedTransactionDetail(transactionId) : { payment: null, payout: null, refunds: [], dispute: null, timeline: [] };
+  return { transaction: publicDeal(deal.id, deal.data()!), reviewed: ownReview.exists, ...protectedDetail };
 });
 
 function applyVisibleReview(tx: Transaction, reviewId: string, data: DocumentData, summary: DocumentData | undefined, now: Timestamp) {

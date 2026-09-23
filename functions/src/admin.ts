@@ -97,21 +97,27 @@ async function transactionMetrics(range: AdminRange, revenue = false): Promise<M
   const result = base(revenue ? "revenue" : "transactions", range);
   const collection = db.collection("transactions");
   const completedQuery = dated(collection.where("status", "==", "completed"), "completedAt", range);
-  const [all, created, completed, inProgress, cancelled, disputed, category, types] = await Promise.all([
+  const [all, created, completed, inProgress, cancelled, disputed, category, types, protectedCount, fundsProtected, paymentFailures, payoutAttention, refundActivity] = await Promise.all([
     count(collection), count(dated(collection, "createdAt", range)), sum(completedQuery, "amountSen"),
     count(collection.where("status", "==", "in_progress")), count(collection.where("status", "==", "cancelled")), count(collection.where("status", "==", "disputed")),
     Promise.all(CATEGORIES.map((item) => sum(dated(collection.where("status", "==", "completed").where("categoryId", "==", item), "completedAt", range), "amountSen"))),
     Promise.all(["buy_now", "offer", "auction"].map((item) => sum(dated(collection.where("status", "==", "completed").where("type", "==", item), "completedAt", range), "amountSen"))),
+    count(collection.where("settlementMode", "==", "protected")), count(db.collection("protectedPayments").where("status", "==", "protected")),
+    count(db.collection("protectedPayments").where("status", "==", "failed")),
+    Promise.all(["eligible", "processing", "failed"].map((status) => count(db.collection("payouts").where("status", "==", status)))),
+    Promise.all(["requested", "pending", "approved", "processing", "failed"].map((status) => count(db.collection("refunds").where("status", "==", status)))),
   ]);
   result.cards = [card("All agreed transactions", all, "current"), card("New agreements", created, "period"), card("Completed transactions", completed.count, "period"),
     card("GMV", completed.value, "period", "money", "Completed transactions only; distinct from promotion revenue."), card("Average completed value", averageSen(completed.value, completed.count), "period", "money"),
-    card("In progress", inProgress, "current"), card("Cancelled", cancelled, "current"), card("Disputed", disputed, "current")];
+    card("In progress", inProgress, "current"), card("Cancelled", cancelled, "current"), card("Disputed", disputed, "current"),
+    card("Protected transactions", protectedCount, "current"), card("Funds protected", fundsProtected, "current"), card("Payment failures", paymentFailures, "current"),
+    card("Payouts needing attention", payoutAttention.reduce((sum, value) => sum + value, 0), "current"), card("Open refund activity", refundActivity.reduce((sum, value) => sum + value, 0), "current")];
   result.breakdowns = [
     { label: "Completed value by category · selected period", items: CATEGORIES.map((label, index) => ({ label, count: category[index]?.count ?? 0, amountSen: category[index]?.value ?? 0 })).sort((a, b) => (b.amountSen ?? 0) - (a.amountSen ?? 0)) },
     { label: "Completed value by agreement type · selected period", items: ["Buy Now", "Offer", "Auction"].map((label, index) => ({ label, count: types[index]?.count ?? 0, amountSen: types[index]?.value ?? 0 })) },
   ];
   result.series = [await timeSeries(collection.where("status", "==", "completed"), "completedAt", range, "amountSen")];
-  result.unavailable.push("Location breakdown is unavailable: transactions do not snapshot a verified exchange location.", "Completion rate by agreement cohort is unavailable without cohort tracking; a cross-period ratio would be misleading.");
+  result.unavailable.push("Location breakdown is unavailable: transactions do not snapshot a verified exchange location.", "Completion rate by agreement cohort is unavailable without cohort tracking; a cross-period ratio would be misleading.", "Protected payment actions are read-only and disabled. Completed GMV is gross agreement value; net-of-refund accounting is not implemented.");
   return result;
 }
 
@@ -230,7 +236,7 @@ function publicRow(sectionName: PageSection, id: string, data: DocumentData) {
   const common = { id, createdAt: iso(data.createdAt) };
   if (sectionName === "users") return { ...common, displayName: data.displayName ?? "TAKEME member", location: data.location ?? "" };
   if (sectionName === "listings") return { ...common, title: data.title, categoryId: data.categoryId, sellerId: data.sellerId, listingType: data.listingType, status: data.status, price: data.price };
-  if (sectionName === "transactions") return { ...common, listingTitle: data.listingTitle, buyerId: data.buyerId, sellerId: data.sellerId, status: data.status, type: data.type, amountSen: data.amountSen, completedAt: iso(data.completedAt) };
+  if (sectionName === "transactions") return { ...common, listingTitle: data.listingTitle, buyerId: data.buyerId, sellerId: data.sellerId, status: data.status, type: data.type, settlementMode: data.settlementMode ?? "standard", amountSen: data.amountSen, completedAt: iso(data.completedAt) };
   if (sectionName === "promotions") return { ...common, listingId: data.listingId, type: data.type, status: data.status, paymentStatus: data.paymentStatus, impressions: data.impressions ?? 0, clicks: data.clicks ?? 0 };
   if (sectionName === "reviews") return { ...common, reviewedUserId: data.reviewedUserId, reviewerRole: data.reviewerRole, rating: data.rating, tags: data.tags ?? [], publishedAt: iso(data.publishedAt) };
   return { ...common, targetType: data.targetType, targetId: data.targetId, reason: data.reason, status: data.status, reporterId: data.reporterId };
@@ -265,15 +271,17 @@ export const getAdminRecord = onCall(async (request) => {
   const row = publicRow(selected, recordId, data);
   if (selected === "users") {
     const authUser = await getAuth().getUser(recordId).catch(() => null);
-    const [listings, buying, selling, summary, reviews, reports] = await Promise.all([
+    const [listings, buying, selling, summary, reviews, reports, paymentProfile] = await Promise.all([
       count(db.collection("listings").where("sellerId", "==", recordId)),
       sum(db.collection("transactions").where("buyerId", "==", recordId).where("status", "==", "completed"), "amountSen"),
       sum(db.collection("transactions").where("sellerId", "==", recordId).where("status", "==", "completed"), "amountSen"),
       db.collection("trustSummaries").doc(recordId).get(),
       count(db.collection("publicReviews").where("reviewedUserId", "==", recordId)),
       count(db.collection("reports").where("targetType", "==", "user").where("targetId", "==", recordId)),
+      db.collection("sellerPaymentProfiles").doc(recordId).get(),
     ]);
-    return { row, detail: { email: authUser?.email ?? null, listings, completedPurchases: buying.count, completedSales: selling.count, completedBuyerValueSen: buying.value, completedSellerValueSen: selling.value, buyerTier: summary.data()?.buyer?.tier ?? null, sellerTier: summary.data()?.seller?.tier ?? null, reviews, reports } };
+    return { row, detail: { email: authUser?.email ?? null, listings, completedPurchases: buying.count, completedSales: selling.count, completedBuyerValueSen: buying.value, completedSellerValueSen: selling.value, buyerTier: summary.data()?.buyer?.tier ?? null, sellerTier: summary.data()?.seller?.tier ?? null, reviews, reports,
+      protectedPaymentOnboarding: paymentProfile.exists ? { provider: paymentProfile.data()?.provider, status: paymentProfile.data()?.status, providerAccountReference: paymentProfile.data()?.providerAccountReference ?? null, chargesEnabled: paymentProfile.data()?.chargesEnabled === true, payoutsEnabled: paymentProfile.data()?.payoutsEnabled === true, requirementsStatus: paymentProfile.data()?.requirementsStatus ?? null, lastCheckedAt: iso(paymentProfile.data()?.lastCheckedAt) } : { status: "not_started" } } };
   }
   if (selected === "listings") {
     const [views, saves, bids, offers, promotions, reports] = await Promise.all([
@@ -286,8 +294,21 @@ export const getAdminRecord = onCall(async (request) => {
     return { row, detail: { views, saves, bids, offers, reports, promotions: promotions.docs.map((item) => publicRow("promotions", item.id, item.data())) } };
   }
   if (selected === "transactions") {
-    const [buyerReview, sellerReview] = await Promise.all([ref.collection("reviews").doc(data.buyerId).get(), ref.collection("reviews").doc(data.sellerId).get()]);
-    return { row, detail: { listingId: data.listingId, categoryId: data.categoryId, paymentMethod: data.paymentMethod, buyerConfirmedAt: iso(data.buyerConfirmedAt), sellerConfirmedAt: iso(data.sellerConfirmedAt), completedAt: iso(data.completedAt), cancelledAt: iso(data.cancelledAt), cancellationReason: data.cancellationReason ?? null, disputeReason: data.disputeReason ?? null, reviewWindowEndAt: iso(data.reviewWindowEndAt), reviewsVisibleAt: iso(data.reviewsVisibleAt), buyerReviewed: buyerReview.exists, sellerReviewed: sellerReview.exists } };
+    const [buyerReview, sellerReview, payment, payout, dispute, refunds, events] = await Promise.all([
+      ref.collection("reviews").doc(data.buyerId).get(), ref.collection("reviews").doc(data.sellerId).get(),
+      db.collection("protectedPayments").doc(recordId).get(), db.collection("payouts").doc(recordId).get(), db.collection("transactionDisputes").doc(recordId).get(),
+      db.collection("refunds").where("transactionId", "==", recordId).limit(20).get(), db.collection("transactionEvents").where("transactionId", "==", recordId).limit(50).get(),
+    ]);
+    const paymentData = payment.data(); const payoutData = payout.data(); const disputeData = dispute.data();
+    return { row, detail: { listingId: data.listingId, categoryId: data.categoryId, settlementMode: data.settlementMode ?? "standard", paymentMethod: data.paymentMethod,
+      buyerConfirmedAt: iso(data.buyerConfirmedAt), sellerConfirmedAt: iso(data.sellerConfirmedAt), completedAt: iso(data.completedAt), cancelledAt: iso(data.cancelledAt), disputedAt: iso(data.disputedAt),
+      cancellationReason: data.cancellationReason ?? null, disputeReason: data.disputeReason ?? null, reviewWindowEndAt: iso(data.reviewWindowEndAt), reviewsVisibleAt: iso(data.reviewsVisibleAt), buyerReviewed: buyerReview.exists, sellerReviewed: sellerReview.exists,
+      protectedPayment: payment.exists ? { provider: paymentData?.provider, status: paymentData?.status, providerReference: paymentData?.providerReference ?? null, protectedAmountSen: paymentData?.protectedAmountSen, platformFeeSen: paymentData?.platformFeeSen ?? null, sellerNetAmountSen: paymentData?.sellerNetAmountSen ?? null, paidAt: iso(paymentData?.paidAt), protectedAt: iso(paymentData?.protectedAt), releasedAt: iso(paymentData?.releasedAt), refundedAt: iso(paymentData?.refundedAt) } : null,
+      payout: payout.exists ? { status: payoutData?.status, providerReference: payoutData?.providerReference ?? null, amountSen: payoutData?.amountSen ?? null, eligibleAt: iso(payoutData?.eligibleAt), paidAt: iso(payoutData?.paidAt) } : null,
+      refunds: refunds.docs.map((item) => ({ id: item.id, status: item.data().status, amountSen: item.data().amountSen, reason: item.data().reason, actorType: item.data().actorType, actorId: item.data().actorId, providerReference: item.data().providerReference ?? null, requestedAt: iso(item.data().requestedAt), refundedAt: iso(item.data().refundedAt) })),
+      protectedDispute: dispute.exists ? { status: disputeData?.status, reason: disputeData?.reason, description: disputeData?.description, sellerResponse: disputeData?.sellerResponse, resolution: disputeData?.resolution, refundAmountSen: disputeData?.refundAmountSen, internalNotes: disputeData?.internalNotes, openedAt: iso(disputeData?.openedAt), resolvedAt: iso(disputeData?.resolvedAt) } : null,
+      auditTimeline: events.docs.map((item) => ({ eventType: item.data().eventType, actorType: item.data().actorType, actorId: item.data().actorId, providerReference: item.data().providerReference ?? null, metadata: item.data().metadata ?? {}, createdAt: iso(item.data().createdAt) })).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))),
+      financialActionsEnabled: false } };
   }
   if (selected === "reports") return { row, detail: { details: data.details ?? "", updatedAt: iso(data.updatedAt), moderationActionAvailable: false } };
   if (selected === "promotions") return { row, detail: { packageId: data.packageId, priceSen: data.priceSen, currency: data.currency, startAt: iso(data.startAt), endAt: iso(data.endAt), refundReviewRequired: data.refundReviewRequired ?? false } };

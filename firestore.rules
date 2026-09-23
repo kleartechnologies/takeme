@@ -169,6 +169,18 @@ service cloud.firestore {
       allow list: if false;
       allow create, update, delete: if false;
     }
+    // Protected-payment records are never client-authoritative. Participants and
+    // administrators receive explicit safe projections through callable Functions.
+    match /protectedPayments/{transactionId} { allow read, write: if false; }
+    match /payouts/{transactionId} { allow read, write: if false; }
+    match /refunds/{refundId} { allow read, write: if false; }
+    match /sellerPaymentProfiles/{uid} { allow read, write: if false; }
+    match /transactionDisputes/{transactionId} {
+      allow read, write: if false;
+      match /evidence/{evidenceId} { allow read, write: if false; }
+    }
+    match /transactionEvents/{eventId} { allow read, write: if false; }
+    match /paymentProviderEvents/{eventId} { allow read, write: if false; }
     match /marketplaceEvents/{eventId} {
       allow get: if isAdmin();
       allow list: if isAdmin() && request.query.limit <= 100;

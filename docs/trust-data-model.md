@@ -10,6 +10,13 @@ Firebase Auth owns private identity. `users/{uid}` holds public-only name, photo
 | `offerLocks/{listingId}_{buyerId}` | Functions only | One open request per buyer/listing; expired/terminal requests can be replaced |
 | `listingDeals/{listingId}` | Functions only | Prevent simultaneous accepted deals on one listing; supports cancelled replacement |
 | `transactions/{transactionId}` | Buyer/seller direct get; all writes through Functions; participant history via bounded callable | Agreed amount in integer sen, source/type, confirmations, lifecycle, review window; private amount |
+| `protectedPayments/{transactionId}` | Admin SDK only; participants receive an allowlisted callable projection | Provider-neutral payment state and integer-sen protected/fee/net amounts |
+| `payouts/{transactionId}` | Admin SDK only; participants receive an allowlisted callable projection | Seller payout state, independent of completion |
+| `refunds/{refundId}` | Admin SDK only; participants receive an allowlisted callable projection | Server-authoritative full or partial refund lifecycle |
+| `sellerPaymentProfiles/{uid}` | Admin SDK only; seller receives a sanitized callable projection | Private provider onboarding, never public seller trust |
+| `transactionDisputes/{transactionId}` + `/evidence/{id}` | Admin SDK only; participants use narrow callables | Existing dispute flow extended with protected response/evidence; internal notes omitted |
+| `transactionEvents/{eventId}` | Admin SDK only; safe participant/admin callable projections | Deterministic immutable protected-settlement events |
+| `paymentProviderEvents/{providerEventId}` | Admin SDK only | Reserved future webhook deduplication ledger |
 | `transactions/{transactionId}/reviews/{reviewerUid}` | Author's direct get only; Functions write immutable record; admin get | Unpublished double-blind review; other party cannot read early |
 | `publicReviews/{opaqueId}` | Functions/admin only | Released, sanitized review. Public callable returns role, rating, tags, comment and date, not participant IDs or transaction amount |
 | `trustSummaries/{uid}` | Public direct get; Functions write | Source of truth for separate buyer/seller completion count, tier, ratings and distribution; no fabricated defaults stored |
@@ -26,6 +33,8 @@ Reviews require a completed deal, the correct participant, 1–5 stars, role-app
 Buyer and seller tiers are separate, based **only** on completed transaction counts. Server policy in `functions/src/transaction-domain.ts` defines Bronze 5, Silver 15, Gold 30 and Platinum 75. There is currently no hidden minimum rating, review count or reliability threshold. Ratings are role-specific sum/count/distribution of published valid reviews. Tier progress obtains thresholds from `getReputationPolicy`, not a second UI constant. Admin can later aggregate completed `transactions.amountSen` for GMV; listing price, bids, offers and promotion spend do not qualify. Do not publish a lifetime RM value on a profile.
 
 Client rules deny writes to all authoritative transactions, offers, locks, summaries, public reviews, counters and events. Functions re-check Auth, ownership, status, amount and time inside Firestore transactions. Bounded indexes support participant histories (20 per role), listing offers (20), public reviews (10) and expired-review release (100/hour). Auction, listing, Saved, Phase 6 intelligence and Phase 7 promotion rules remain in force. See [mobile transactions](mobile-transactions.md) for state/UX/Flutter mapping and [mobile monetization](mobile-monetization.md) for paid-visibility separation.
+
+Protected settlement records are fully denied to direct clients, including administrators. Claim-gated admin and participant callables return different explicit projections. Provider references and internal notes are visible only in the admin projection; card data and provider credentials are never stored. Existing transactions without `settlementMode` are interpreted as `standard`, so Phase 11 requires no production backfill. See [protected transactions](protected-transactions.md).
 
 ## Discovery seller projection
 

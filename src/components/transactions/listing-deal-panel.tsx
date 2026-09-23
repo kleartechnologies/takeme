@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getListingDealState, respondToOffer, submitOffer } from "@/lib/services/transactions";
@@ -68,6 +69,10 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
     {loading && <p className="mt-3 text-sm text-[var(--takeme-gray)]">Loading requests…</p>}
     {transaction && <Link href={`/transactions/${transaction.id}`} className="button-primary mt-4 min-h-11 w-full px-4">View {transaction.status === "completed" ? "completed transaction" : "transaction status"}</Link>}
     {userId && !loading && !seller && !transaction && listing.status === "active" && !offers.some((offer) => ["submitted", "countered"].includes(offer.status) && (!now || new Date(offer.expiresAt).getTime() > now)) && <div className="mt-4 space-y-3">
+      <fieldset><legend className="text-xs font-semibold text-stone-700">Transaction option</legend><div className="mt-2 grid gap-2">
+        <label className="flex min-h-12 items-center gap-3 rounded-xl border border-[var(--takeme-green)] bg-white p-3 text-sm"><input type="radio" checked readOnly name={`settlement-${listing.id}`} className="accent-[var(--takeme-dark-green)]" /><span><strong className="block">Standard transaction</strong><span className="text-xs text-[var(--takeme-gray)]">Confirm the exchange with the seller. TAKEME does not process payment.</span></span></label>
+        <div className="rounded-xl border border-gray-200 bg-stone-100 p-3 text-sm text-stone-600" aria-disabled="true"><div className="flex items-start gap-3"><input type="radio" disabled name={`settlement-${listing.id}`} className="mt-1" /><span><strong className="flex items-center gap-1.5 text-stone-700"><ShieldCheck size={16} /> TAKEME Protected Transaction</strong><span className="mt-1 block text-xs leading-5">Future eligible purchases will use a payment provider, seller fulfilment, buyer receipt confirmation, dispute review and conditional payout release.</span></span></div><button type="button" disabled className="button-secondary mt-3 min-h-11 w-full cursor-not-allowed px-3 text-xs">Protected payments coming soon</button><p className="mt-2 text-[10px] leading-4">Designed to support eligible purchases and disputes under TAKEME&apos;s applicable terms. Protection terms, fees and eligibility require review.</p></div>
+      </div></fieldset>
       <label className="form-field"><span>Agreed payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => void send("buy_now")} className="button-primary min-h-12 w-full px-4">Request at {money.format(listing.price)}</button>
       <div className="flex gap-2"><label className="form-field min-w-0 flex-1"><span>Or make an offer (RM)</span><input type="number" inputMode="decimal" min="0.01" max={listing.price} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" /></label><button type="button" disabled={busy || !amount} onClick={() => void send("offer")} className="button-secondary min-h-12 self-end px-4">Send offer</button></div>
