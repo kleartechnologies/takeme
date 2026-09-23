@@ -1,5 +1,47 @@
 {
   "indexes": [
+    { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "categoryId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "completedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "categoryId", "order": "ASCENDING" }, { "fieldPath": "completedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "completedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "buyerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "sellerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "trustSummaries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "buyer.completedCount", "order": "ASCENDING" }, { "fieldPath": "seller.completedCount", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "promotions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "publicReviews", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "rating", "order": "ASCENDING" }, { "fieldPath": "publishedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "publicReviews", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "reviewerRole", "order": "ASCENDING" }, { "fieldPath": "publishedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "reports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "reports", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "targetType", "order": "ASCENDING" }, { "fieldPath": "targetId", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "listingId", "order": "ASCENDING" }, { "fieldPath": "eventType", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "marketplaceEvents", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "eventType", "order": "ASCENDING" }, { "fieldPath": "categoryId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
     { "collectionGroup": "offers", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "listingId", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }

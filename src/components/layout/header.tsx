@@ -37,6 +37,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const pathname = usePathname();
+  if (pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
 
   return <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl">

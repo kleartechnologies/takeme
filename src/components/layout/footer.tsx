@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Logo } from "./logo";
 
 export function Footer() {
+  const pathname = usePathname();
+  if (pathname.startsWith("/admin")) return null;
   return (
     <footer className="border-t border-gray-200 bg-[var(--takeme-charcoal)] pb-24 pt-12 text-gray-300 lg:pb-10">
       <div className="page-shell grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">

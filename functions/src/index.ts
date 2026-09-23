@@ -382,3 +382,5 @@ export {
   getPublicReviews,
   reportPublicReview,
 } from "./transactions";
+
+export { getAdminMetrics, getAdminPage, getAdminRecord } from "./admin";
