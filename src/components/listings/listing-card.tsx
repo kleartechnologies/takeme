@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import type { Listing } from "@/types/marketplace";
 import { SaveButton } from "@/components/saved/save-button";
+import { PublicSellerSummary } from "@/components/profile/public-seller-summary";
 import { trackMarketplaceIntent, type CandidateSource } from "@/lib/services/intelligence";
 import { trackPromotionIntent, type PromotionBadge } from "@/lib/services/promotions";
 
@@ -55,6 +56,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
         <p className="line-clamp-2 min-h-10 text-xs font-semibold leading-5 tracking-[-0.01em] text-[var(--takeme-charcoal)] sm:text-base">{listing.title}</p>
         <p className="mt-1 text-base font-bold tracking-tight text-[var(--takeme-charcoal)] sm:text-lg">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>
         {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
+        <PublicSellerSummary uid={listing.sellerId} variant="card" />
         <div className="mt-auto flex items-center justify-between gap-1 pt-2 text-[10px] text-[var(--takeme-gray)] sm:gap-2 sm:pt-3 sm:text-xs">
           <span className="flex min-w-0 items-center gap-1"><MapPin size={13} className="shrink-0" /><span className="truncate">{listing.location}</span></span>
           <span className="shrink-0 rounded-full bg-stone-100 px-1.5 py-1 sm:px-2">{listing.condition}</span>

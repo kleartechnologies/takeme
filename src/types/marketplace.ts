@@ -167,6 +167,17 @@ export interface TrustSummary {
   updatedAt: string;
 }
 
+export interface PublicSellerSummary {
+  uid: string;
+  displayName: string;
+  photoURL: string | null;
+  sellerRating: number | null;
+  sellerReviewCount: number;
+  sellerCompletedTransactionCount: number;
+  sellerTier: ReputationTier | null;
+  verificationStatus: "unverified" | "verified";
+}
+
 export interface Conversation {
   id: string;
   listingId: string;

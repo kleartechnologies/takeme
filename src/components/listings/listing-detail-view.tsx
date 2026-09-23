@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, MapPin, Share2, ShieldCheck, Sparkles, Star, UserRound } from "lucide-react";
+import { CalendarDays, ChevronLeft, MapPin, Share2, ShieldCheck, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -17,9 +17,8 @@ import { getCategoryName } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getListingsBySeller, subscribeToListing } from "@/lib/services/listings";
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
-import { getUserProfile } from "@/lib/services/users";
 import { useCurrentTime } from "@/lib/use-current-time";
-import type { Listing, UserProfile } from "@/types/marketplace";
+import type { Listing } from "@/types/marketplace";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 2 });
 const senMoney = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -27,7 +26,7 @@ const senMoney = new Intl.NumberFormat("en-MY", { style: "currency", currency: "
 export function ListingDetailView({ id, created = false }: { id: string; created?: boolean }) {
   const now = useCurrentTime();
   const { user } = useAuth();
-  const [state, setState] = useState<{ loading: boolean; listing: Listing | null; seller: UserProfile | null; related: Listing[]; error: string }>({ loading: true, listing: null, seller: null, related: [], error: "" });
+  const [state, setState] = useState<{ loading: boolean; listing: Listing | null; related: Listing[]; error: string }>({ loading: true, listing: null, related: [], error: "" });
   const [selectedImage, setSelectedImage] = useState(0);
   const [shareMessage, setShareMessage] = useState("");
   const trackedView = useRef("");
@@ -57,19 +56,19 @@ export function ListingDetailView({ id, created = false }: { id: string; created
     let contextSeller = "";
     const unsubscribe = subscribeToListing(id, async (listing) => {
       if (!active) return;
-      if (!listing) { setState({ loading: false, listing: null, seller: null, related: [], error: "not-found" }); return; }
+      if (!listing) { setState({ loading: false, listing: null, related: [], error: "not-found" }); return; }
       if (contextSeller === listing.sellerId) {
         setState((current) => ({ ...current, loading: false, listing, error: "" }));
         return;
       }
       contextSeller = listing.sellerId;
       try {
-        const [seller, related] = await Promise.all([getUserProfile(listing.sellerId), getListingsBySeller(listing.sellerId)]);
-        if (active) setState({ loading: false, listing, seller, related: related.filter((item) => item.id !== listing.id), error: "" });
+        const related = await getListingsBySeller(listing.sellerId);
+        if (active) setState({ loading: false, listing, related: related.filter((item) => item.id !== listing.id), error: "" });
       } catch (error) {
-        if (active) setState({ loading: false, listing: null, seller: null, related: [], error: firebaseErrorMessage(error) });
+        if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) });
       }
-    }, (error) => { if (active) setState({ loading: false, listing: null, seller: null, related: [], error: firebaseErrorMessage(error) }); });
+    }, (error) => { if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) }); });
     return () => { active = false; unsubscribe(); };
   }, [id]);
 
@@ -93,12 +92,11 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           <div className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-stone-100">{listing.imageUrls[0] && <Image src={listing.imageUrls[selectedImage] ?? listing.imageUrls[0]} alt={listing.title} fill priority sizes="(max-width:1024px) 100vw, 65vw" className="object-cover" />}</div>
           {listing.imageUrls.length > 1 && <div className="mt-3 grid grid-cols-5 gap-2 sm:grid-cols-6">{listing.imageUrls.map((url, index) => <button key={url} onClick={() => setSelectedImage(index)} className={`relative aspect-square overflow-hidden rounded-xl border-2 ${selectedImage === index ? "border-[var(--takeme-green)]" : "border-transparent"}`} aria-label={`Show image ${index + 1}`}><Image src={url} alt="" fill sizes="100px" className="object-cover" /></button>)}</div>}
         </section>
-        <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-md)] sm:p-7 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <aside className="h-fit min-w-0 rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-md)] sm:p-7 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[var(--takeme-light-green)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">{isAuction ? "Auction" : "Fixed price"}</span><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-[var(--takeme-gray)]">{listing.condition}</span></div>
           <h1 className="mt-5 text-2xl font-bold leading-tight tracking-[-0.035em] sm:text-3xl">{listing.title}</h1>
           <p className="mt-4 text-3xl font-bold tracking-tight text-[var(--takeme-charcoal)]">{displayAmount}</p>
           {isAuction && <p className="mt-1 text-xs font-semibold text-[var(--takeme-dark-green)]">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"}</p>}
-          <Link href={`/sellers/${listing.sellerId}`} className="mt-5 flex min-h-14 items-center gap-3 rounded-xl bg-stone-50 p-2"><span className="relative grid size-11 place-items-center overflow-hidden rounded-full bg-white">{state.seller?.photoURL ? <Image src={state.seller.photoURL} alt="" fill sizes="44px" className="object-cover" /> : <UserRound size={20} />}</span><div><p className="text-sm font-bold">{state.seller?.displayName ?? "TAKEME seller"}</p><p className="text-xs text-stone-500">View seller profile</p></div></Link>
           <p className="mt-3 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p>
           {isAuction ? <AuctionPanel listing={listing} userId={user?.uid} owner={owner} /> : <ListingDealPanel listing={listing} userId={user?.uid} />}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
