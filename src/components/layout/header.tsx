@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Heart, LogOut, Menu, Search, UserRound, X } from "lucide-react";
+import { Bell, Heart, LogOut, Menu, MessageSquare, Search, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
@@ -11,6 +11,7 @@ import { useUnreadCount } from "@/lib/use-unread-count";
 import { Logo } from "./logo";
 
 const menuLinks = [
+  { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
   { href: "/for-you", label: "For You" },
   { href: "/categories", label: "Categories" },
@@ -20,6 +21,7 @@ const menuLinks = [
   { href: "/saved-searches", label: "Saved searches" },
   { href: "/following", label: "Following" },
   { href: "/updates", label: "Updates" },
+  { href: "/messages", label: "Messages" },
 ];
 
 function SearchForm({ hideOnMobile = false }: { hideOnMobile?: boolean }) {
@@ -57,6 +59,7 @@ export function Header() {
         <Link href="/saved" className="icon-button" aria-label="Saved listings" aria-current={pathname === "/saved" ? "page" : undefined}><Heart size={20} /></Link>
         <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
         <Link href="/updates" className="icon-button relative" aria-label={unreadCount ? `Updates, ${unreadCount} unread` : "Updates"} aria-current={pathname === "/updates" ? "page" : undefined}><Bell size={19} />{unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-700 px-1 text-[10px] leading-5 text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>
+        <Link href="/messages" className="icon-button" aria-label="Messages" aria-current={pathname.startsWith("/messages") ? "page" : undefined}><MessageSquare size={19} /></Link>
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
         {user && <button type="button" onClick={() => void logout()} aria-label="Sign out" className="icon-button"><LogOut size={18} /></button>}
       </nav>

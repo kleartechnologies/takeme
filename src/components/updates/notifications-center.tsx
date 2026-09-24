@@ -70,7 +70,7 @@ export function NotificationsCenter() {
 
   if (!configured) return <FirebaseSetupState />;
   if (authLoading) return <RowsSkeleton />;
-  if (!user) return <SignInRequired message="Log in to see your marketplace notifications." />;
+  if (!user) return <SignInRequired message="Log in to see your marketplace notifications." next="/updates" />;
   return <div>
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-[var(--takeme-gray)]">Real alerts from your saved items, searches, sellers, auctions and transactions.</p>

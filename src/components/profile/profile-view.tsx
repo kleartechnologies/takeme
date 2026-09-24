@@ -46,6 +46,7 @@ export function ProfileView() {
   const [confirm, setConfirm] = useState<Listing | null>(null);
   const [removingId, setRemovingId] = useState("");
   const [actionError, setActionError] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!confirm) return;
@@ -69,12 +70,12 @@ export function ProfileView() {
     let active = true;
     Promise.all([getUserProfile(user.uid), getListingsBySeller(user.uid, true), getTrustSummary(user.uid).catch(() => null)]).then(([profile, listings, trust]) => { if (active) setState({ loading: false, profile, trust, listings, error: "" }); }).catch(() => { if (active) setState({ loading: false, profile: null, trust: null, listings: [], error: "Your marketplace account could not be loaded. Please try again." }); });
     return () => { active = false; };
-  }, [user]);
+  }, [user, retry]);
 
   if (!configured) return <FirebaseSetupState />;
   if (authLoading || (user && state.loading)) return <div className="min-h-80 animate-pulse rounded-3xl bg-stone-100" />;
   if (!user) return <div className="grid min-h-[55vh] place-items-center rounded-3xl border border-gray-200 bg-white p-8 text-center"><div><div className="mx-auto grid size-16 place-items-center rounded-full bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><UserRound size={28} /></div><h1 className="mt-5 text-2xl font-bold">Your marketplace profile</h1><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--takeme-gray)]">Log in to view and manage your listings.</p><Link href="/login?next=/profile" className="button-primary mt-6 h-12 px-6"><LogIn size={17} /> Log in</Link></div></div>;
-  if (state.error) return <ErrorState message={state.error} />;
+  if (state.error) return <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => { setState((current) => ({ ...current, loading: true, error: "" })); setRetry((value) => value + 1); }} className="button-secondary mt-3 min-h-11 px-5">Retry profile</button></div>;
   const profile = state.profile;
   const current = state.listings.filter(isCurrent);
   const past = state.listings.filter((listing) => !isCurrent(listing));

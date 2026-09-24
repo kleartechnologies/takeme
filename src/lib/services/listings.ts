@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
@@ -140,7 +141,8 @@ export async function getActiveListings(filters: ListingQuery = {}, cursor?: Que
   let hasMore = false;
   for (let batch = 0; batch < 4 && matches.length < pageSize; batch += 1) {
     const pageConstraints = [...constraints, ...(lastRead ? [startAfter(lastRead)] : []), limit(pageSize + 1)];
-    const snapshot = await getDocs(query(collection(database, "listings"), ...pageConstraints));
+    // Discovery must not mistake an offline, empty cache for an empty marketplace.
+    const snapshot = await getDocsFromServer(query(collection(database, "listings"), ...pageConstraints));
     const source = snapshot.docs.slice(0, pageSize);
     hasMore = snapshot.size > pageSize;
     for (const document of source) {

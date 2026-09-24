@@ -22,7 +22,7 @@ export function EditListingView({ id }: { id: string }) {
   }, [id, user]);
   if (!configured) return <FirebaseSetupState />;
   if (authLoading) return <div className="min-h-96 animate-pulse rounded-3xl bg-stone-100" />;
-  if (!user) return <SignInRequired message="Log in as the listing owner to edit it." />;
+  if (!user) return <SignInRequired message="Log in as the listing owner to edit it." next={`/listings/${id}/edit`} />;
   if (state.loading) return <div className="min-h-96 animate-pulse rounded-3xl bg-stone-100" />;
   if (state.error) return <ErrorState message={state.error} />;
   if (state.listing?.status === "removed") return <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center"><h2 className="text-2xl font-bold">This listing has been removed</h2><p className="mt-2 text-[var(--takeme-gray)]">Removed listings are retained for history and cannot be republished in Phase 2.</p><Link href="/profile" className="button-secondary mt-6 h-11 px-5">Back to My Listings</Link></div>;

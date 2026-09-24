@@ -37,7 +37,7 @@ export function SavedSearchesView() {
   }
   if (!configured) return <FirebaseSetupState />;
   if (authLoading || loading && user) return <div className="h-40 animate-pulse rounded-2xl bg-stone-100" />;
-  if (!user) return <SignInRequired message="Log in to manage your saved searches." />;
+  if (!user) return <SignInRequired message="Log in to manage your saved searches." next="/saved-searches" />;
   return <div>
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-[var(--takeme-gray)]">You choose which searches to save. Alerts only apply to genuinely new matching listings.</p><Link href="/explore" className="button-primary min-h-11 px-4">Explore listings</Link></div>
     {error && <div role="alert"><ErrorState message={error} /><button type="button" onClick={() => setRetry((value) => value + 1)} className="button-secondary mt-3 min-h-11 px-4">Retry</button></div>}

@@ -20,7 +20,7 @@ function auctionLabel(listing: Listing) {
   return "Live auction";
 }
 
-export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", initialSaved, onSavedChange, recommendationSource, recommendationSessionId, promotion, promotionContext = "explore" }: { listing: Listing; sizes?: string; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationSessionId?: string | null; promotion?: PromotionBadge; promotionContext?: "home" | "explore" }) {
+export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", priority = false, initialSaved, onSavedChange, recommendationSource, recommendationSessionId, promotion, promotionContext = "explore" }: { listing: Listing; sizes?: string; priority?: boolean; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationSessionId?: string | null; promotion?: PromotionBadge; promotionContext?: "home" | "explore" }) {
   const { user } = useAuth();
   const card = useRef<HTMLElement>(null);
   const impression = useRef("");
@@ -58,7 +58,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
     <article ref={card} className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[var(--takeme-shadow-sm)] transition duration-300 hover:-translate-y-1 hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]">
       <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
         <Link href={`/listings/${listing.id}`} onClick={recordClick} aria-label={`View ${listing.title}`} className="relative block h-full w-full">
-          {listing.imageUrls[0] && <Image src={listing.imageUrls[0]} alt={listing.title} fill sizes={sizes} className="object-cover transition duration-500 group-hover:scale-[1.04]" />}
+          {listing.imageUrls[0] && <Image src={listing.imageUrls[0]} alt={listing.title} fill sizes={sizes} loading={priority ? "eager" : "lazy"} className="object-cover transition duration-500 group-hover:scale-[1.04]" />}
         </Link>
         <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5 sm:left-3 sm:top-3">
           <span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:text-[11px] ${isAuction ? "bg-[var(--takeme-dark-green)] text-white" : "bg-white/95 text-[var(--takeme-charcoal)]"}`}>{isAuction ? auctionLabel(listing) : "Fixed price"}</span>

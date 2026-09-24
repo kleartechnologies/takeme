@@ -61,6 +61,7 @@ export function TransactionView({ id }: { id: string }) {
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
   const [comment, setComment] = useState("");
+  const [retry, setRetry] = useState(0);
 
   function applyDetail(result: Awaited<ReturnType<typeof getTransactionDetail>>) {
     setTransaction(result.transaction);
@@ -78,7 +79,7 @@ export function TransactionView({ id }: { id: string }) {
       applyDetail(result); setPolicy(nextPolicy); setLoading(false);
     }).catch(() => { if (active) { setError("This transaction is unavailable or you are not a participant."); setLoading(false); } });
     return () => { active = false; };
-  }, [id, user]);
+  }, [id, user, retry]);
   async function act(task: () => Promise<unknown>, message: string) {
     setBusy(true); setError(""); setNotice("");
     try { await task(); await reload(); setNotice(message); setReason(""); setSellerResponse(""); setEvidence(""); }
@@ -88,7 +89,7 @@ export function TransactionView({ id }: { id: string }) {
 
   if (authLoading || (user && loading)) return <div className="min-h-80 animate-pulse rounded-3xl bg-stone-100" />;
   if (!user) return <div className="rounded-3xl border border-gray-200 bg-white p-6 text-center"><h1 className="text-2xl font-bold">Transaction status</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">Sign in as a buyer or seller to view this private deal.</p><Link href={`/login?next=${encodeURIComponent(`/transactions/${id}`)}`} className="button-primary mt-5 min-h-11 px-5">Log in</Link></div>;
-  if (!transaction) return <div role="alert" className="rounded-2xl bg-red-50 p-5 text-sm text-red-700">{error || "Transaction not found."}</div>;
+  if (!transaction) return <div role="alert" className="rounded-2xl bg-red-50 p-5 text-sm text-red-700"><p>{error || "Transaction not found."}</p><button type="button" className="button-secondary mt-3 min-h-11 px-4" onClick={() => { setLoading(true); setError(""); setRetry((value) => value + 1); }}>Retry transaction</button></div>;
   const buyer = user.uid === transaction.buyerId;
   const protectedMode = transaction.settlementMode === "protected";
   const ownConfirmed = buyer ? transaction.buyerConfirmedAt : transaction.sellerConfirmedAt;
