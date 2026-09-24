@@ -68,7 +68,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
       </div>
       <Link href={`/listings/${listing.id}`} onClick={recordClick} className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-4">
         <p className="line-clamp-2 min-h-10 text-xs font-semibold leading-5 tracking-[-0.01em] text-[var(--takeme-charcoal)] sm:text-base">{listing.title}</p>
-        <p className="mt-1 text-base font-bold tracking-tight text-[var(--takeme-charcoal)] sm:text-lg">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>
+        <p className="mt-1 text-base font-bold tracking-tight text-[var(--takeme-charcoal)] sm:text-lg">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}{isAuction && <span className="ml-1 text-[10px] font-medium text-[var(--takeme-gray)]">{(listing.bidCount ?? 0) > 0 ? "current bid" : "starting bid"}</span>}</p>
         {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
         <PublicSellerSummary uid={listing.sellerId} variant="card" />
         <div className="mt-auto flex items-center justify-between gap-1 pt-2 text-[10px] text-[var(--takeme-gray)] sm:gap-2 sm:pt-3 sm:text-xs">

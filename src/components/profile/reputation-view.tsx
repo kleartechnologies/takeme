@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getPublicReviews, getReputationPolicy, reportPublicReview, type ReputationPolicy } from "@/lib/services/transactions";
 import { getTrustSummary } from "@/lib/services/trust";
+import { clearPublicSellerSummaryCache, getPublicSellerSummary } from "@/lib/services/public-sellers";
 import type { PublicReview, ReputationTier, RoleReputation, TrustSummary } from "@/types/marketplace";
 
 const tiers: ReputationTier[] = ["bronze", "silver", "gold", "platinum"];
@@ -14,7 +15,7 @@ const reportReasons = [
   ["spam", "Spam"], ["personal_information", "Personal information"], ["unrelated", "Unrelated to transaction"], ["other", "Other"],
 ] as const;
 
-export function ReputationView({ uid, compact = false, initialSummary }: { uid: string; compact?: boolean; initialSummary?: TrustSummary | null }) {
+export function ReputationView({ uid, compact = false, initialSummary, publicSellerOnly = false }: { uid: string; compact?: boolean; initialSummary?: TrustSummary | null; publicSellerOnly?: boolean }) {
   const { user } = useAuth();
   const [summary, setSummary] = useState<TrustSummary | null>(initialSummary ?? null);
   const [policy, setPolicy] = useState<ReputationPolicy | null>(null);
@@ -25,23 +26,30 @@ export function ReputationView({ uid, compact = false, initialSummary }: { uid: 
   const [reason, setReason] = useState("spam");
   const [details, setDetails] = useState("");
   const [reportNotice, setReportNotice] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
-    Promise.all([initialSummary !== undefined ? Promise.resolve(initialSummary) : getTrustSummary(uid), getReputationPolicy(), compact ? Promise.resolve([]) : getPublicReviews(uid)])
+    queueMicrotask(() => { if (active) { setLoading(true); setError(""); } });
+    const trust = publicSellerOnly ? getPublicSellerSummary(uid).then((seller): TrustSummary | null => seller ? {
+      userId: uid, verificationStatus: seller.verificationStatus, updatedAt: "",
+      buyer: { completedCount: 0, tier: null, reviewCount: 0, ratingSum: 0, averageRating: null, ratingDistribution: {} },
+      seller: { completedCount: seller.sellerCompletedTransactionCount, tier: seller.sellerTier, reviewCount: seller.sellerReviewCount, ratingSum: 0, averageRating: seller.sellerRating, ratingDistribution: {} },
+    } : null) : initialSummary !== undefined ? Promise.resolve(initialSummary) : getTrustSummary(uid);
+    Promise.all([trust, getReputationPolicy(), compact ? Promise.resolve([]) : getPublicReviews(uid, publicSellerOnly)])
       .then(([nextSummary, nextPolicy, nextReviews]) => { if (active) { setSummary(nextSummary); setPolicy(nextPolicy); setReviews(nextReviews); setLoading(false); } })
       .catch(() => { if (active) { setError("Reputation is unavailable right now."); setLoading(false); } });
     return () => { active = false; };
-  }, [uid, compact, initialSummary]);
+  }, [uid, compact, initialSummary, publicSellerOnly, retry]);
   async function submitReport(reviewId: string) {
     setReportNotice("");
     try { await reportPublicReview(reviewId, reason, details); setReportNotice("Review report submitted for moderation."); setReporting(""); setDetails(""); }
     catch { setReportNotice("Could not submit the report. Please try again."); }
   }
   if (loading) return <div className="mt-6 min-h-28 animate-pulse rounded-2xl bg-stone-100" />;
-  if (error || !policy) return <p className="mt-6 text-sm text-[var(--takeme-gray)]">{error || "Reputation is unavailable."}</p>;
+  if (error || !policy || (publicSellerOnly && !summary)) return <div className="mt-6"><p className="text-sm text-[var(--takeme-gray)]">{error || "Reputation is unavailable."}</p><button type="button" className="button-secondary mt-3 min-h-11 px-4" onClick={() => { if (publicSellerOnly) clearPublicSellerSummaryCache(); setRetry((value) => value + 1); }}>Retry</button></div>;
   return <section className="mt-7" aria-label="Marketplace reputation">
-    {!compact && <div className="mb-4"><h2 className="text-xl font-bold">Marketplace reputation</h2><p className="mt-1 text-xs text-[var(--takeme-gray)]">Buyer and seller activity are separate. Only mutually confirmed completed transactions count.</p></div>}
-    <div className={`grid gap-3 ${compact ? "" : "md:grid-cols-2"}`}><RoleCard role="buyer" data={summary?.buyer} policy={policy} compact={compact} /><RoleCard role="seller" data={summary?.seller} policy={policy} compact={compact} /></div>
+    {!compact && <div className="mb-4"><h2 className="text-xl font-bold">{publicSellerOnly ? "Seller reputation" : "Marketplace reputation"}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)]">{publicSellerOnly ? "Based on confirmed sales and published buyer reviews." : "Buyer and seller activity are separate. Only mutually confirmed completed transactions count."}</p></div>}
+    <div className={`grid gap-3 ${compact || publicSellerOnly ? "" : "md:grid-cols-2"}`}>{!publicSellerOnly && <RoleCard role="buyer" data={summary?.buyer} policy={policy} compact={compact} />}<RoleCard role="seller" data={summary?.seller} policy={policy} compact={compact} /></div>
     {!compact && <><Link href="/help/tiers" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">How TAKEME tiers work</Link>
       <div className="mt-5"><h3 className="text-lg font-bold">Published reviews</h3><p className="mt-1 text-xs text-[var(--takeme-gray)]">Reviews appear after both parties submit or the review window closes.</p>
         {reviews.length ? <div className="mt-3 space-y-3">{reviews.map((review) => <article key={review.id} className="rounded-2xl border border-gray-200 bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{review.reviewerRole === "buyer" ? "Buyer → seller" : "Seller → buyer"} · {"★".repeat(review.rating)}<span className="text-gray-300">{"★".repeat(5 - review.rating)}</span></p><time className="text-xs text-[var(--takeme-gray)]">{new Date(review.createdAt).toLocaleDateString("en-MY")}</time></div>{review.tags.length > 0 && <p className="mt-2 text-xs text-[var(--takeme-gray)]">{review.tags.join(" · ")}</p>}{review.comment && <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{review.comment}</p>}

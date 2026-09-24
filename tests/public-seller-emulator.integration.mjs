@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getFirestore, setDoc } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getDoc, getFirestore, setDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
 const projectId = "demo-takeme";
@@ -38,6 +38,8 @@ await admin.doc(`trustSummaries/${sellerIds[0]}`).set({
 });
 
 await assert.rejects(() => setDoc(doc(signed.db, "trustSummaries", sellerIds[0]), { seller: { completedCount: 999 } }), /permission/i);
+await assert.rejects(() => getDoc(doc(signed.db, "trustSummaries", sellerIds[0])), /permission/i);
+await assert.rejects(() => getDoc(doc(guest.db, "trustSummaries", sellerIds[0])), /permission/i);
 const call = httpsCallable(guest.functions, "getPublicSellerSummaries");
 for (const count of [10, 20, 40]) {
   const result = (await call({ sellerIds: sellerIds.slice(0, count) })).data;
@@ -49,6 +51,10 @@ assert.equal("buyer" in trusted, false);
 assert.equal("amountSen" in trusted, false);
 assert.equal("lifetimeValueSen" in trusted, false);
 assert.equal("internalRiskScore" in trusted, false);
+await admin.doc(`publicReviews/buyer-private-${suffix}`).set({ reviewedUserId: sellerIds[0], reviewerRole: "seller", rating: 5, tags: [], comment: "Buyer-side review", createdAt: new Date() });
+await admin.doc(`publicReviews/seller-public-${suffix}`).set({ reviewedUserId: sellerIds[0], reviewerRole: "buyer", rating: 4, tags: [], comment: "Seller-side review", createdAt: new Date() });
+const publicReviews = (await httpsCallable(guest.functions, "getPublicReviews")({ userId: sellerIds[0] })).data.reviews;
+assert.deepEqual(publicReviews.map((review) => review.comment), ["Seller-side review"]);
 const newcomer = (await call({ sellerIds: [sellerIds[1]] })).data.sellers[0];
 assert.equal(newcomer.sellerRating, null);
 assert.equal(newcomer.sellerReviewCount, 0);

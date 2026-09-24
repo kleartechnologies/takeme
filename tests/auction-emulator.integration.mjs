@@ -15,6 +15,7 @@ const { getFirestore: getAdminFirestore, Timestamp } = functionsRequire("firebas
 const { _test } = functionsRequire("./lib/index.js");
 const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.com`, projectId, storageBucket: `${projectId}.firebasestorage.app`, appId: "1:123456789:web:demo" };
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const adminDb = getAdminFirestore();
 
 async function client(label, authenticated = true) {
   const app = initializeApp(config, `${label}-${suffix}`);
@@ -73,14 +74,14 @@ const base = {
   minimumBidIncrement: 1_000,
 };
 
-const start = new Date(Date.now() + 5_000);
+const start = new Date(Date.now() + 60_000);
 const created = await call(owner, "createAuctionListing", { ...base, auctionStartAt: start.toISOString(), auctionEndAt: new Date(start.getTime() + 10 * 60_000).toISOString() });
 const imageUrl = await uploadFixture(owner, created.listingId, "listing.png");
 await call(owner, "publishAuctionListing", { listingId: created.listingId, imageUrls: [imageUrl] });
 
 await assert.rejects(() => call(guest, "placeBid", { listingId: created.listingId, amount: 10_000 }), /sign in|unauthenticated/i);
 await assert.rejects(() => call(bidderOne, "placeBid", { listingId: created.listingId, amount: 10_000 }), /not started/i);
-await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.getTime() - Date.now() + 200)));
+await adminDb.doc(`listings/${created.listingId}`).update({ auctionStartAt: Timestamp.fromMillis(Date.now() - 200) });
 await assert.rejects(() => call(owner, "placeBid", { listingId: created.listingId, amount: 10_000 }), /seller|own auction/i);
 
 await call(bidderOne, "placeBid", { listingId: created.listingId, amount: 10_000 });
@@ -121,7 +122,6 @@ assert.equal(cancelled.auctionStatus, "cancelled");
 await assert.rejects(() => call(bidderOne, "placeBid", { listingId: cancellable.listingId, amount: 10_000 }), /unavailable|cancelled/i);
 await assert.rejects(() => call(owner, "cancelAuction", { listingId: created.listingId }), /with bids/i);
 
-const adminDb = getAdminFirestore();
 const noBidStart = new Date(Date.now() + 60_000);
 const noBidAuction = await call(owner, "createAuctionListing", { ...base, title: "No bid lifecycle auction", auctionStartAt: noBidStart.toISOString(), auctionEndAt: new Date(noBidStart.getTime() + 10 * 60_000).toISOString() });
 const noBidImage = await uploadFixture(owner, noBidAuction.listingId, "no-bids.png");

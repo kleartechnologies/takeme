@@ -5,7 +5,7 @@ import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "fi
 import { connectFirestoreEmulator, doc, getDoc, getFirestore, serverTimestamp, setDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
-const projectId = "demo-takeme";
+const projectId = "demo-takeme-engagement";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:18080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:19099";
 const requireFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
@@ -131,6 +131,7 @@ await drainJobs();
 assert.equal((await call(buyer, "getNotifications")).items.filter((item) => item.type === "auction_ending").length, 1);
 await call(buyer, "placeBid", { listingId: auctionId, amount: 10000 });
 await call(other, "placeBid", { listingId: auctionId, amount: 11000 });
+assert.equal((await auctionRef.get()).data().price, 110);
 await eventually(async () => (await call(buyer, "getNotifications")).items.some((item) => item.type === "outbid"), "outbid alert");
 await auctionRef.update({ auctionEndAt: Timestamp.fromMillis(Date.now() - 1000), updatedAt: Timestamp.now() });
 await functionsModule.advanceAuctionLifecycle.run();

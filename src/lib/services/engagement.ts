@@ -1,7 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 
-export type NotificationType = "saved_price_drop" | "saved_unavailable" | "new_matching_listing" | "followed_seller_listing" | "auction_ending" | "outbid" | "auction_lost" | "auction_won" | "offer_received" | "offer_accepted" | "counteroffer" | "transaction_update" | "transaction_completed" | "review_available";
+export type NotificationType = "saved_price_drop" | "saved_unavailable" | "new_matching_listing" | "followed_seller_listing" | "auction_ending" | "outbid" | "auction_lost" | "message_received" | "auction_won" | "offer_received" | "offer_accepted" | "counteroffer" | "transaction_update" | "transaction_completed" | "review_available";
 export type Frequency = "instant" | "daily" | "off";
 export type SearchCriteria = { query: string; category: string; condition: string; type: string; auction: string; price: number | null; location: string; sort: "newest" | "price_low" | "price_high" };
 export type Notification = { id: string; type: NotificationType; title: string; body: string; href: string; createdAt: string; readAt: string | null; openedAt: string | null; listingId?: string; sellerId?: string; transactionId?: string };

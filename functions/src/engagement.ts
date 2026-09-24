@@ -45,6 +45,19 @@ async function emit(uid: string, key: string, notice: Notice) {
   });
 }
 
+export const onMessageEngagementCreated = onDocumentCreated("conversations/{conversationId}/messages/{messageId}", async (event) => {
+  const message = event.data?.data();
+  if (!message?.senderId) return;
+  const conversation = await db.collection("conversations").doc(event.params.conversationId).get();
+  const data = conversation.data();
+  if (!data || ![data.buyerId, data.sellerId].includes(message.senderId)) return;
+  const recipientId = data.buyerId === message.senderId ? data.sellerId : data.buyerId;
+  await emit(recipientId, `message:${event.params.conversationId}:${event.params.messageId}`, {
+    type: "message_received", title: "New marketplace message", body: `New message about ${String(data.listingTitle ?? "a listing").slice(0, 60)}.`,
+    href: `/messages/${event.params.conversationId}`, listingId: data.listingId,
+  });
+});
+
 export const getUnreadCount = onCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const doc = await summaryRef(uid).get();

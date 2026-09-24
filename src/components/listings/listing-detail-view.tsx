@@ -11,6 +11,8 @@ import { ListingSection } from "@/components/listings/listing-section";
 import { SimilarListings } from "@/components/listings/similar-listings";
 import { ListingDealPanel } from "@/components/transactions/listing-deal-panel";
 import { SellerTrustSignal } from "@/components/profile/seller-trust-signal";
+import { MessageSellerAction } from "@/components/messages/message-seller-action";
+import { ReportAction } from "@/components/trust/report-action";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { getCategoryName } from "@/data/categories";
@@ -102,6 +104,8 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
           {owner && listing.status === "active" && (!isAuction || (now > 0 && ["active", "scheduled"].includes(listing.auctionStatus ?? "") && Boolean(listing.auctionEndAt && new Date(listing.auctionEndAt).getTime() > now))) && <div className="mt-3 grid grid-cols-2 gap-2"><Link href={`/listings/${listing.id}/promote?type=boost`} className="button-secondary min-h-12 px-3 text-xs"><Sparkles size={16} /> Boost listing</Link><Link href={`/listings/${listing.id}/promote?type=featured`} className="button-secondary min-h-12 px-3 text-xs"><Star size={16} /> Featured</Link></div>}
           {!owner && listing.status === "active" && <SaveButton listingId={listing.id} />}
+          {!owner && listing.status === "active" && <MessageSellerAction listingId={listing.id} />}
+          {!owner && <ReportAction targetType="listing" targetId={listing.id} label="Report listing" />}
           <button type="button" onClick={() => void share()} className="button-secondary mt-3 min-h-12 w-full"><Share2 size={18} /> Share listing</button>
           {shareMessage && <p role="status" className="mt-2 text-xs text-[var(--takeme-gray)]">{shareMessage}</p>}
           <SellerTrustSignal uid={listing.sellerId} />

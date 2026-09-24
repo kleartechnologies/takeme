@@ -9,6 +9,7 @@ const sections = [
   { title: "Marketplace", items: [["saved_price_drop", "Saved item price drops"], ["saved_unavailable", "Saved item availability"], ["new_matching_listing", "New saved-search matches"]] },
   { title: "Sellers", items: [["followed_seller_listing", "New listings from followed sellers"]] },
   { title: "Auctions", items: [["auction_ending", "Saved auctions ending soon"], ["outbid", "Outbid alerts"], ["auction_lost", "Auction results when you did not win"]] },
+  { title: "Messages", items: [["message_received", "New marketplace messages"]] },
 ] as const;
 
 export function PreferencesView() {

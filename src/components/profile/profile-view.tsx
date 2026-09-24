@@ -51,7 +51,15 @@ export function ProfileView() {
     if (!confirm) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.querySelector<HTMLElement>('[aria-labelledby="remove-title"] button[aria-label="Close"]')?.focus();
-    function onKeyDown(event: KeyboardEvent) { if (event.key === "Escape" && !removingId) setConfirm(null); }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !removingId) setConfirm(null);
+      if (event.key !== "Tab") return;
+      const dialog = document.querySelector<HTMLElement>('[aria-labelledby="remove-title"]');
+      const focusable = [...(dialog?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])];
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus(); };
   }, [confirm, removingId]);
@@ -101,7 +109,7 @@ export function ProfileView() {
       {actionError && <div className="mb-4" role="alert"><ErrorState message={actionError} /></div>}
       {shown.length ? <div className="grid gap-3">{shown.map((listing) => <MyListingRow key={listing.id} listing={listing} now={now} onRemove={() => setConfirm(listing)} />)}</div> : <EmptyState title={statusFilter === "all" ? view === "current" ? "No current listings" : "No past listings" : "Nothing in this group"} description={statusFilter === "all" ? view === "current" ? "Publish your first item or auction to start selling." : "Ended, cancelled and removed listings will appear here." : "Choose another status to see your listings."} />}
     </section>
-    {confirm && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingId) setConfirm(null); }}><section role="dialog" aria-modal="true" aria-labelledby="remove-title" className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between gap-3"><h2 id="remove-title" className="text-xl font-bold">{isAuction(confirm) ? "Cancel this auction?" : "Remove this listing?"}</h2><button className="icon-button" aria-label="Close" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}><X size={20} /></button></div><p className="mt-3 text-sm leading-6 text-[var(--takeme-gray)]">{isAuction(confirm) ? "An auction can only be cancelled before any bids. It will move to Past listings." : "The item will leave the public marketplace and move to Past listings."}</p>{actionError && <p className="mt-4 text-sm text-red-700" role="alert">{actionError}</p>}<div className="mt-6 flex gap-3"><button className="button-secondary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}>Keep it</button><button className="button-primary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => void remove()}>{removingId && <LoaderCircle size={17} className="animate-spin" />}{isAuction(confirm) ? "Cancel auction" : "Remove listing"}</button></div></section></div>}
+    {confirm && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingId) setConfirm(null); }}><section role="dialog" aria-modal="true" aria-labelledby="remove-title" aria-describedby="remove-description" className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between gap-3"><h2 id="remove-title" className="text-xl font-bold">{isAuction(confirm) ? "Cancel this auction?" : "Remove this listing?"}</h2><button className="icon-button" aria-label="Close" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}><X size={20} /></button></div><p id="remove-description" className="mt-3 text-sm leading-6 text-[var(--takeme-gray)]">{isAuction(confirm) ? "An auction can only be cancelled before any bids. It will move to Past listings." : "The item will leave the public marketplace and move to Past listings."}</p>{actionError && <p className="mt-4 text-sm text-red-700" role="alert">{actionError}</p>}<div className="mt-6 flex gap-3"><button className="button-secondary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}>Keep it</button><button className="button-primary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => void remove()}>{removingId && <LoaderCircle size={17} className="animate-spin" />}{isAuction(confirm) ? "Cancel auction" : "Remove listing"}</button></div></section></div>}
   </div>;
 }
 

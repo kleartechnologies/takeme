@@ -18,6 +18,8 @@ import {
   type ReputationPolicy,
 } from "@/lib/services/transactions";
 import type { MarketplaceTransaction, ProtectedTimelineEvent, ProtectedTransactionDetail } from "@/types/marketplace";
+import { openTransactionConversation } from "@/lib/services/conversations";
+import { useRouter } from "next/navigation";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" });
 const statusTitle = { in_progress: "Exchange in progress", completed: "Completed", cancelled: "Cancelled", disputed: "Disputed — awaiting review" };
@@ -42,6 +44,7 @@ function eventLabel(event: ProtectedTimelineEvent) {
 }
 
 export function TransactionView({ id }: { id: string }) {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const now = useCurrentTime(30_000);
   const [transaction, setTransaction] = useState<MarketplaceTransaction | null>(null);
@@ -109,6 +112,7 @@ export function TransactionView({ id }: { id: string }) {
       <h2 className="mt-2 text-xl font-bold">{transaction.listingTitle}</h2><p className="mt-2 text-2xl font-bold">{money.format(transaction.amountSen / 100)}</p>
       <p className="mt-2 text-sm leading-6 text-[var(--takeme-gray)]">You are the {buyer ? "buyer" : "seller"}. {protectedMode ? "Payment and payout states are recorded separately from the marketplace transaction." : `Payment method: ${transaction.paymentMethod.replaceAll("_", " ")}. This agreed amount is not proof that TAKEME processed payment.`}</p>
       <Link href={`/listings/${transaction.listingId}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[var(--takeme-dark-green)]">View listing →</Link>
+      <button type="button" disabled={busy} className="button-secondary mt-3 min-h-11 w-full" onClick={() => void act(async () => { const conversationId = await openTransactionConversation(id); router.push(`/messages/${conversationId}`); }, "Conversation opened.")}>Open Conversation</button>
     </div>
 
     {protectedMode ? <ProtectedStatus detail={protectedDetail} /> : <StandardCompletion transaction={transaction} busy={busy} canConfirm={canConfirm} ownConfirmed={ownConfirmed} otherConfirmed={otherConfirmed} userId={user.uid} reason={reason} setReason={setReason} act={act} />}

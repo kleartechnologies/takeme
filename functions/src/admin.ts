@@ -335,7 +335,30 @@ export const getAdminRecord = onCall(async (request) => {
       auditTimeline: events.docs.map((item) => ({ eventType: item.data().eventType, actorType: item.data().actorType, actorId: item.data().actorId, providerReference: item.data().providerReference ?? null, metadata: item.data().metadata ?? {}, createdAt: iso(item.data().createdAt) })).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))),
       financialActionsEnabled: false } };
   }
-  if (selected === "reports") return { row, detail: { details: data.details ?? "", updatedAt: iso(data.updatedAt), moderationActionAvailable: false } };
+  if (selected === "reports") {
+    const conversation = data.conversationId ? await db.collection("conversations").doc(data.conversationId).get() : null;
+    const message = data.targetType === "message" && conversation?.exists ? await conversation.ref.collection("messages").doc(data.targetId).get() : null;
+    const contextMessages = conversation?.exists ? await conversation.ref.collection("messages").orderBy("createdAt", "desc").limit(20).get() : null;
+    return { row, detail: { details: data.details ?? "", updatedAt: iso(data.updatedAt), listingId: data.listingId ?? null, userId: data.userId ?? null, conversationId: data.conversationId ?? null,
+      conversation: conversation?.exists ? { listingId: conversation.data()?.listingId, buyerId: conversation.data()?.buyerId, sellerId: conversation.data()?.sellerId } : null,
+      reportedMessage: message?.exists ? { senderId: message.data()?.senderId, body: message.data()?.body, createdAt: iso(message.data()?.createdAt) } : null,
+      recentConversationMessages: contextMessages?.docs.map((item) => ({ id: item.id, senderId: item.data().senderId, body: item.data().body, createdAt: iso(item.data().createdAt) })) ?? [],
+      resolution: data.resolution ?? "", internalNotes: data.internalNotes ?? "", moderationActionAvailable: true } };
+  }
   if (selected === "promotions") return { row, detail: { packageId: data.packageId, priceSen: data.priceSen, currency: data.currency, startAt: iso(data.startAt), endAt: iso(data.endAt), refundReviewRequired: data.refundReviewRequired ?? false } };
   return { row, detail: { tags: data.tags ?? [], comment: data.comment ?? "", publishedAt: iso(data.publishedAt) } };
+});
+
+export const updateAdminReport = onCall(async (request) => {
+  const adminId = requireAdmin(request);
+  const reportId = requiredId(request.data?.reportId);
+  const status = request.data?.status;
+  if (!["submitted", "reviewing", "resolved", "dismissed"].includes(status)) throw new HttpsError("invalid-argument", "Invalid report status.");
+  const resolution = typeof request.data?.resolution === "string" ? request.data.resolution.trim() : "";
+  const internalNotes = typeof request.data?.internalNotes === "string" ? request.data.internalNotes.trim() : "";
+  if (resolution.length > 2000 || internalNotes.length > 4000) throw new HttpsError("invalid-argument", "Moderation notes are too long.");
+  if (status === "resolved" && !resolution) throw new HttpsError("invalid-argument", "A resolution is required.");
+  const ref = db.collection("reports").doc(reportId);
+  await db.runTransaction(async (tx) => { const report = await tx.get(ref); if (!report.exists) throw new HttpsError("not-found", "Report not found."); tx.update(ref, { status, resolution, internalNotes, moderatedBy: adminId, updatedAt: Timestamp.now() }); });
+  return { updated: true };
 });

@@ -1,3 +1,2 @@
-import { MessageCircle } from "lucide-react";
-import Link from "next/link";
-export default function MessagesPage() { return <main className="page-shell grid min-h-[60vh] place-items-center py-12"><div className="max-w-md text-center"><span className="mx-auto grid size-16 place-items-center rounded-full bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><MessageCircle size={28} /></span><h1 className="mt-5 text-3xl font-bold tracking-tight">Messaging is not available yet</h1><p className="mt-3 leading-7 text-[var(--takeme-gray)]">You can browse listings and place auction bids, but buyers and sellers cannot message through TAKEME yet.</p><Link href="/explore" className="button-primary mt-6 h-11 px-5">Explore listings</Link></div></main>; }
+import { MessagesInbox } from "@/components/messages/messages-inbox";
+export default function MessagesPage() { return <main className="page-shell py-6 md:py-10"><MessagesInbox /></main>; }

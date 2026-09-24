@@ -95,6 +95,13 @@ assert.ok(firstPage.nextCursor);
 const secondPage = await call(operator, "getAdminPage", { section: "reports", status: "submitted", cursor: firstPage.nextCursor });
 assert.ok(secondPage.rows.length >= 2);
 assert.equal(new Set([...firstPage.rows, ...secondPage.rows].map((row) => row.id)).size, firstPage.rows.length + secondPage.rows.length);
+const triageId = `phase9-page-${suffix}-0`;
+await assert.rejects(() => call(member, "updateAdminReport", { reportId: triageId, status: "resolved", resolution: "Reviewed", internalNotes: "Private" }), /permission|administrator/i);
+await assert.rejects(() => call(operator, "updateAdminReport", { reportId: triageId, status: "resolved", resolution: "", internalNotes: "Private" }), /resolution/i);
+assert.equal((await call(operator, "updateAdminReport", { reportId: triageId, status: "resolved", resolution: "Reviewed", internalNotes: "Private" })).updated, true);
+const triaged = await call(operator, "getAdminRecord", { section: "reports", id: triageId });
+assert.equal(triaged.detail.internalNotes, "Private");
+assert.equal((await db.doc(`reports/${triageId}`).get()).data().status, "resolved");
 
 await Promise.all([deleteApp(operator.app), deleteApp(member.app), deleteAdmin(adminApp)]);
 console.log("Admin emulator integration passed: claim gate, private reads, completed-only GMV, promotion separation, date filters, tier/rating distribution, detail and pagination.");

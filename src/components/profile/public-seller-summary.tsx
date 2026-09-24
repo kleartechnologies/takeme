@@ -5,21 +5,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { completedSalesLabel, sellerRatingLabel } from "@/lib/public-seller-presentation";
-import { getPublicSellerSummary } from "@/lib/services/public-sellers";
+import { clearPublicSellerSummaryCache, getPublicSellerSummary } from "@/lib/services/public-sellers";
 import type { PublicSellerSummary as SellerSummary } from "@/types/marketplace";
 
 export function PublicSellerSummary({ uid, variant }: { uid: string; variant: "card" | "detail" }) {
   const [state, setState] = useState<{ uid: string; seller: SellerSummary | null }>({ uid: "", seller: null });
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
     getPublicSellerSummary(uid).then((seller) => { if (active) setState({ uid, seller }); });
     return () => { active = false; };
-  }, [uid]);
+  }, [uid, retry]);
 
   if (state.uid !== uid) return variant === "card"
     ? <div aria-hidden="true" className="mt-2 min-h-10 animate-pulse rounded-lg bg-stone-100" />
     : <div aria-hidden="true" className="mt-5 min-h-28 animate-pulse rounded-2xl bg-stone-100" />;
-  if (!state.seller) return variant === "card" ? <div className="min-h-10" /> : <p className="mt-5 text-sm text-[var(--takeme-gray)]">Seller details are unavailable right now.</p>;
+  if (!state.seller) return variant === "card" ? <div className="min-h-10" /> : <div className="mt-5"><p className="text-sm text-[var(--takeme-gray)]">Seller trust is unavailable right now.</p><button type="button" className="button-secondary mt-2 min-h-11 px-4" onClick={() => { clearPublicSellerSummaryCache(); setState({ uid: "", seller: null }); setRetry((value) => value + 1); }}>Retry</button></div>;
   return variant === "card" ? <CardSeller seller={state.seller} /> : <DetailSeller seller={state.seller} />;
 }
 

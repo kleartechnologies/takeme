@@ -273,6 +273,9 @@ export const placeBid = onCall(async (request) => {
     transaction.create(bidRef, { bidderId: uid, amount, outbidUserId: typeof data.currentBidderId === "string" && data.currentBidderId !== uid ? data.currentBidderId : null, createdAt: now });
     transaction.update(listingRef, {
       currentBid: amount,
+      // `price` is the indexed discovery amount for mixed fixed-price/auction sorting.
+      // Starting bid remains immutable in `startingBid`; the displayed current bid is indexed here.
+      price: amount / 100,
       currentBidderId: uid,
       bidCount: bidCount + 1,
       auctionStatus: "active",
@@ -386,7 +389,7 @@ export {
   reportPublicReview,
 } from "./transactions";
 
-export { getAdminMetrics, getAdminPage, getAdminRecord } from "./admin";
+export { getAdminMetrics, getAdminPage, getAdminRecord, updateAdminReport } from "./admin";
 
 export {
   getUnreadCount, getNotifications, markNotificationRead, openNotification, markAllNotificationsRead,
@@ -395,10 +398,13 @@ export {
   onSavedWatchChanged, onListingEngagementChanged, onBidEngagementCreated,
   onOfferEngagementCreated, onOfferEngagementUpdated,
   onTransactionEngagementCreated, onTransactionEngagementUpdated,
+  onMessageEngagementCreated,
   processEngagementJobs, queueEndingAuctionAlerts,
 } from "./engagement";
 
 export { getPublicSellerSummaries } from "./public-sellers";
+export { submitMarketplaceReport } from "./reports";
+export { openListingConversation, openTransactionConversation, getConversation, getConversations, getConversationMessages, sendConversationMessage, markConversationSeen, onTransactionConversationCreated } from "./messaging";
 
 export {
   getProtectedPaymentPolicy,

@@ -31,6 +31,7 @@ import {
 } from "@/lib/listing-validation";
 import type { Listing, ListingInput } from "@/types/marketplace";
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
+import { isActiveInventoryListing } from "@/lib/active-inventory";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
 
@@ -132,13 +133,6 @@ export async function getActiveListings(filters: ListingQuery = {}, cursor?: Que
     constraints.push(orderBy("createdAt", "desc"));
   }
 
-  if (!searching && !filters.auctionStatus && !filters.maxPrice) {
-    if (cursor) constraints.push(startAfter(cursor));
-    const snapshot = await getDocs(query(collection(database, "listings"), ...constraints, limit(pageSize + 1)));
-    const visible = snapshot.docs.slice(0, pageSize);
-    return { listings: visible.map(fromDocument), cursor: visible.at(-1) ?? null, hasMore: snapshot.size > pageSize };
-  }
-
   // Firestore permits only one array-contains filter here. Narrow title matches
   // and auction status locally, advancing even when a batch has no matches.
   const matches: Listing[] = [];
@@ -152,6 +146,7 @@ export async function getActiveListings(filters: ListingQuery = {}, cursor?: Que
     for (const document of source) {
       lastRead = document;
       const listing = fromDocument(document);
+      if (!isActiveInventoryListing(listing)) continue;
       if (filters.categoryId && listing.categoryId !== filters.categoryId) continue;
       if (filters.condition && listing.condition !== filters.condition) continue;
       if (filters.listingType && listing.listingType !== filters.listingType) continue;
@@ -180,7 +175,8 @@ export async function getListingsBySeller(sellerId: string, includeRemoved = fal
   if (!includeRemoved) constraints.push(where("status", "==", "active"));
   constraints.push(orderBy("createdAt", "desc"), limit(50));
   const snapshot = await getDocs(query(collection(requireDatabase(), "listings"), ...constraints));
-  return snapshot.docs.map(fromDocument);
+  const listings = snapshot.docs.map(fromDocument);
+  return includeRemoved ? listings : listings.filter((listing) => isActiveInventoryListing(listing));
 }
 
 async function resizeImage(file: File) {
@@ -269,11 +265,13 @@ export async function createListing(input: ListingInput, files: File[]) {
   }
 }
 
-export async function updateListing(id: string, input: ListingInput, retainedImageUrls: string[], newFiles: File[]) {
+export async function updateListing(id: string, input: ListingInput, orderedPhotos: { url: string; existing: boolean; file?: File }[]) {
   const services = requireServices();
   const current = await getListing(id);
   if (!current) throw new Error("Listing not found.");
   if (current.sellerId !== services.user.uid) throw new Error("You are not allowed to edit this listing.");
+  const retainedImageUrls = orderedPhotos.filter((photo) => photo.existing).map((photo) => photo.url);
+  const newFiles = orderedPhotos.flatMap((photo) => photo.file ? [photo.file] : []);
   if (retainedImageUrls.some((url) => !current.imageUrls.includes(url))) throw new Error("Existing listing images are invalid.");
   const finalCount = retainedImageUrls.length + newFiles.length;
   const errors = validateListingInput(input);
@@ -287,7 +285,8 @@ export async function updateListing(id: string, input: ListingInput, retainedIma
 
   const uploaded = await uploadListingImages(services.user.uid, id, newFiles);
   try {
-    const imageUrls = [...retainedImageUrls, ...uploaded.map((item) => item.url)];
+    let newIndex = 0;
+    const imageUrls = orderedPhotos.map((photo) => photo.existing ? photo.url : uploaded[newIndex++]?.url ?? "");
     if (input.listingType === "auction") await saveAuction(id, input, imageUrls);
     else await updateDoc(doc(services.db, "listings", id), { ...prepareBuyNowListing(input), imageUrls, updatedAt: serverTimestamp() });
   } catch (error) {

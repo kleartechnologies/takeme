@@ -19,7 +19,10 @@ async function flush() {
     let values = new Map<string, PublicSellerSummary>();
     try {
       if (!firebaseFunctions) throw new Error("Seller summary service is not configured.");
-      const result = await httpsCallable<{ sellerIds: string[] }, { sellers: PublicSellerSummary[] }>(firebaseFunctions, "getPublicSellerSummaries")({ sellerIds });
+      const result = await Promise.race([
+        httpsCallable<{ sellerIds: string[] }, { sellers: PublicSellerSummary[] }>(firebaseFunctions, "getPublicSellerSummaries")({ sellerIds }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Seller trust request timed out.")), 8000)),
+      ]);
       values = new Map(result.data.sellers.map((seller) => [seller.uid, seller]));
     } catch {
       // Discovery remains usable when optional seller trust is unavailable.

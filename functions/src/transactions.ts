@@ -392,8 +392,11 @@ export const releaseExpiredReviews = onSchedule({ schedule: "every 60 minutes", 
 
 export const getPublicReviews = onCall(async (request) => {
   const userId = id(request.data?.userId, "User");
-  const page = await db.collection("publicReviews").where("reviewedUserId", "==", userId).orderBy("createdAt", "desc").limit(10).get();
-  return { reviews: page.docs.map((item) => ({ id: item.id, reviewerRole: item.data().reviewerRole, rating: item.data().rating,
+  const base = db.collection("publicReviews").where("reviewedUserId", "==", userId);
+  const own = request.auth?.uid === userId && request.data?.sellerOnly !== true;
+  const page = await base.orderBy("createdAt", "desc").limit(own ? 10 : 30).get();
+  const visible = (own ? page.docs : page.docs.filter((item) => item.data().reviewerRole === "buyer")).slice(0, 10);
+  return { reviews: visible.map((item) => ({ id: item.id, reviewerRole: item.data().reviewerRole, rating: item.data().rating,
     tags: item.data().tags, comment: item.data().comment, createdAt: iso(item.data().createdAt) })) };
 });
 

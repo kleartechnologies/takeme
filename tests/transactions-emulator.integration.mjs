@@ -108,7 +108,8 @@ await assert.rejects(() => call(seller, "submitTransactionReview", { transaction
 const sellerReview = await call(seller, "submitTransactionReview", { transactionId, rating: 4, tags: ["Easy to deal with"], comment: "Smooth deal" });
 assert.equal(sellerReview.visible, true);
 const sellerPublic = (await call(guest, "getPublicReviews", { userId: seller.uid })).reviews;
-const buyerPublic = (await call(guest, "getPublicReviews", { userId: buyer.uid })).reviews;
+const buyerPublic = (await call(buyer, "getPublicReviews", { userId: buyer.uid })).reviews;
+assert.equal((await call(guest, "getPublicReviews", { userId: buyer.uid })).reviews.length, 0);
 assert.equal(sellerPublic.length, 1);
 assert.equal(buyerPublic.length, 1);
 assert.equal(sellerPublic[0].rating, 5);

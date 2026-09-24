@@ -239,8 +239,8 @@ export interface ConversationMessage {
   createdAt: string;
 }
 
-export type ReportReason = "spam" | "misleading" | "prohibited_item" | "harassment" | "fraud_concern" | "other";
-export type ReportTargetType = "listing" | "user";
+export type ReportReason = "spam" | "misleading" | "prohibited_item" | "counterfeit" | "wrong_category" | "suspicious_behavior" | "harassment" | "fraud_concern" | "other";
+export type ReportTargetType = "listing" | "user" | "conversation" | "message";
 export type ReportStatus = "submitted" | "reviewing" | "resolved" | "dismissed";
 
 export interface MarketplaceReport {

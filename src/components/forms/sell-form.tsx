@@ -87,6 +87,9 @@ export function SellForm({ listing }: { listing?: Listing }) {
     if (!photo.existing) URL.revokeObjectURL(photo.url);
     setPhotos((current) => current.filter((item) => item.id !== photo.id));
   }
+  function movePhoto(index: number, target: number) {
+    setPhotos((current) => { const next = [...current]; const [photo] = next.splice(index, 1); next.splice(target, 0, photo); return next; });
+  }
 
   async function submit(values: SellValues) {
     if (photos.length === 0) { setPhotoError("Add at least one image."); return; }
@@ -117,7 +120,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     setBusy(true); setSubmitError(""); setProgress(listing ? "Saving changes…" : listingType === "auction" ? "Creating your secure auction…" : "Preparing your listing…");
     try {
       if (listing) {
-        await updateListing(listing.id, input, photos.filter((photo) => photo.existing).map((photo) => photo.url), photos.flatMap((photo) => photo.file ? [photo.file] : []));
+        await updateListing(listing.id, input, photos);
         router.push(`/listings/${listing.id}?updated=1`);
       } else {
         setProgress("Optimising and uploading images…");
@@ -136,7 +139,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
       <div className="grid gap-6">
         <Section number="01" title="Show what you’re selling" description={`JPEG, PNG or WebP · up to ${MAX_LISTING_IMAGES} images · 8 MB each.`}>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-            {photos.map((photo, index) => <div key={photo.id} className="relative aspect-square overflow-hidden rounded-2xl border border-stone-200"><Image src={photo.url} alt={`Listing image ${index + 1}`} fill sizes="160px" className="object-cover" unoptimized={!photo.existing} /><button type="button" onClick={() => removePhoto(photo)} className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-white text-stone-700 shadow" aria-label="Remove image"><X size={15} /></button></div>)}
+            {photos.map((photo, index) => <div key={photo.id} className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white"><div className="relative aspect-square"><Image src={photo.url} alt={`Listing image ${index + 1}`} fill sizes="160px" className="object-cover" unoptimized={!photo.existing} />{index === 0 && <span className="absolute left-1 top-1 rounded-full bg-[var(--takeme-dark-green)] px-2 py-1 text-[10px] font-bold text-white">Cover</span>}</div><div className="grid grid-cols-2 gap-1 p-1"><button type="button" disabled={index === 0} onClick={() => movePhoto(index, index - 1)} className="min-h-11 rounded-lg bg-stone-100 text-xs font-bold disabled:opacity-40" aria-label={`Move image ${index + 1} earlier`}>←</button><button type="button" disabled={index === photos.length - 1} onClick={() => movePhoto(index, index + 1)} className="min-h-11 rounded-lg bg-stone-100 text-xs font-bold disabled:opacity-40" aria-label={`Move image ${index + 1} later`}>→</button><button type="button" disabled={index === 0} onClick={() => movePhoto(index, 0)} className="col-span-2 min-h-11 rounded-lg bg-[var(--takeme-light-green)] px-1 text-[10px] font-bold text-[var(--takeme-dark-green)] disabled:opacity-40">Make cover</button><button type="button" onClick={() => removePhoto(photo)} className="col-span-2 min-h-11 rounded-lg bg-red-50 px-1 text-xs font-bold text-red-700" aria-label={`Remove image ${index + 1}`}><X size={14} /> Remove</button></div></div>)}
             {photos.length < MAX_LISTING_IMAGES && <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 text-center text-xs font-semibold text-[var(--takeme-gray)] hover:border-[var(--takeme-green)] hover:bg-[var(--takeme-light-green)]"><ImagePlus size={24} className="text-[var(--takeme-dark-green)]" />Add images<input type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { addPhotos(event.target.files); event.target.value = ""; }} /></label>}
           </div>{photoError && <p className="field-error mt-2" role="alert">{photoError}</p>}
         </Section>

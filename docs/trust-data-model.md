@@ -18,10 +18,11 @@ Firebase Auth owns private identity. `users/{uid}` holds public-only name, photo
 | `transactionEvents/{eventId}` | Admin SDK only; safe participant/admin callable projections | Deterministic immutable protected-settlement events |
 | `paymentProviderEvents/{providerEventId}` | Admin SDK only | Reserved future webhook deduplication ledger |
 | `transactions/{transactionId}/reviews/{reviewerUid}` | Author's direct get only; Functions write immutable record; admin get | Unpublished double-blind review; other party cannot read early |
-| `publicReviews/{opaqueId}` | Functions/admin only | Released, sanitized review. Public callable returns role, rating, tags, comment and date, not participant IDs or transaction amount |
-| `trustSummaries/{uid}` | Public direct get; Functions write | Source of truth for separate buyer/seller completion count, tier, ratings and distribution; no fabricated defaults stored |
+| `publicReviews/{opaqueId}` | Functions/admin only | Released, sanitized review. Public callable returns seller-side reviews only to visitors; owner may see both roles. No participant IDs or transaction amount |
+| `trustSummaries/{uid}` | Owner/admin direct get only; Functions write | Private source of truth for separate buyer/seller completion count, tier, ratings and distribution; no fabricated defaults stored |
+| `getPublicSellerSummaries` | Public callable with explicit allowlist | Seller-only name, photo, verification, tier, completed sales, rating and review count; never buyer fields |
 | `marketplaceEvents/{id}` | Admin read; Functions write | Deterministic `TRANSACTION_COMPLETED` and `REVIEW_SUBMITTED` events, private amount on completion event only |
-| `reports/{id}` | Reporter/admin read; controlled listing/user client create, review reports through Function | Immutable moderation intake; no delete-negative-review action |
+| `reports/{id}` | Functions/admin only; no client direct reads/writes | Deterministic intake for listing, seller, conversation, message and review reports; admin-only status, resolution and notes |
 | `promotions/{id}`, `promotionLocks/{listingId}` | Phase 7 server authority | Paid placement cannot grant a transaction, review, reputation or tier |
 
 Offer amounts and accepted transaction amounts are integer MYR sen. Buy Now snapshots the canonical listed price; offer acceptance snapshots the final counter/offer price. Auction `finalBid` is already integer sen and becomes one deterministic `auction-{listingId}` transaction after trusted finalization. A view, bid, offer, accepted request, or auction win is **not** completion.

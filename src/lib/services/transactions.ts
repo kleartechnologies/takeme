@@ -28,7 +28,7 @@ export const requestTransactionCancellation = (transactionId: string, reason: st
 export const declineTransactionCancellation = (transactionId: string) => invoke<{ status: string }>("declineTransactionCancellation", { transactionId });
 export const disputeTransaction = (transactionId: string, reason: string) => invoke<{ status: string }>("disputeTransaction", { transactionId, reason });
 export const submitTransactionReview = (transactionId: string, rating: number, tags: string[], comment: string) => invoke<{ submitted: boolean; visible: boolean }>("submitTransactionReview", { transactionId, rating, tags, comment });
-export const getPublicReviews = (userId: string) => invoke<{ reviews: PublicReview[] }>("getPublicReviews", { userId }, false).then((data) => data.reviews);
+export const getPublicReviews = (userId: string, sellerOnly = false) => invoke<{ reviews: PublicReview[] }>("getPublicReviews", { userId, sellerOnly }, false).then((data) => data.reviews);
 export const reportPublicReview = (reviewId: string, reason: string, details: string) => invoke<{ submitted: boolean }>("reportPublicReview", { reviewId, reason, details });
 export const getProtectedPaymentPolicy = () => invoke<{ enabled: false; provider: "stripe_connect"; implementationReady: false; message: string; legalNotice: string }>("getProtectedPaymentPolicy", {}, false);
 export const getSellerPaymentOnboarding = () => invoke<SellerPaymentOnboarding>("getSellerPaymentOnboarding");

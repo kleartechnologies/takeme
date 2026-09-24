@@ -24,7 +24,8 @@ test("Explore, For You, Saved and related listing surfaces reuse the trusted car
 test("listing detail uses the expanded seller trust panel and handles unavailable data", () => {
   assert.match(source("src/components/listings/listing-detail-view.tsx"), /<SellerTrustSignal uid=\{listing\.sellerId\}/);
   const summary = source("src/components/profile/public-seller-summary.tsx");
-  assert.match(summary, /Seller details are unavailable right now/);
+  assert.match(summary, /Seller trust is unavailable right now/);
+  assert.match(summary, /Retry/);
   assert.match(summary, /How seller tiers work/);
   assert.match(summary, /Buyer reputation is tracked separately/);
 });

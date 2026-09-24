@@ -6,7 +6,6 @@ service cloud.firestore {
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
     function parentListing(listingId) { return get(/databases/$(database)/documents/listings/$(listingId)).data; }
     function transactionData(transactionId) { return get(/databases/$(database)/documents/transactions/$(transactionId)).data; }
-    function conversationData(conversationId) { return get(/databases/$(database)/documents/conversations/$(conversationId)).data; }
     function transactionParticipant(data) { return signedIn() && request.auth.uid in [data.buyerId, data.sellerId]; }
     function conversationParticipant(data) { return signedIn() && request.auth.uid in [data.buyerId, data.sellerId]; }
 
@@ -171,7 +170,7 @@ service cloud.firestore {
     match /listingDeals/{listingId} { allow read, write: if false; }
     match /publicReviews/{reviewId} { allow read, write: if false; }
     match /trustSummaries/{uid} {
-      allow get: if true;
+      allow get: if owns(uid) || isAdmin();
       allow list: if false;
       allow create, update, delete: if false;
     }
@@ -228,60 +227,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /conversations/{conversationId} {
-      allow get: if conversationParticipant(resource.data) || isAdmin();
-      allow list: if (signedIn() && request.auth.uid in resource.data.participants || isAdmin()) && request.query.limit <= 20;
-      allow create: if signedIn()
-        && request.resource.data.keys().hasAll(['id', 'listingId', 'buyerId', 'sellerId', 'participants', 'latestMessage', 'unreadBy', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasOnly(['id', 'listingId', 'buyerId', 'sellerId', 'participants', 'latestMessage', 'unreadBy', 'createdAt', 'updatedAt'])
-        && request.resource.data.id == conversationId
-        && request.resource.data.buyerId == request.auth.uid
-        && request.resource.data.sellerId is string
-        && request.resource.data.sellerId != request.auth.uid
-        && request.resource.data.listingId is string
-        && conversationId == request.resource.data.listingId + '_' + request.auth.uid
-        && parentListing(request.resource.data.listingId).status == 'active'
-        && parentListing(request.resource.data.listingId).sellerId == request.resource.data.sellerId
-        && request.resource.data.participants == [request.auth.uid, request.resource.data.sellerId]
-        && request.resource.data.latestMessage == null
-        && request.resource.data.unreadBy is map
-        && request.resource.data.unreadBy.keys().hasAll([request.auth.uid, request.resource.data.sellerId])
-        && request.resource.data.unreadBy.keys().hasOnly([request.auth.uid, request.resource.data.sellerId])
-        && request.resource.data.unreadBy[request.auth.uid] == 0
-        && request.resource.data.unreadBy[request.resource.data.sellerId] == 0
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
-      allow update, delete: if false;
+      allow read, write: if false;
       match /messages/{messageId} {
-        allow get: if conversationParticipant(conversationData(conversationId)) || isAdmin();
-        allow list: if (conversationParticipant(conversationData(conversationId)) || isAdmin()) && request.query.limit <= 21;
-        allow create: if conversationParticipant(conversationData(conversationId))
-          && request.resource.data.keys().hasAll(['id', 'senderId', 'body', 'createdAt'])
-          && request.resource.data.keys().hasOnly(['id', 'senderId', 'body', 'createdAt'])
-          && request.resource.data.id == messageId
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.body is string
-          && request.resource.data.body.size() >= 1 && request.resource.data.body.size() <= 2000
-          && request.resource.data.createdAt == request.time;
-        allow update, delete: if false;
+        allow read, write: if false;
       }
     }
     match /reports/{reportId} {
-      allow get: if (signedIn() && resource.data.reporterId == request.auth.uid) || isAdmin();
-      allow list: if ((signedIn() && resource.data.reporterId == request.auth.uid) || isAdmin()) && request.query.limit <= 20;
-      allow create: if signedIn()
-        && request.resource.data.keys().hasAll(['id', 'reporterId', 'targetType', 'targetId', 'reason', 'details', 'status', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasOnly(['id', 'reporterId', 'targetType', 'targetId', 'reason', 'details', 'status', 'createdAt', 'updatedAt'])
-        && request.resource.data.id == reportId
-        && request.resource.data.reporterId == request.auth.uid
-        && request.resource.data.targetType in ['listing', 'user']
-        && request.resource.data.targetId is string && request.resource.data.targetId.size() > 0
-        && (request.resource.data.targetType == 'listing' && exists(/databases/$(database)/documents/listings/$(request.resource.data.targetId))
-          || request.resource.data.targetType == 'user' && exists(/databases/$(database)/documents/users/$(request.resource.data.targetId)))
-        && request.resource.data.reason in ['spam', 'misleading', 'prohibited_item', 'harassment', 'fraud_concern', 'other']
-        && request.resource.data.details is string && request.resource.data.details.size() <= 1000
-        && request.resource.data.status == 'submitted'
-        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
-      allow update, delete: if false;
+      allow read, write: if false;
     }
 
     match /auctions/{id} { allow read, write: if false; }
