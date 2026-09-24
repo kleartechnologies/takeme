@@ -4,6 +4,12 @@ TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. The local source
 
 Brand: **Same Stuff. A Brighter Tomorrow.** · **Buy. Sell. Give. Reuse.** · Poppins · `#00C853`, `#006233`, `#E8F5E9`, `#1F2937`, `#6B7280`, `#FAFAFA`.
 
+## Phase 13 — engagement and retention
+
+Saved listings remain the watchlist. Seller follows and explicitly saved searches can produce real, deduplicated in-app alerts; fixed-price history is server-owned in integer sen. `/updates` is a paginated notification center with a server-maintained unread summary, preferences, and deep links. Auction and transaction alerts observe authoritative events only. The private admin Engagement view reports aggregate counts without notification content. Push, email, daily digest, messaging alerts, and protected-payment alerts are not active. See [engagement and retention](docs/engagement-retention.md) for the architecture and release prerequisites, and [mobile engagement](docs/mobile-engagement.md) for the Flutter contract. No deployment, GitHub push, or live payment connection is performed in this phase.
+
+Local verification: `npm run test:functions`, `npm test`, `npm run lint`, `npm run build`, and `firebase emulators:exec --config .firebase-engagement-test.json --project demo-takeme --only auth,firestore,functions 'node tests/engagement-emulator.integration.mjs'`. The dedicated test config uses ports 18080/19099/15001 so an existing local emulator session can remain running.
+
 ## Architecture
 
 `listings/{listingId}` remains the canonical listing object. A buy-now listing retains its Phase 2 shape. An auction listing adds:

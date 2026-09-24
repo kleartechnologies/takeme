@@ -161,6 +161,25 @@ async function intelligenceMetrics(range: AdminRange): Promise<Metrics> {
   return result;
 }
 
+async function engagementMetrics(range: AdminRange): Promise<Metrics> {
+  const result = base("engagement", range);
+  const notifications = db.collectionGroup("notifications");
+  const searches = db.collection("savedSearches");
+  const [created, markedRead, opened, activeSearches, newSearches, follows, priceDrops, auctionAlerts, searchAlerts] = await Promise.all([
+    count(dated(notifications, "createdAt", range)),
+    count(dated(notifications.where("readAt", ">", Timestamp.fromMillis(0)), "readAt", range)),
+    count(dated(notifications.where("openedAt", ">", Timestamp.fromMillis(0)), "openedAt", range)),
+    count(searches.where("active", "==", true)), count(dated(searches, "createdAt", range)),
+    count(db.collectionGroup("members")),
+    count(dated(notifications.where("type", "==", "saved_price_drop"), "createdAt", range)),
+    Promise.all(["auction_ending", "outbid", "auction_won", "auction_lost"].map((type) => count(dated(notifications.where("type", "==", type), "createdAt", range)))),
+    count(dated(notifications.where("type", "==", "new_matching_listing"), "createdAt", range)),
+  ]);
+  result.cards = [card("Notifications created", created, "period"), card("Notifications opened", opened, "period", "count", "One server-recorded open per notification, not a verified destination view."), card("Notifications marked read", markedRead, "period", "count", "Read action is not proof of a deep-link open."), card("Active saved searches", activeSearches, "current"), card("New saved searches", newSearches, "period"), card("Current seller follows", follows, "current"), card("Price-drop alerts", priceDrops, "period"), card("Auction alerts", auctionAlerts.reduce((a, b) => a + b, 0), "period"), card("Saved-search alerts", searchAlerts, "period")];
+  result.unavailable.push("A notification open rate by creation cohort is not shown: period opens and creations are not the same cohort.", "Historical follows and unfollows are not reconstructed from current relationships.", "A search trigger rate needs a stable eligible-listing denominator and is not shown.");
+  return result;
+}
+
 async function reviewMetrics(range: AdminRange): Promise<Metrics> {
   const result = base("reviews", range);
   const reviews = db.collection("publicReviews");
@@ -224,6 +243,7 @@ export const getAdminMetrics = onCall(async (request) => {
   if (selected === "listings") return listingMetrics(range);
   if (selected === "transactions" || selected === "revenue") return transactionMetrics(range, selected === "revenue");
   if (selected === "intelligence") return intelligenceMetrics(range);
+  if (selected === "engagement") return engagementMetrics(range);
   if (selected === "promotions") return promotionMetrics(range);
   if (selected === "reviews") return reviewMetrics(range);
   if (selected === "reports") return reportMetrics(range);

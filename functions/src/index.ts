@@ -270,7 +270,7 @@ export const placeBid = onCall(async (request) => {
     const amountError = validateBidAmount(input.amount, minimum);
     if (amountError) throw new HttpsError("invalid-argument", amountError);
     const amount = Number(input.amount);
-    transaction.create(bidRef, { bidderId: uid, amount, createdAt: now });
+    transaction.create(bidRef, { bidderId: uid, amount, outbidUserId: typeof data.currentBidderId === "string" && data.currentBidderId !== uid ? data.currentBidderId : null, createdAt: now });
     transaction.update(listingRef, {
       currentBid: amount,
       currentBidderId: uid,
@@ -387,6 +387,16 @@ export {
 } from "./transactions";
 
 export { getAdminMetrics, getAdminPage, getAdminRecord } from "./admin";
+
+export {
+  getUnreadCount, getNotifications, markNotificationRead, openNotification, markAllNotificationsRead,
+  getNotificationPreferences, setNotificationPreference, getFollowState,
+  setSellerFollow, getFollowing, saveSearch, deleteSavedSearch, getSavedSearches,
+  onSavedWatchChanged, onListingEngagementChanged, onBidEngagementCreated,
+  onOfferEngagementCreated, onOfferEngagementUpdated,
+  onTransactionEngagementCreated, onTransactionEngagementUpdated,
+  processEngagementJobs, queueEndingAuctionAlerts,
+} from "./engagement";
 
 export { getPublicSellerSummaries } from "./public-sellers";
 

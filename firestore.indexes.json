@@ -1,5 +1,20 @@
 {
   "indexes": [
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "readAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "openedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "members", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "sellerId", "order": "ASCENDING" }
+    ]},
     { "collectionGroup": "listings", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "categoryId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
     ]},

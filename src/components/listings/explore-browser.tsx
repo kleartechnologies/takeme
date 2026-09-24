@@ -2,6 +2,7 @@
 
 import { Filter, LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CategoryGrid } from "@/components/home/category-grid";
 import { HeroBannerCarousel } from "@/components/home/hero-banner-carousel";
@@ -14,6 +15,8 @@ import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { getPromotionPlacements, type PromotionBadge } from "@/lib/services/promotions";
 import type { Listing } from "@/types/marketplace";
 import { ListingCard } from "./listing-card";
+import { useAuth } from "@/components/auth/auth-provider";
+import { saveSearch } from "@/lib/services/engagement";
 
 type Filters = { q: string; category: string; condition: string; type: string; auction: string; price: string; location: string; sort: ListingSort };
 const defaults: Filters = { q: "", category: "", condition: "", type: "", auction: "", price: "", location: "", sort: "newest" };
@@ -25,6 +28,7 @@ function fromParams(params: URLSearchParams): Filters {
 }
 
 export function ExploreBrowser() {
+  const { user } = useAuth();
   const params = useSearchParams();
   const [filters, setFilters] = useState<Filters>(() => fromParams(new URLSearchParams(params.toString())));
   const [queryInput, setQueryInput] = useState(filters.q);
@@ -33,6 +37,8 @@ export function ExploreBrowser() {
   const [state, setState] = useState<{ key: string; page: ListingPage; error: string }>({ key: "", page: emptyPage, error: "" });
   const [placement, setPlacement] = useState<{ key: string; orderIds: string[]; badges: Record<string, PromotionBadge> }>({ key: "", orderIds: [], badges: {} });
   const [loadingMore, setLoadingMore] = useState(false);
+  const [savingSearch, setSavingSearch] = useState(false);
+  const [savedSearchMessage, setSavedSearchMessage] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -99,6 +105,15 @@ export function ExploreBrowser() {
   const listingById = new Map(state.page.listings.map((item) => [item.id, item]));
   const displayedListings = activePlacement?.orderIds.length ? activePlacement.orderIds.map((id) => listingById.get(id)).filter((item): item is Listing => Boolean(item)) : state.page.listings;
   const activeCount = [filters.q, filters.category, filters.condition, filters.type, filters.auction, filters.price, filters.location].filter(Boolean).length;
+  async function saveCurrentSearch() {
+    setSavingSearch(true); setSavedSearchMessage("");
+    try {
+      const result = await saveSearch({ query: filters.q, category: filters.category, condition: filters.condition, type: filters.type || (filters.auction ? "auction" : ""), auction: filters.auction, price: filters.price ? Number(filters.price) : null, location: filters.location, sort: filters.sort }, params.get("savedSearch") ? undefined : "instant", params.get("savedSearch") ?? undefined);
+      if (params.get("savedSearch")) { const url = new URL(window.location.href); url.searchParams.set("savedSearch", result.searchId); window.history.replaceState(null, "", url.pathname + url.search); }
+      setSavedSearchMessage(params.get("savedSearch") ? "Saved search updated." : "Search saved. Manage alerts in Saved searches.");
+    } catch (error) { setSavedSearchMessage(error instanceof Error ? error.message : "Could not save this search."); }
+    finally { setSavingSearch(false); }
+  }
   const reset = () => { update(defaults); setQueryInput(""); setSearchError(""); };
   const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); if (value.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: value, context: "explore" }); update({ q: value }); };
   const openNearby = () => {
@@ -128,7 +143,8 @@ export function ExploreBrowser() {
 
   return <div>
     <form onSubmit={submitSearch} role="search" aria-label="Search marketplace listings" className="flex flex-wrap gap-2 sm:gap-3"><label className="input-shell h-12 min-w-[180px] flex-1 rounded-full bg-white shadow-sm"><Search size={20} /><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="What are you looking for?" /></label><button className="button-primary h-12 px-5" type="submit">Search</button><button type="button" onClick={() => setOpen(true)} className="button-secondary h-12 px-4 lg:hidden" aria-expanded={open} aria-controls="mobile-filters"><Filter size={18} /> Filters{activeCount > 0 ? ` (${activeCount})` : ""}</button><label className="select-label w-full sm:w-52"><span className="sr-only">Sort listings</span><select value={filters.sort} onChange={(event) => update({ sort: event.target.value as ListingSort })}><option value="newest" disabled={Boolean(filters.price)}>Newest first</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></label></form>
-    <p className="mt-2 text-xs leading-5 text-stone-500">Search matches title words or prefixes. Filters can be combined; a price cap sorts by price.</p>
+    <div className="mt-2 flex flex-wrap items-center gap-3"><p className="text-xs leading-5 text-stone-500">Search matches title words or prefixes. Filters can be combined; a price cap sorts by price.</p>{activeCount > 0 && (user ? <button type="button" disabled={savingSearch} onClick={() => void saveCurrentSearch()} className="min-h-11 text-sm font-semibold text-[var(--takeme-dark-green)] underline">{savingSearch ? "Saving…" : params.get("savedSearch") ? "Update saved search" : "Save search"}</button> : <Link href={`/login?next=${encodeURIComponent(`/explore?${params}`)}`} className="min-h-11 content-center text-sm font-semibold text-[var(--takeme-dark-green)] underline">Log in to save search</Link>)}<Link href="/saved-searches" className="min-h-11 content-center text-sm font-semibold text-[var(--takeme-dark-green)] underline">Saved searches</Link></div>
+    {savedSearchMessage && <p className="mt-1 text-xs text-[var(--takeme-dark-green)]" role="status">{savedSearchMessage}</p>}
     {searchError && <p className="field-error mt-2" role="alert">{searchError}</p>}
     {activeCount === 0 && <div className="mt-5"><HeroBannerCarousel /><CategoryGrid /></div>}
     <div className="banner-track mt-5 flex gap-2 overflow-x-auto border-b border-gray-200" role="tablist" aria-label="Marketplace discovery">

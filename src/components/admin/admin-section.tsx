@@ -13,6 +13,7 @@ const titles: Record<AdminSection, { title: string; description: string }> = {
   transactions: { title: "Transactions", description: "Standard agreements and read-only protected settlement states. Pending, failed, cancelled and disputed value is never GMV." },
   revenue: { title: "Completed marketplace value", description: "GMV is the sum of legitimate completed transaction amounts, not money collected by TAKEME." },
   intelligence: { title: "Marketplace intelligence", description: "Counts of accepted, deduplicated private events. Ranking remains separate." },
+  engagement: { title: "Engagement & retention", description: "Aggregated in-app notification and saved-search activity. Private notification content is not shown." },
   promotions: { title: "Promotions", description: "Unpaid requests and observed engagement; verified purchases and revenue are not yet available." },
   reviews: { title: "Reviews & reputation", description: "Published double-blind reviews and current role-specific tier distributions." },
   reports: { title: "Reports & disputes", description: "Read-only moderation intake and unresolved deal disputes." },

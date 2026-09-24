@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { UnreadCountProvider } from "@/lib/use-unread-count";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -33,5 +34,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full"><AuthProvider><Header />{children}<Footer /><Suspense fallback={null}><MobileNav /></Suspense></AuthProvider></body></html>;
+  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full"><AuthProvider><UnreadCountProvider><Header />{children}<Footer /><Suspense fallback={null}><MobileNav /></Suspense></UnreadCountProvider></AuthProvider></body></html>;
 }

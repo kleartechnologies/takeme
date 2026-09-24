@@ -117,6 +117,12 @@ service cloud.firestore {
         allow delete: if owns(uid);
         allow update: if false;
       }
+      match /notifications/{notificationId} {
+        allow read, write: if false;
+      }
+      match /following/{sellerId} {
+        allow read, write: if false;
+      }
     }
 
     match /listings/{listingId} {
@@ -286,5 +292,25 @@ service cloud.firestore {
     match /boosts/{id} { allow read, write: if false; }
     match /featuredListings/{id} { allow read: if true; allow write: if false; }
     match /notifications/{id} { allow read, write: if false; }
+    match /notificationSummaries/{uid} { allow read, write: if false; }
+    match /notificationPreferences/{uid} { allow read, write: if false; }
+    match /sellerFollowers/{sellerId} {
+      allow read, write: if false;
+      match /members/{uid} { allow read, write: if false; }
+    }
+    match /sellerFollowSummaries/{sellerId} { allow read, write: if false; }
+    match /savedSearches/{searchId} { allow read, write: if false; }
+    match /savedSearchQuotas/{uid} { allow read, write: if false; }
+    match /savedSearchFingerprints/{fingerprintId} { allow read, write: if false; }
+    match /listingWatchers/{listingId} {
+      allow read, write: if false;
+      match /users/{uid} { allow read, write: if false; }
+    }
+    match /listingPriceHistory/{listingId} {
+      allow read, write: if false;
+      match /changes/{changeId} { allow read, write: if false; }
+    }
+    match /engagementJobs/{jobId} { allow read, write: if false; }
+    match /engagementSchedulerCursors/{cursorId} { allow read, write: if false; }
   }
 }

@@ -1,7 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 
-export type AdminSection = "overview" | "users" | "listings" | "transactions" | "revenue" | "intelligence" | "promotions" | "reviews" | "reports" | "settings";
+export type AdminSection = "overview" | "users" | "listings" | "transactions" | "revenue" | "intelligence" | "engagement" | "promotions" | "reviews" | "reports" | "settings";
 export type AdminList = "users" | "listings" | "transactions" | "promotions" | "reviews" | "reports";
 export type AdminPreset = "today" | "7d" | "30d" | "90d" | "year" | "all" | "custom";
 export interface AdminMetrics {

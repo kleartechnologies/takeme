@@ -14,6 +14,7 @@ const links = [
   { href: "/admin/transactions", label: "Transactions", icon: ClipboardList },
   { href: "/admin/revenue", label: "GMV", icon: WalletCards },
   { href: "/admin/intelligence", label: "Intelligence", icon: Sparkles },
+  { href: "/admin/engagement", label: "Engagement", icon: BarChart3 },
   { href: "/admin/promotions", label: "Promotions", icon: Megaphone },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/reports", label: "Reports", icon: MessageSquareWarning },

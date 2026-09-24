@@ -1,4 +1,4 @@
-export const ADMIN_SECTIONS = ["overview", "users", "listings", "transactions", "revenue", "intelligence", "promotions", "reviews", "reports", "settings"] as const;
+export const ADMIN_SECTIONS = ["overview", "users", "listings", "transactions", "revenue", "intelligence", "engagement", "promotions", "reviews", "reports", "settings"] as const;
 export type AdminSection = typeof ADMIN_SECTIONS[number];
 export const ADMIN_PRESETS = ["today", "7d", "30d", "90d", "year", "all", "custom"] as const;
 export type AdminPreset = typeof ADMIN_PRESETS[number];

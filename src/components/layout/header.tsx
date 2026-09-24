@@ -7,6 +7,7 @@ import { type FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logout } from "@/lib/firebase/auth";
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
+import { useUnreadCount } from "@/lib/use-unread-count";
 import { Logo } from "./logo";
 
 const menuLinks = [
@@ -16,6 +17,8 @@ const menuLinks = [
   { href: "/explore?type=auction", label: "Auctions" },
   { href: "/sell", label: "Sell something" },
   { href: "/saved", label: "Saved listings" },
+  { href: "/saved-searches", label: "Saved searches" },
+  { href: "/following", label: "Following" },
   { href: "/updates", label: "Updates" },
 ];
 
@@ -38,6 +41,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const pathname = usePathname();
+  const unreadCount = useUnreadCount();
   if (pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
 
@@ -52,7 +56,7 @@ export function Header() {
         <Link href="/for-you" className="nav-link" aria-current={pathname === "/for-you" ? "page" : undefined}>For You</Link>
         <Link href="/saved" className="icon-button" aria-label="Saved listings" aria-current={pathname === "/saved" ? "page" : undefined}><Heart size={20} /></Link>
         <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
-        <Link href="/updates" className="icon-button" aria-label="Updates" aria-current={pathname === "/updates" ? "page" : undefined}><Bell size={19} /></Link>
+        <Link href="/updates" className="icon-button relative" aria-label={unreadCount ? `Updates, ${unreadCount} unread` : "Updates"} aria-current={pathname === "/updates" ? "page" : undefined}><Bell size={19} />{unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-700 px-1 text-[10px] leading-5 text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
         {user && <button type="button" onClick={() => void logout()} aria-label="Sign out" className="icon-button"><LogOut size={18} /></button>}
       </nav>
