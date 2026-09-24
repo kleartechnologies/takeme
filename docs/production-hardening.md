@@ -2,6 +2,8 @@
 
 This is a source/rules and `demo-takeme` emulator audit, not an assessment of deployed configuration or production data. No production deployment, migration, payment, or test record was made.
 
+Subsequent Phase 15A read-only production inspection and Phase 15B preparation are recorded in [the production deployment runbook](production-deployment-runbook.md). The later audit observed no root Firestore collections or Storage objects, zero deployed Functions, eight deployed versus 45 local indexes, older deployed Firestore/Storage rules, missing Netlify production variables and missing `takeme.my`/`www.takeme.my` Auth domains. These facts do **not** clear historical schema risk for unobserved/orphaned data or authorize deployment. Phase 15B remains preparation only; Gate 9 in the runbook requires separate explicit approval.
+
 ## Security model and collection map
 
 Firebase Authentication supplies the caller UID. The only admin authority is the `admin: true` custom claim; profile fields and callable payloads cannot grant it. Firestore rules govern direct SDK access, while Admin SDK Functions bypass rules and must check authorization themselves. Client UI checks are convenience only.
@@ -49,6 +51,8 @@ Present controls are per-user intelligence quotas, saved-search count limits, bo
 **Launch blockers:** deploy the coordinated fixed-price callable/rules/client change in the order below; validate existing public profile/listing documents against public schema and repair any legacy private fields under separately approved migration controls; establish App Check and rate-limit/abuse controls; complete privacy/PDPA, content-safety, monitoring, incident response, TTL and billing reviews; run real-device/cross-browser testing and production-safe authorization smoke checks. Existing auction derived-price reconciliation remains a separately approved production-data procedure. No production data was inspected here, so this audit cannot certify that historical public listings are free of private fields. The profile rule now fails closed for extra fields, but public listing queries still return whole documents. This historical-data exposure risk is **BLOCKING** until the live listing schema is verified or a separate public projection is introduced.
 
 ## Eventual deployment order (not executed)
+
+The detailed, current dependency order, per-Function inventory, approval gates and rollback procedures are maintained in [the production deployment runbook](production-deployment-runbook.md). The outline below is historical Phase 15 guidance; the runbook controls any later rollout proposal.
 
 1. Back up and inventory live schema, claims, indexes, Functions, web release and rollback options; obtain separate approval. Do not write migration data during this audit.
 2. Deploy new Firestore indexes/configuration and wait for readiness. Deploy compatible new callable Functions **before** rules that deny direct fixed-price writes, because the existing web client still uses those writes.
