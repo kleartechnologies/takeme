@@ -11,6 +11,7 @@ import {
   validateBidAmount,
   type AuctionSettings,
 } from "./auction-domain";
+import { ringgitToSen } from "./transaction-domain";
 
 initializeApp();
 setGlobalOptions({ region: "asia-southeast1", maxInstances: 20 });
@@ -18,9 +19,10 @@ setGlobalOptions({ region: "asia-southeast1", maxInstances: 20 });
 const db = getFirestore();
 const LISTINGS = "listings";
 const ALLOWED_CONDITIONS = new Set(["New", "Like new", "Good", "Fair"]);
+const ALLOWED_CATEGORIES = new Set(["electronics", "fashion", "home-living", "games", "toys-hobbies", "sports", "automotive", "books", "collectibles", "tools", "baby-kids", "tv-home-appliances", "health-nutrition", "others"]);
 
 function requireUser(request: CallableRequest<unknown>) {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before managing an auction.");
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before managing a listing.");
   return request.auth.uid;
 }
 
@@ -33,9 +35,15 @@ function requireString(value: unknown, field: string, minimum: number, maximum: 
   return trimmed;
 }
 
+function requireId(value: unknown, field: string) {
+  const id = requireString(value, field, 1, 128);
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new HttpsError("invalid-argument", `${field} is invalid.`);
+  return id;
+}
+
 function optionalCoordinate(value: unknown, field: string) {
   if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new HttpsError("invalid-argument", `${field} is invalid.`);
+  if (typeof value !== "number" || !Number.isFinite(value) || value < (field === "Latitude" ? -90 : -180) || value > (field === "Latitude" ? 90 : 180)) throw new HttpsError("invalid-argument", `${field} is invalid.`);
   return value;
 }
 
@@ -69,6 +77,7 @@ function parseListingPayload(value: unknown, now = new Date()) {
   const title = requireString(input.title, "Title", 6, 80);
   const description = requireString(input.description, "Description", 20, 1200);
   const categoryId = requireString(input.categoryId, "Category", 1, 60);
+  if (!ALLOWED_CATEGORIES.has(categoryId)) throw new HttpsError("invalid-argument", "Category is invalid.");
   const condition = requireString(input.condition, "Condition", 1, 20);
   if (!ALLOWED_CONDITIONS.has(condition)) throw new HttpsError("invalid-argument", "Condition is invalid.");
   const location = requireString(input.location, "Location", 2, 120);
@@ -92,6 +101,27 @@ function parseListingPayload(value: unknown, now = new Date()) {
   };
 }
 
+function parseFixedPayload(value: unknown, updating = false) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpsError("invalid-argument", "Listing details are required.");
+  const input = value as Record<string, unknown>;
+  const allowed = new Set(["title", "description", "categoryId", "condition", "price", "listingType", "location", "latitude", "longitude", ...(updating ? ["listingId", "imageUrls"] : [])]);
+  if (Object.keys(input).some((key) => !allowed.has(key)) || input.listingType !== "buy_now") throw new HttpsError("invalid-argument", "Invalid fixed-price listing fields.");
+  const title = requireString(input.title, "Title", 6, 80);
+  const description = requireString(input.description, "Description", 20, 1200);
+  const categoryId = requireString(input.categoryId, "Category", 1, 60);
+  if (!ALLOWED_CATEGORIES.has(categoryId)) throw new HttpsError("invalid-argument", "Category is invalid.");
+  const condition = requireString(input.condition, "Condition", 1, 20);
+  if (!ALLOWED_CONDITIONS.has(condition)) throw new HttpsError("invalid-argument", "Condition is invalid.");
+  const location = requireString(input.location, "Location", 2, 120);
+  const priceSen = ringgitToSen(input.price);
+  if (priceSen === null) throw new HttpsError("invalid-argument", "Price must be positive MYR with no more than two decimal places.");
+  const latitude = optionalCoordinate(input.latitude, "Latitude");
+  const longitude = optionalCoordinate(input.longitude, "Longitude");
+  return { title, description, categoryId, condition, location, price: priceSen / 100,
+    ...(latitude === undefined ? {} : { latitude }), ...(longitude === undefined ? {} : { longitude }),
+    locationKey: normalizeSearch(location), searchTokens: createSearchTokens(title), facetKeys: createFacetKeys(categoryId, condition, "buy_now", location), listingType: "buy_now" as const };
+}
+
 async function verifyListingImages(uid: string, listingId: string, value: unknown) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 8 || value.some((url) => typeof url !== "string" || url.length > 2048)) {
     throw new HttpsError("invalid-argument", "Provide between 1 and 8 valid listing images.");
@@ -110,9 +140,11 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
       throw new HttpsError("invalid-argument", "Listing images must be uploaded to Firebase Storage.");
     }
     const match = /^\/v0\/b\/([^/]+)\/o\/([^/]+)$/.exec(url.pathname);
-    const objectPath = match ? decodeURIComponent(match[2]!) : "";
+    let objectPath = "";
+    try { objectPath = match ? decodeURIComponent(match[2]!) : ""; }
+    catch { throw new HttpsError("invalid-argument", "A listing image URL is invalid."); }
     if (!match || !allowedBuckets.has(match[1]!) || !objectPath.startsWith(`users/${uid}/listings/${listingId}/`) || paths.has(objectPath)) {
-      throw new HttpsError("invalid-argument", "Listing images must belong to this auction.");
+      throw new HttpsError("invalid-argument", "Listing images must belong to this listing.");
     }
     const bucket = getStorage().bucket(match[1]!);
     const [metadata] = await bucket.file(objectPath).getMetadata().catch(() => {
@@ -129,6 +161,68 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
   }
   return value as string[];
 }
+
+export const createFixedListingDraft = onCall(async (request) => {
+  const uid = requireUser(request);
+  const content = parseFixedPayload(request.data);
+  const ref = db.collection(LISTINGS).doc();
+  const now = Timestamp.now();
+  await ref.create({ id: ref.id, sellerId: uid, ...content, imageUrls: [], status: "draft", createdAt: now, updatedAt: now });
+  return { listingId: ref.id };
+});
+
+async function requireFixedOwner(uid: string, listingId: string) {
+  const snapshot = await db.collection(LISTINGS).doc(listingId).get();
+  if (!snapshot.exists || snapshot.data()?.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
+  if (snapshot.data()?.listingType !== "buy_now") throw new HttpsError("failed-precondition", "This listing is not fixed-price.");
+}
+
+export const publishFixedListing = onCall(async (request) => {
+  const uid = requireUser(request);
+  const listingId = requireId(request.data?.listingId, "Listing ID");
+  await requireFixedOwner(uid, listingId);
+  const imageUrls = await verifyListingImages(uid, listingId, request.data?.imageUrls);
+  const ref = db.collection(LISTINGS).doc(listingId);
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const data = snapshot.data();
+    if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
+    if (data.listingType !== "buy_now" || data.status !== "draft") throw new HttpsError("failed-precondition", "This listing cannot be published.");
+    tx.update(ref, { imageUrls, status: "active", updatedAt: Timestamp.now() });
+  });
+  return { listingId };
+});
+
+export const updateFixedListing = onCall(async (request) => {
+  const uid = requireUser(request);
+  const listingId = requireId(request.data?.listingId, "Listing ID");
+  const content = parseFixedPayload(request.data, true);
+  await requireFixedOwner(uid, listingId);
+  const imageUrls = await verifyListingImages(uid, listingId, request.data?.imageUrls);
+  const ref = db.collection(LISTINGS).doc(listingId);
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const data = snapshot.data();
+    if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
+    if (data.listingType !== "buy_now" || !["draft", "active"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be edited.");
+    tx.update(ref, { ...content, imageUrls, updatedAt: Timestamp.now() });
+  });
+  return { listingId };
+});
+
+export const removeFixedListing = onCall(async (request) => {
+  const uid = requireUser(request);
+  const listingId = requireId(request.data?.listingId, "Listing ID");
+  const ref = db.collection(LISTINGS).doc(listingId);
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const data = snapshot.data();
+    if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
+    if (data.listingType !== "buy_now" || !["draft", "active"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be removed.");
+    tx.update(ref, { status: "removed", updatedAt: Timestamp.now() });
+  });
+  return { listingId, status: "removed" };
+});
 
 function listingContent(input: ReturnType<typeof parseListingPayload>) {
   return {
@@ -203,7 +297,7 @@ export const createAuctionListing = onCall(async (request) => {
 export const publishAuctionListing = onCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown; imageUrls?: unknown };
-  const listingId = requireString(input?.listingId, "Listing ID", 1, 128);
+  const listingId = requireId(input?.listingId, "Listing ID");
   const imageUrls = await verifyListingImages(uid, listingId, input?.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
   const result = await db.runTransaction(async (transaction) => {
@@ -225,7 +319,7 @@ export const publishAuctionListing = onCall(async (request) => {
 export const updateAuctionListing = onCall(async (request) => {
   const uid = requireUser(request);
   const payload = request.data as Record<string, unknown>;
-  const listingId = requireString(payload?.listingId, "Listing ID", 1, 128);
+  const listingId = requireId(payload?.listingId, "Listing ID");
   const input = parseListingPayload(payload, new Date());
   const imageUrls = await verifyListingImages(uid, listingId, payload.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
@@ -245,7 +339,7 @@ export const updateAuctionListing = onCall(async (request) => {
 export const placeBid = onCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown; amount?: unknown };
-  const listingId = requireString(input?.listingId, "Listing ID", 1, 128);
+  const listingId = requireId(input?.listingId, "Listing ID");
   const listingRef = db.collection(LISTINGS).doc(listingId);
   const bidRef = listingRef.collection("bids").doc();
 
@@ -289,7 +383,7 @@ export const placeBid = onCall(async (request) => {
 export const cancelAuction = onCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown };
-  const listingId = requireString(input?.listingId, "Listing ID", 1, 128);
+  const listingId = requireId(input?.listingId, "Listing ID");
   const listingRef = db.collection(LISTINGS).doc(listingId);
   const result = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(listingRef);

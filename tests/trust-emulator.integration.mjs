@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
-import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, setDoc, startAfter, updateDoc, where } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
 const projectId = "demo-takeme";
@@ -39,6 +39,15 @@ await assert.rejects(() => updateDoc(doc(buyer.db, "users", sellerId), { display
 await assert.rejects(() => updateDoc(doc(seller.db, "users", sellerId), { email: "secret@example.test" }), /permission/i);
 await updateDoc(doc(seller.db, "users", sellerId), { displayName: "Updated seller", updatedAt: serverTimestamp() });
 assert.equal((await getDoc(doc(guest.db, "users", sellerId))).data().email, undefined);
+await admin.doc(`users/${sellerId}`).update({ email: "legacy-private@example.test" });
+await assert.rejects(() => getDoc(doc(guest.db, "users", sellerId)), /permission/i, "Legacy profiles with private fields must not be readable in full.");
+assert.equal((await getDoc(doc(seller.db, "users", sellerId))).data().email, "legacy-private@example.test", "The owner can still access their legacy profile.");
+await assert.rejects(() => getDocs(collection(guest.db, "users")), /permission/i);
+assert.ok((await getDocs(query(collection(guest.db, "listings"), where("status", "==", "active"), limit(10)))).size >= 1);
+await admin.doc(`reviews/legacy-${suffix}`).set({ internalNotes: "private" });
+await admin.doc(`featuredListings/legacy-${suffix}`).set({ internalNotes: "private" });
+await assert.rejects(() => getDoc(doc(guest.db, "reviews", `legacy-${suffix}`)), /permission/i);
+await assert.rejects(() => getDoc(doc(guest.db, "featuredListings", `legacy-${suffix}`)), /permission/i);
 
 const saved = doc(buyer.db, "users", buyerId, "saved", listingId);
 await setDoc(saved, { listingId, savedAt: serverTimestamp() });
@@ -121,6 +130,9 @@ await assert.rejects(() => setDoc(doc(buyer.db, conversationPath, "messages", "f
 await assert.rejects(() => updateDoc(doc(buyer.db, conversationPath), { latestMessage: { body: "fake" } }), /permission/i);
 
 const report = doc(collection(buyer.db, "reports"));
+const privateDraftId = `private-draft-${suffix}`;
+await admin.doc(`listings/${privateDraftId}`).set({ id: privateDraftId, sellerId, status: "draft" });
+await assert.rejects(() => call(buyer, "submitMarketplaceReport", { targetType: "listing", targetId: privateDraftId, reason: "spam" }), /not found/i);
 await assert.rejects(() => setDoc(report, { id: report.id, reporterId: buyerId, targetType: "listing", targetId: extraId, reason: "misleading", details: "Incorrect condition", status: "submitted", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), /permission/i);
 const submitted = await call(buyer, "submitMarketplaceReport", { targetType: "listing", targetId: extraId, reason: "misleading", details: "Incorrect condition" });
 assert.equal((await call(buyer, "submitMarketplaceReport", { targetType: "listing", targetId: extraId, reason: "misleading", details: "Again" })).reportId, submitted.reportId);

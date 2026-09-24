@@ -23,7 +23,7 @@ export const submitMarketplaceReport = onCall(async (request) => {
   let listingId: string | null = null; let userId: string | null = null;
   if (targetType === "listing") {
     const listing = await db.collection("listings").doc(targetId).get();
-    if (!listing.exists) throw new HttpsError("not-found", "Listing not found.");
+    if (!listing.exists || !["active", "ended", "sold"].includes(String(listing.data()?.status))) throw new HttpsError("not-found", "Listing not found.");
     listingId = targetId; userId = listing.data()?.sellerId ?? null;
     if (userId === reporterId) throw new HttpsError("failed-precondition", "You cannot report your own listing.");
   } else if (targetType === "user") {

@@ -119,6 +119,7 @@ assert.equal((await admin.doc(`trustSummaries/${buyer.uid}`).get()).data().buyer
 assert.equal((await call(buyer, "getTransactionDetail", { transactionId })).reviewed, true);
 await assert.rejects(() => getDoc(doc(guest.db, "publicReviews", sellerPublic[0].id)), /permission/i);
 assert.equal((await call(buyer, "reportPublicReview", { reviewId: sellerPublic[0].id, reason: "false_information", details: "Concern" })).submitted, true);
+await assert.rejects(() => call(outsider, "reportPublicReview", { reviewId: buyerPublic[0].id, reason: "spam" }), /private|permission/i);
 assert.equal((await admin.doc(`reports/review-${sellerPublic[0].id}-${buyer.uid}`).get()).data().targetType, "review");
 
 const buyRequest = await call(buyer, "submitOffer", { listingId: cancelId, type: "buy_now", amountSen: 1, paymentMethod: "bank_transfer" });

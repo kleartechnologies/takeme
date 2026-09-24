@@ -33,6 +33,7 @@ const [operator, member] = await Promise.all([client("phase9-operator"), client(
 await assert.rejects(() => call(member, "getAdminMetrics", { section: "overview" }), /permission|administrator/i);
 await assert.rejects(() => call(member, "getAdminPage", { section: "users" }), /permission|administrator/i);
 await assert.rejects(() => call(member, "getAdminRecord", { section: "users", id: member.uid }), /permission|administrator/i);
+await assert.rejects(() => call(member, "getAdminMetrics", { section: "revenue", admin: true, uid: member.uid }), /permission|administrator/i);
 await assert.rejects(() => getDocs(query(collection(member.firestore, "marketplaceEvents"), limit(10))), /permission/i);
 await adminAuth.setCustomUserClaims(operator.uid, { admin: true });
 await getIdToken(operator.auth.currentUser, true);

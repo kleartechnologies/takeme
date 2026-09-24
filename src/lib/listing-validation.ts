@@ -1,4 +1,5 @@
 import type { ListingCondition, ListingInput } from "@/types/marketplace";
+import { categories } from "../data/categories.ts";
 
 export const MAX_LISTING_IMAGES = 8;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -46,10 +47,10 @@ export function validateListingInput(input: ListingInput) {
   const errors: string[] = [];
   if (input.title.trim().length < 6 || input.title.trim().length > 80) errors.push("Title must be between 6 and 80 characters.");
   if (input.description.trim().length < 20 || input.description.trim().length > 1200) errors.push("Description must be between 20 and 1,200 characters.");
-  if (!input.categoryId.trim()) errors.push("Category is required.");
+  if (!categories.some((category) => category.id === input.categoryId)) errors.push("Choose a valid category.");
   if (!LISTING_CONDITIONS.includes(input.condition)) errors.push("Condition is invalid.");
   if (input.listingType === "buy_now") {
-    if (!Number.isFinite(input.price) || input.price <= 0 || input.price > 10_000_000) errors.push("Price must be a positive amount.");
+    if (ringgitToSen(input.price) === null) errors.push("Price must be a positive MYR amount with no more than 2 decimal places.");
   } else {
     if (!Number.isSafeInteger(input.startingBid) || input.startingBid <= 0 || input.startingBid > MAX_MONEY_SEN) errors.push("Starting bid must be a positive amount with no more than 2 decimal places.");
     if (!Number.isSafeInteger(input.minimumBidIncrement) || input.minimumBidIncrement <= 0 || input.minimumBidIncrement > MAX_MONEY_SEN) errors.push("Minimum bid increment must be a positive amount with no more than 2 decimal places.");
@@ -67,6 +68,8 @@ export function validateListingInput(input: ListingInput) {
     }
   }
   if (input.location.trim().length < 2 || input.location.trim().length > 120) errors.push("Location must be between 2 and 120 characters.");
+  if (input.latitude !== undefined && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) errors.push("Latitude is invalid.");
+  if (input.longitude !== undefined && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) errors.push("Longitude is invalid.");
   return errors;
 }
 

@@ -3,9 +3,9 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { initializeApp, deleteApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
-import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, updateDoc, setDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
-import { connectStorageEmulator, getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
+import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 
 const projectId = "demo-takeme";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
@@ -40,10 +40,7 @@ async function uploadFixture(owner, listingId, filename) {
 const [owner, bidderOne, bidderTwo, guest] = await Promise.all([client("auction-owner"), client("auction-bidder-one"), client("auction-bidder-two"), client("auction-guest", false)]);
 const call = (target, name, data) => httpsCallable(target.functions, name)(data).then((result) => result.data);
 
-const buyNowRef = doc(collection(owner.firestore, "listings"));
-await setDoc(buyNowRef, {
-  id: buyNowRef.id,
-  sellerId: owner.auth.currentUser.uid,
+const fixedInput = {
   title: "Buy now camera kit",
   description: "A complete and working camera kit with two batteries included.",
   categoryId: "electronics",
@@ -51,16 +48,33 @@ await setDoc(buyNowRef, {
   price: 250,
   listingType: "buy_now",
   location: "Shah Alam, Selangor",
-  locationKey: "shah alam selangor",
-  imageUrls: [],
-  searchTokens: ["camera"],
-  facetKeys: ["*|*|*|*"],
-  status: "draft",
-  createdAt: serverTimestamp(),
-  updatedAt: serverTimestamp(),
-});
+};
+await assert.rejects(() => call(guest, "createFixedListingDraft", fixedInput), /sign in|unauthenticated/i);
+await assert.rejects(() => call(owner, "createFixedListingDraft", { ...fixedInput, sellerId: bidderOne.auth.currentUser.uid }), /invalid fixed-price listing fields/i);
+const fixedDraft = await call(owner, "createFixedListingDraft", fixedInput);
+const buyNowRef = doc(owner.firestore, "listings", fixedDraft.listingId);
+await assert.rejects(() => setDoc(doc(collection(owner.firestore, "listings")), { ...fixedInput, sellerId: owner.auth.currentUser.uid, status: "draft" }), /permission/i);
 const buyNowImage = await uploadFixture(owner, buyNowRef.id, "buy-now.png");
-await updateDoc(buyNowRef, { status: "active", imageUrls: [buyNowImage], updatedAt: serverTimestamp() });
+const foreignImage = ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/foreign.png`);
+await assert.rejects(() => uploadBytes(foreignImage, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), /unauthorized|permission/i);
+await assert.rejects(() => deleteObject(ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/buy-now.png`)), /unauthorized|permission/i);
+await assert.rejects(() => call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: ["https://example.com/fake.png"] }), /storage|image/i);
+await call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: [buyNowImage] });
+await assert.rejects(() => updateDoc(buyNowRef, { categoryId: "invented" }), /permission/i);
+await assert.rejects(() => updateDoc(buyNowRef, { price: 0.001 }), /permission/i);
+await assert.rejects(() => updateDoc(buyNowRef, { searchTokens: ["unrelated"] }), /permission/i);
+await assert.rejects(() => updateDoc(buyNowRef, { facetKeys: ["*|*|*|*"] }), /permission/i);
+await assert.rejects(() => updateDoc(buyNowRef, { imageUrls: ["https://example.com/fake.png"] }), /permission/i);
+await assert.rejects(() => call(owner, "updateFixedListing", { ...fixedInput, listingId: buyNowRef.id, categoryId: "invented", imageUrls: [buyNowImage] }), /category/i);
+await assert.rejects(() => call(owner, "updateFixedListing", { ...fixedInput, listingId: buyNowRef.id, price: 0.001, imageUrls: [buyNowImage] }), /price/i);
+await assert.rejects(() => call(bidderOne, "updateFixedListing", { ...fixedInput, listingId: buyNowRef.id, imageUrls: [buyNowImage] }), /yours|permission/i);
+await assert.rejects(() => call(bidderOne, "removeFixedListing", { listingId: buyNowRef.id }), /yours|permission/i);
+await assert.rejects(() => call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: [buyNowImage] }), /cannot be published/i);
+await call(owner, "updateFixedListing", { ...fixedInput, listingId: buyNowRef.id, title: "Updated camera kit", imageUrls: [buyNowImage] });
+const securedFixed = (await getDoc(buyNowRef)).data();
+assert.equal(securedFixed.title, "Updated camera kit");
+assert.ok(securedFixed.searchTokens.includes("updated"));
+assert.ok(securedFixed.facetKeys.includes("electronics|*|*|*"));
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", buyNowRef.id), { title: "Cross seller edit" }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { sellerId: bidderOne.auth.currentUser.uid }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { listingType: "auction" }), /permission/i);
@@ -73,6 +87,7 @@ const base = {
   startingBid: 10_000,
   minimumBidIncrement: 1_000,
 };
+await assert.rejects(() => call(owner, "createAuctionListing", { ...base, categoryId: "invented", auctionStartAt: new Date(Date.now() + 60_000).toISOString(), auctionEndAt: new Date(Date.now() + 11 * 60_000).toISOString() }), /category/i);
 
 const start = new Date(Date.now() + 60_000);
 const created = await call(owner, "createAuctionListing", { ...base, auctionStartAt: start.toISOString(), auctionEndAt: new Date(start.getTime() + 10 * 60_000).toISOString() });

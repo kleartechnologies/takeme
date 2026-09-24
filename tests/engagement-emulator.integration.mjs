@@ -8,6 +8,7 @@ import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/
 const projectId = "demo-takeme-engagement";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:18080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:19099";
+process.env.GCLOUD_PROJECT = projectId;
 const requireFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
 const { getFirestore: getAdminFirestore, Timestamp } = requireFunctions("firebase-admin/firestore");
 const { getAuth: getAdminAuth } = requireFunctions("firebase-admin/auth");

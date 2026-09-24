@@ -408,6 +408,7 @@ export const reportPublicReview = onCall(async (request) => {
   const detail = typeof request.data?.details === "string" ? request.data.details.trim().slice(0, 1000) : "";
   const review = await db.collection("publicReviews").doc(reviewId).get();
   if (!review.exists) throw new HttpsError("not-found", "Review not found.");
+  if (review.data()?.reviewerRole !== "buyer" && review.data()?.reviewedUserId !== reporterId) throw new HttpsError("permission-denied", "This review is private.");
   const ref = db.collection("reports").doc(`review-${reviewId}-${reporterId}`);
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(ref);

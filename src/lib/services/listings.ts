@@ -1,7 +1,6 @@
 import {
   Timestamp,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -10,10 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
   startAfter,
-  updateDoc,
   where,
   type DocumentData,
   type QueryConstraint,
@@ -24,14 +20,13 @@ import { auth, db, storage } from "@/lib/firebase/client";
 import {
   MAX_LISTING_IMAGES,
   createFacetKey,
-  createFacetKeys,
-  createSearchTokens,
   normalizeSearch,
   validateImageFiles,
   validateListingInput,
 } from "@/lib/listing-validation";
 import type { Listing, ListingInput } from "@/types/marketplace";
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
+import { createFixedDraft, publishFixed, removeFixed, updateFixed } from "@/lib/services/fixed-listings";
 import { isActiveInventoryListing } from "@/lib/active-inventory";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
@@ -216,28 +211,10 @@ async function uploadListingImages(uid: string, listingId: string, files: File[]
   return uploaded;
 }
 
-function prepareBuyNowListing(input: Extract<ListingInput, { listingType: "buy_now" }>) {
-  return {
-    title: input.title.trim(),
-    description: input.description.trim(),
-    categoryId: input.categoryId,
-    condition: input.condition,
-    price: input.price,
-    listingType: "buy_now" as const,
-    location: input.location.trim(),
-    ...(typeof input.latitude === "number" ? { latitude: input.latitude } : {}),
-    ...(typeof input.longitude === "number" ? { longitude: input.longitude } : {}),
-    locationKey: normalizeSearch(input.location),
-    searchTokens: createSearchTokens(input.title),
-    facetKeys: createFacetKeys({ categoryId: input.categoryId, condition: input.condition, listingType: "buy_now", location: input.location }),
-  };
-}
-
 export async function createListing(input: ListingInput, files: File[]) {
   const services = requireServices();
   const errors = [...validateListingInput(input), ...validateImageFiles(files)];
   if (errors.length) throw new Error(errors[0]);
-  const listingRef = input.listingType === "auction" ? null : doc(collection(services.db, "listings"));
   const uploaded: { url: string; fullPath: string }[] = [];
   let listingId = "";
 
@@ -245,13 +222,12 @@ export async function createListing(input: ListingInput, files: File[]) {
     if (input.listingType === "auction") {
       listingId = await createAuctionDraft(input);
     } else {
-      listingId = listingRef!.id;
-      await setDoc(listingRef!, { id: listingId, sellerId: services.user.uid, ...prepareBuyNowListing(input), imageUrls: [], status: "draft", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      listingId = await createFixedDraft(input);
     }
     uploaded.push(...await uploadListingImages(services.user.uid, listingId, files));
     const imageUrls = uploaded.map((item) => item.url);
     if (input.listingType === "auction") await publishAuction(listingId, imageUrls);
-    else await updateDoc(listingRef!, { imageUrls, status: "active", updatedAt: serverTimestamp() });
+    else await publishFixed(listingId, imageUrls);
     return listingId;
   } catch (error) {
     await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
@@ -259,8 +235,7 @@ export async function createListing(input: ListingInput, files: File[]) {
       if (input.listingType === "auction") {
         await cancelAuctionListing(listingId).catch(() => undefined);
       } else {
-        const failedRef = doc(services.db, "listings", listingId);
-        try { await deleteDoc(failedRef); } catch { await updateDoc(failedRef, { status: "removed", updatedAt: serverTimestamp() }).catch(() => undefined); }
+        await removeFixed(listingId).catch(() => undefined);
       }
     }
     throw error;
@@ -290,7 +265,7 @@ export async function updateListing(id: string, input: ListingInput, orderedPhot
     let newIndex = 0;
     const imageUrls = orderedPhotos.map((photo) => photo.existing ? photo.url : uploaded[newIndex++]?.url ?? "");
     if (input.listingType === "auction") await saveAuction(id, input, imageUrls);
-    else await updateDoc(doc(services.db, "listings", id), { ...prepareBuyNowListing(input), imageUrls, updatedAt: serverTimestamp() });
+    else await updateFixed(id, input, imageUrls);
   } catch (error) {
     await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
     throw error;
@@ -309,5 +284,5 @@ export async function deleteListing(id: string) {
   if (!current) throw new Error("Listing not found.");
   if (current.sellerId !== services.user.uid) throw new Error("You are not allowed to remove this listing.");
   if (current.listingType === "auction" || current.listingType === "buy_now_and_auction") await cancelAuctionListing(id);
-  else await updateDoc(doc(services.db, "listings", id), { status: "removed", updatedAt: serverTimestamp() });
+  else await removeFixed(id);
 }
