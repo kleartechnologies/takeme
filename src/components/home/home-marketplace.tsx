@@ -11,12 +11,11 @@ import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type ListingPage, type ListingQuery } from "@/lib/services/listings";
 import { getHomeRecommendations, type CandidateSource } from "@/lib/services/intelligence";
 
-type Tab = "top" | "nearby" | "auctions" | "free";
+type Tab = "top" | "nearby" | "auctions";
 const tabs: { id: Tab; label: string }[] = [
   { id: "top", label: "Top Picks" },
   { id: "nearby", label: "Nearby" },
   { id: "auctions", label: "Auctions" },
-  { id: "free", label: "Free" },
 ];
 const emptyPage: ListingPage = { listings: [], cursor: null, hasMore: false };
 
@@ -39,7 +38,7 @@ export function HomeMarketplace() {
 
   useEffect(() => {
     currentKey.current = key;
-    if (!isFirebaseConfigured || tab === "free" || (tab === "nearby" && !location)) return;
+    if (!isFirebaseConfigured || (tab === "nearby" && !location)) return;
     let active = true;
     const cached = cache.current.get(key);
     if (cached && (!cached.sessionId || Date.now() - (cacheFetchedAt.current.get(key) ?? 0) < 90 * 60_000)) {
@@ -89,7 +88,7 @@ export function HomeMarketplace() {
     finally { setLoadingMore(false); }
   }
 
-  const title = tab === "top" ? state.key === key && state.personalized ? "Recommended for You" : "Top Picks" : tab === "nearby" ? "Nearby" : tab === "auctions" ? "Auctions" : "Free Items";
+  const title = tab === "top" ? state.key === key && state.personalized ? "Recommended for You" : "Top Picks" : tab === "nearby" ? "Nearby" : "Auctions";
   const viewAll = tab === "auctions" ? "/explore?type=auction" : tab === "nearby" ? `/explore?location=${encodeURIComponent(location)}` : "/explore";
   const loading = state.key !== key || state.loading;
   return <section id="discovery" className="scroll-mt-24 border-t border-gray-200 pt-2">
@@ -97,10 +96,9 @@ export function HomeMarketplace() {
       {tabs.map((item) => <button key={item.id} type="button" role="tab" id={`discovery-tab-${item.id}`} aria-controls="discovery-panel" aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onKeyDown={keyboardTab} onClick={() => selectTab(item.id)} className={`relative min-h-12 shrink-0 whitespace-nowrap px-0.5 text-sm font-semibold transition-colors ${tab === item.id ? "text-[var(--takeme-dark-green)] after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[var(--takeme-green)]" : "text-[var(--takeme-gray)] hover:text-[var(--takeme-dark-green)]"}`}>{item.label}</button>)}
     </div>
     <div id="discovery-panel" role="tabpanel" aria-labelledby={`discovery-tab-${tab}`} tabIndex={0} className="pt-5">
-      <div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">{tab === "top" ? state.key === key && state.personalized ? "Based on your recent marketplace interests." : "Freshly listed items from TAKEME sellers." : tab === "auctions" ? "Live and upcoming auctions." : tab === "nearby" ? "Find listings by the seller’s stated location, not your device location." : "Free items are not supported yet."}</p></div>{tab !== "free" && (tab !== "nearby" || location) && <Link href={viewAll} className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">View all <ArrowRight size={15} /></Link>}</div>
+      <div className="mb-4 flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">{tab === "top" ? state.key === key && state.personalized ? "Based on your recent marketplace interests." : "Freshly listed items from TAKEME sellers." : tab === "auctions" ? "Live and upcoming auctions." : "Find listings by the seller’s stated location, not your device location."}</p></div>{(tab !== "nearby" || location) && <Link href={viewAll} className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">View all <ArrowRight size={15} /></Link>}</div>
       {tab === "nearby" && <form onSubmit={submitLocation} className="mb-5 flex max-w-md gap-2"><label className="input-shell min-w-0 flex-1"><MapPin size={17} className="shrink-0" /><span className="sr-only">Seller location</span><input value={locationInput} onChange={(event) => setLocationInput(event.target.value)} placeholder="e.g. Kuala Lumpur" /></label><button type="submit" className="button-secondary h-12 shrink-0 px-4">Find</button></form>}
-      {tab === "free" ? <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm leading-6 text-[var(--takeme-gray)]">TAKEME listings currently require a positive price. Free items will appear here when the marketplace supports them. <Link href="/explore" className="font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">Browse listings</Link></div>
-        : tab === "nearby" && !location ? <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm leading-6 text-[var(--takeme-gray)]">Enter a seller location above to see matching listings. This is a text location filter, not distance or GPS search.</div>
+      {tab === "nearby" && !location ? <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm leading-6 text-[var(--takeme-gray)]">Enter a seller location above to see matching listings. This is a text location filter, not distance or GPS search.</div>
         : !isFirebaseConfigured ? <FirebaseSetupState />
         : state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => { cache.current.delete(key); setRetry((value) => value + 1); }} className="button-secondary mt-4 h-11 px-5">Retry</button></div>
         : loading ? <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <ListingSkeleton key={index} />)}</div>
