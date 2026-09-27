@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./client";
+import { newPublicProfileFields, validateSignupDisplayName } from "./profile-name";
 
 function requireFirebase() {
   if (!auth || !db) {
@@ -26,10 +27,7 @@ async function createProfile(user: User, displayName?: string) {
   await setDoc(
     profileRef,
     {
-      uid: user.uid,
-      displayName: displayName || user.displayName || "TAKEME member",
-      photoURL: user.photoURL ?? null,
-      location: "",
+      ...newPublicProfileFields(user, displayName),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
@@ -37,10 +35,11 @@ async function createProfile(user: User, displayName?: string) {
 }
 
 export async function registerWithEmail(email: string, password: string, displayName: string) {
+  const name = validateSignupDisplayName(displayName);
   const services = requireFirebase();
   const credential = await createUserWithEmailAndPassword(services.auth, email, password);
-  await updateProfile(credential.user, { displayName });
-  await createProfile(credential.user, displayName);
+  await updateProfile(credential.user, { displayName: name });
+  await createProfile(credential.user, name);
   return credential.user;
 }
 

@@ -7,6 +7,7 @@ import { FormEvent, useState } from "react";
 import { Logo } from "@/components/layout/logo";
 import { loginWithEmail, registerWithEmail, resetPassword } from "@/lib/firebase/auth";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
+import { PROFILE_NAME_ERROR, validateSignupDisplayName } from "@/lib/firebase/profile-name";
 
 type Mode = "login" | "register" | "forgot";
 
@@ -26,7 +27,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
     event.preventDefault(); setMessage(""); setError("");
     if (!email.includes("@")) return setError("Enter a valid email address.");
     if (mode !== "forgot" && password.length < 8) return setError("Password must be at least 8 characters.");
-    if (mode === "register" && displayName.trim().length < 2) return setError("Enter your name.");
+    if (mode === "register") {
+      try { validateSignupDisplayName(displayName); }
+      catch { return setError(PROFILE_NAME_ERROR); }
+    }
     setBusy(true);
     try {
       if (mode === "register") { await registerWithEmail(email, password, displayName.trim()); router.push(nextPath); }
