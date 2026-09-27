@@ -8,9 +8,9 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./client";
-import { newPublicProfileFields, validateSignupDisplayName } from "./profile-name";
+import { createProfileIfMissing } from "./profile-bootstrap";
+import { validateSignupDisplayName } from "./profile-name";
 
 function requireFirebase() {
   if (!auth || !db) {
@@ -21,17 +21,7 @@ function requireFirebase() {
 
 async function createProfile(user: User, displayName?: string) {
   const services = requireFirebase();
-  const profileRef = doc(services.db, "users", user.uid);
-  const existing = await getDoc(profileRef);
-  if (existing.exists()) return;
-  await setDoc(
-    profileRef,
-    {
-      ...newPublicProfileFields(user, displayName),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    },
-  );
+  await createProfileIfMissing(services.db, user, displayName);
 }
 
 export async function registerWithEmail(email: string, password: string, displayName: string) {

@@ -17,6 +17,7 @@ import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { getCategoryName } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
+import { listingCanonicalUrl } from "@/lib/listing-metadata";
 import { getListingsBySeller, subscribeToListing } from "@/lib/services/listings";
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { useCurrentTime } from "@/lib/use-current-time";
@@ -44,7 +45,7 @@ export function ListingDetailView({ id, created = false }: { id: string; created
 
   async function share() {
     if (!state.listing) return;
-    const url = window.location.origin + `/listings/${state.listing.id}`;
+    const url = listingCanonicalUrl(state.listing.id, process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin);
     try {
       if (navigator.share) await navigator.share({ title: state.listing.title, url });
       else { await navigator.clipboard.writeText(url); setShareMessage("Link copied"); }
