@@ -40,7 +40,7 @@ const cancelId = `phase8-cancel-${suffix}`;
 const disputeId = `phase8-dispute-${suffix}`;
 const auctionId = `phase8-auction-${suffix}`;
 const now = Timestamp.now();
-const base = { title: "Working vintage camera", description: "A complete working camera with accessories and case.", categoryId: "electronics", condition: "Good", price: 1500, location: "Kuala Lumpur",
+const base = { title: "Working vintage camera", description: "A complete working camera with accessories and case.", categoryId: "electronics", condition: "Good", price: 1500, privacyVersion: 2, publicLocation: { districtOrCity: "Kuala Lumpur", state: "W.P. Kuala Lumpur", country: "Malaysia" }, location: "Kuala Lumpur, W.P. Kuala Lumpur",
   listingType: "buy_now", imageUrls: ["/brand/takeme-app-icon.png"], status: "active", createdAt: now, updatedAt: now, searchTokens: ["camera"], facetKeys: ["*|*|*|*"], sellerId: seller.uid };
 for (const id of [listingId, cancelId, disputeId]) await admin.doc(`listings/${id}`).set({ ...base, id });
 await admin.doc(`listings/${auctionId}`).set({ ...base, id: auctionId, listingType: "auction", auctionStatus: "active", status: "active", startingBid: 10000,

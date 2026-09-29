@@ -23,10 +23,12 @@ export function publicSellerSummary(userId: string, profile: RecordLike, trust: 
   const averageRating = reviewCount > 0 && typeof seller?.averageRating === "number" && Number.isFinite(seller.averageRating) && seller.averageRating >= 1 && seller.averageRating <= 5
     ? seller.averageRating
     : null;
+  const memberSince = profile.createdAt && typeof profile.createdAt === "object" && "toDate" in profile.createdAt && typeof profile.createdAt.toDate === "function" ? profile.createdAt.toDate().toISOString() : null;
   return {
     uid: userId,
     displayName: profile.displayName.trim().slice(0, 80),
     photoURL: typeof profile.photoURL === "string" && profile.photoURL.length <= 2048 ? profile.photoURL : null,
+    ...(memberSince ? { memberSince } : {}),
     sellerRating: averageRating,
     sellerReviewCount: reviewCount,
     sellerCompletedTransactionCount: nonNegativeInteger(seller?.completedCount),

@@ -27,6 +27,7 @@ const draftId = `metadata-draft-${suffix}`;
 try {
   await database.doc(`listings/${activeId}`).set({
     status: "active", title: "Public camera", description: "A working camera",
+    location: "Jitra, Kedah", publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" }, privacyVersion: 2,
     listingType: "buy_now", price: 250, imageUrls: ["https://firebasestorage.googleapis.com/public-image"],
     sellerId: "private-seller-id", buyerId: "private-buyer-id", internalNotes: "private notes",
   });

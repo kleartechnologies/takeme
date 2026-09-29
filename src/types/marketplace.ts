@@ -1,3 +1,5 @@
+import type { PublicLocation } from "@/lib/general-location";
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -22,8 +24,9 @@ export interface Listing {
   price: number;
   listingType: ListingType;
   location: string;
-  latitude?: number;
-  longitude?: number;
+  publicLocation?: PublicLocation;
+  meetupLocationId?: string | null;
+  meetupLocation?: { name: string; area: string; state: string; country: "Malaysia" } | null;
   imageUrls: string[];
   status: ListingStatus;
   createdAt: string;
@@ -49,9 +52,8 @@ export interface BaseListingInput {
   description: string;
   categoryId: string;
   condition: ListingCondition;
-  location: string;
-  latitude?: number;
-  longitude?: number;
+  publicLocation: PublicLocation;
+  meetupLocationId?: string | null;
 }
 
 export interface BuyNowListingInput extends BaseListingInput {
@@ -213,6 +215,7 @@ export interface PublicSellerSummary {
   uid: string;
   displayName: string;
   photoURL: string | null;
+  memberSince?: string | null;
   sellerRating: number | null;
   sellerReviewCount: number;
   sellerCompletedTransactionCount: number;

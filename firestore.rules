@@ -11,7 +11,37 @@ service cloud.firestore {
     function publicProfileSafe(data, uid) {
       return data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'location', 'createdAt', 'updatedAt'])
         && data.keys().hasAll(['uid', 'displayName', 'photoURL', 'location'])
+        && validProfileLocation(data.location)
         && data.uid == uid;
+    }
+    function validProfileLocation(value) {
+      return value is string && (value == '' || (
+        value.matches("^[A-Za-z .'-]{2,60}, (Johor|Kedah|Kelantan|Melaka|Negeri Sembilan|Pahang|Perak|Perlis|Pulau Pinang|Sabah|Sarawak|Selangor|Terengganu|W[.]P[.] Kuala Lumpur|W[.]P[.] Labuan|W[.]P[.] Putrajaya)$")
+        && !value.matches('.*(Jalan|jalan|Taman|taman|Lorong|lorong|Unit|unit|Apartment|apartment).*')
+      ));
+    }
+    function validGeneralLocation(value) {
+      return value is map
+        && value.keys().hasAll(['districtOrCity', 'state', 'country'])
+        && value.keys().hasOnly(['districtOrCity', 'state', 'country'])
+        && value.districtOrCity is string && value.districtOrCity.size() >= 2 && value.districtOrCity.size() <= 60
+        && value.state is string && value.state.size() >= 3 && value.state.size() <= 30
+        && value.country == 'Malaysia';
+    }
+    function publicListingSafe(data) {
+      return data.privacyVersion == 2
+        && validGeneralLocation(data.publicLocation)
+        && data.location == data.publicLocation.districtOrCity + ', ' + data.publicLocation.state
+        && !data.keys().hasAny(['latitude', 'longitude', 'coordinates', 'gps', 'geohash', 'address', 'addressLine1', 'addressLine2', 'fullAddress', 'street', 'streetAddress', 'unitNumber', 'houseNumber', 'postcode', 'postalCode', 'privateAddress', 'exactAddress', 'preciseLocation']);
+    }
+    function validMeetup(data, uid) {
+      return data.keys().hasAll(['ownerId', 'name', 'area', 'state', 'country', 'isDefault', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'name', 'area', 'state', 'country', 'isDefault', 'createdAt', 'updatedAt'])
+        && data.ownerId == uid && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && data.area is string && data.area.size() >= 2 && data.area.size() <= 60
+        && data.state is string && data.state.size() >= 3 && data.state.size() <= 30
+        && data.country == 'Malaysia' && data.isDefault is bool
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
     }
     function validPublicProfile(data, uid) {
       return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'location', 'createdAt', 'updatedAt'])
@@ -20,8 +50,7 @@ service cloud.firestore {
         && data.displayName is string
         && data.displayName.size() >= 2 && data.displayName.size() <= 80
         && (data.photoURL == null || data.photoURL is string)
-        && data.location is string
-        && data.location.size() <= 120
+        && validProfileLocation(data.location)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -52,6 +81,15 @@ service cloud.firestore {
         allow delete: if owns(uid);
         allow update: if false;
       }
+      match /meetupLocations/{meetupLocationId} {
+        allow get: if owns(uid);
+        allow list: if owns(uid) && request.query.limit <= 20;
+        allow create: if owns(uid) && validMeetup(request.resource.data, uid);
+        allow update: if owns(uid) && validMeetup(request.resource.data, uid)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if owns(uid);
+      }
       match /notifications/{notificationId} {
         allow read, write: if false;
       }
@@ -60,19 +98,36 @@ service cloud.firestore {
       }
     }
 
+    match /privateUserAddresses/{uid} {
+      allow get: if owns(uid) || isAdmin();
+      allow list: if false;
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasAll(['uid', 'addressLine1', 'addressLine2', 'postcode', 'city', 'state', 'country', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'addressLine1', 'addressLine2', 'postcode', 'city', 'state', 'country', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.addressLine1 is string && request.resource.data.addressLine1.size() <= 160
+        && request.resource.data.addressLine2 is string && request.resource.data.addressLine2.size() <= 160
+        && request.resource.data.postcode is string && request.resource.data.postcode.size() <= 12
+        && request.resource.data.city is string && request.resource.data.city.size() <= 80
+        && request.resource.data.state is string && request.resource.data.state.size() <= 40
+        && request.resource.data.country == 'Malaysia'
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if owns(uid);
+    }
+
     match /listings/{listingId} {
-      allow get: if resource.data.status in ['active', 'ended', 'sold']
-        || (signedIn() && resource.data.sellerId == request.auth.uid)
+      allow get: if (resource.data.listingType == 'buy_now'
+          && resource.data.status in ['active', 'ended', 'sold'] && publicListingSafe(resource.data))
+        || (signedIn() && resource.data.sellerId == request.auth.uid
+          && (resource.data.listingType == 'buy_now'
+            || (resource.data.bidCount == 0 && (resource.data.status == 'draft' || resource.data.auctionStatus == 'scheduled'))))
         || isAdmin();
-      allow list: if resource.data.status in ['active', 'ended']
-        || (signedIn() && resource.data.sellerId == request.auth.uid)
-        || isAdmin();
+      // Owner history and public browsing use server-owned field projections.
+      allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
 
       match /bids/{bidId} {
-        allow read: if parentListing(listingId).status in ['active', 'ended']
-          || (signedIn() && parentListing(listingId).sellerId == request.auth.uid)
-          || isAdmin();
+        allow read: if isAdmin();
         allow create, update, delete: if false;
       }
     }

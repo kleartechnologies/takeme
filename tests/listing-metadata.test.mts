@@ -5,7 +5,8 @@ import { buildListingMetadata, listingCanonicalUrl } from "../src/lib/listing-me
 
 const siteUrl = "https://takeme.my";
 const listing = {
-  status: "active", title: "iPhone 15 Pro 256GB", description: "  Great condition.   Includes box.  ",
+  status: "active", title: "iPhone 15 Pro 256GB", description: "No 40 Jalan Halban 06000 Jitra Kedah",
+  publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" as const },
   price: 2500, listingType: "buy_now", imageUrls: ["https://firebasestorage.googleapis.com/example-image"],
   sellerEmail: "private@example.test", buyerId: "private-buyer", internalNotes: "private notes",
 };
@@ -13,7 +14,7 @@ const listing = {
 test("public listing metadata uses title, price, description, image and canonical URL", () => {
   const metadata = buildListingMetadata("listing-123", listing, siteUrl);
   assert.deepEqual(metadata.title, { absolute: "iPhone 15 Pro 256GB — RM2,500 | TAKEME" });
-  assert.equal(metadata.description, "RM2,500 · Great condition. Includes box.");
+  assert.equal(metadata.description, "RM2,500 · Jitra, Kedah · View this listing on TAKEME.");
   assert.equal(metadata.alternates?.canonical, "https://takeme.my/listings/listing-123");
   assert.equal(metadata.openGraph?.url, "https://takeme.my/listings/listing-123");
   assert.deepEqual(metadata.openGraph?.images, [{ url: listing.imageUrls[0], alt: listing.title }]);
@@ -21,6 +22,7 @@ test("public listing metadata uses title, price, description, image and canonica
   assert.equal(listingCanonicalUrl("a b", siteUrl), "https://takeme.my/listings/a%20b");
   const serialized = JSON.stringify(metadata);
   for (const secret of [listing.sellerEmail, listing.buyerId, listing.internalNotes]) assert.ok(!serialized.includes(secret));
+  assert.ok(!serialized.includes(listing.description));
 });
 
 test("auction metadata uses the real current bid and image fallback", () => {

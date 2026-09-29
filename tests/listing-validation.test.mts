@@ -9,7 +9,7 @@ const validInput = {
   condition: "Good" as const,
   price: 1280,
   listingType: "buy_now" as const,
-  location: "Bangsar, Kuala Lumpur",
+  publicLocation: { districtOrCity: "Bangsar", state: "W.P. Kuala Lumpur", country: "Malaysia" as const },
 };
 
 test("normalizes and tokenizes searchable titles", () => {
@@ -29,6 +29,11 @@ test("builds every facet wildcard combination", () => {
 
 test("accepts valid buy-now listing data", () => {
   assert.deepEqual(validateListingInput(validInput), []);
+});
+
+test("rejects missing or street-level public location", () => {
+  assert.ok(validateListingInput({ ...validInput, publicLocation: undefined } as never).some((error) => error.includes("general location")));
+  assert.ok(validateListingInput({ ...validInput, publicLocation: { districtOrCity: "No 40 Jalan Halban 06000 Jitra", state: "Kedah", country: "Malaysia" } }).some((error) => error.includes("general location")));
 });
 
 test("rejects invalid buy-now price", () => {

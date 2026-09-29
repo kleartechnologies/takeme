@@ -1,33 +1,23 @@
 import {
   Timestamp,
-  collection,
   doc,
   getDoc,
-  getDocs,
-  getDocsFromServer,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  startAfter,
-  where,
   type DocumentData,
-  type QueryConstraint,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase/client";
+import { auth, db, functions, storage } from "@/lib/firebase/client";
 import {
   MAX_LISTING_IMAGES,
-  createFacetKey,
-  normalizeSearch,
   validateImageFiles,
   validateListingInput,
 } from "@/lib/listing-validation";
 import type { Listing, ListingInput } from "@/types/marketplace";
+import { formatPublicLocation, parsePublicLocation } from "@/lib/general-location";
+import { prepareListingImage, uploadListingImagesWith } from "@/lib/listing-image-upload";
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
 import { createFixedDraft, publishFixed, removeFixed, updateFixed } from "@/lib/services/fixed-listings";
-import { isActiveInventoryListing } from "@/lib/active-inventory";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
 
@@ -41,13 +31,18 @@ export interface ListingQuery {
   maxPrice?: number;
   sort?: ListingSort;
   pageSize?: number;
+  sellerId?: string;
 }
 
 export interface ListingPage {
-  listings: Listing[];
-  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  listings: PublicListing[];
+  cursor: string | null;
   hasMore: boolean;
 }
+
+export type PublicListing = Omit<Listing, "currentBidderId" | "winnerId">;
+export interface PublicAuctionBid { amount: number; createdAt: string; isOwnBid: boolean }
+export interface PublicListingDetail { listing: PublicListing; bids: PublicAuctionBid[] }
 
 function requireServices() {
   if (!auth?.currentUser || !db || !storage) throw new Error("Sign in and configure Firebase before managing listings.");
@@ -81,9 +76,10 @@ export function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { i
     condition: data.condition,
     price: Number(data.price),
     listingType: data.listingType,
-    location: data.location,
-    latitude: data.latitude,
-    longitude: data.longitude,
+    location: parsePublicLocation(data.publicLocation) ? formatPublicLocation(parsePublicLocation(data.publicLocation)!) : "",
+    publicLocation: parsePublicLocation(data.publicLocation) ?? undefined,
+    meetupLocationId: typeof data.meetupLocationId === "string" ? data.meetupLocationId : null,
+    meetupLocation: data.meetupLocation ?? null,
     imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
     status: data.status,
     createdAt: toIso(data.createdAt),
@@ -105,110 +101,77 @@ export function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { i
   };
 }
 
-export async function getActiveListings(filters: ListingQuery = {}, cursor?: QueryDocumentSnapshot<DocumentData> | null): Promise<ListingPage> {
-  const database = requireDatabase();
-  const pageSize = Math.min(Math.max(filters.pageSize ?? 12, 1), 24);
-  const constraints: QueryConstraint[] = [where("status", "==", "active")];
-  const search = normalizeSearch(filters.search ?? "");
-
-  const searching = search.length >= 2;
-  if (searching) {
-    constraints.push(where("searchTokens", "array-contains", search.slice(0, 40)));
-  } else {
-    constraints.push(where("facetKeys", "array-contains", createFacetKey({ categoryId: filters.categoryId, condition: filters.condition, listingType: filters.listingType, location: filters.location })));
-  }
-
-  if (filters.maxPrice && filters.maxPrice > 0) {
-    constraints.push(where("price", "<=", filters.maxPrice));
-    constraints.push(orderBy("price", filters.sort === "price_high" ? "desc" : "asc"));
-  } else if (filters.sort === "price_low") {
-    constraints.push(orderBy("price", "asc"));
-  } else if (filters.sort === "price_high") {
-    constraints.push(orderBy("price", "desc"));
-  } else {
-    constraints.push(orderBy("createdAt", "desc"));
-  }
-
-  // Firestore permits only one array-contains filter here. Narrow title matches
-  // and auction status locally, advancing even when a batch has no matches.
-  const matches: Listing[] = [];
-  let lastRead = cursor ?? null;
-  let hasMore = false;
-  for (let batch = 0; batch < 4 && matches.length < pageSize; batch += 1) {
-    const pageConstraints = [...constraints, ...(lastRead ? [startAfter(lastRead)] : []), limit(pageSize + 1)];
-    // Discovery must not mistake an offline, empty cache for an empty marketplace.
-    const snapshot = await getDocsFromServer(query(collection(database, "listings"), ...pageConstraints));
-    const source = snapshot.docs.slice(0, pageSize);
-    hasMore = snapshot.size > pageSize;
-    for (const document of source) {
-      lastRead = document;
-      const listing = fromDocument(document);
-      if (!isActiveInventoryListing(listing)) continue;
-      if (filters.categoryId && listing.categoryId !== filters.categoryId) continue;
-      if (filters.condition && listing.condition !== filters.condition) continue;
-      if (filters.listingType && listing.listingType !== filters.listingType) continue;
-      if (filters.auctionStatus && listing.auctionStatus !== filters.auctionStatus) continue;
-      if (filters.location && !normalizeSearch(listing.location).includes(normalizeSearch(filters.location))) continue;
-      if (filters.maxPrice && listing.listingType !== "buy_now" && ((listing.bidCount ?? 0) > 0 ? (listing.currentBid ?? 0) / 100 : (listing.startingBid ?? 0) / 100) > filters.maxPrice) continue;
-      matches.push(listing);
-      if (matches.length === pageSize) break;
-    }
-    if (!hasMore) break;
-  }
-  return { listings: matches, cursor: lastRead, hasMore };
+export async function getActiveListings(filters: ListingQuery = {}, cursor?: string | null): Promise<ListingPage> {
+  if (!functions) throw new Error("Firebase Functions is not configured. Add the required environment variables first.");
+  // Public callers never query original listing documents as a collection.
+  // The callable validates each source document and returns public fields only.
+  const definedFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined && value !== null));
+  const result = await httpsCallable<{ filters: ListingQuery; cursor: string | null }, ListingPage>(functions, "getPublicListingPage")({ filters: definedFilters, cursor: cursor ?? null });
+  return result.data;
 }
 
 export async function getListing(id: string) {
-  const snapshot = await getDoc(doc(requireDatabase(), "listings", id));
-  return snapshot.exists() ? fromDocument(snapshot) : null;
+  if (auth?.currentUser) {
+    try {
+      const snapshot = await getDoc(doc(requireDatabase(), "listings", id));
+      if (snapshot.exists()) return fromDocument(snapshot);
+    } catch (error) {
+      if (!(typeof error === "object" && error && "code" in error && String(error.code).includes("permission-denied"))) throw error;
+    }
+  }
+  try { return (await getPublicListingDetail(id)).listing as Listing; }
+  catch (error) {
+    if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found")) return null;
+    throw error;
+  }
 }
 
-export function subscribeToListing(id: string, onChange: (listing: Listing | null) => void, onError: (error: Error) => void) {
-  return onSnapshot(doc(requireDatabase(), "listings", id), (snapshot) => onChange(snapshot.exists() ? fromDocument(snapshot) : null), (error) => onError(new Error(error.message)));
+export async function getPublicListingDetail(id: string): Promise<PublicListingDetail> {
+  if (!functions) throw new Error("Firebase Functions is not configured.");
+  const result = await httpsCallable<{ listingId: string }, PublicListingDetail>(functions, "getPublicListingDetail")({ listingId: id });
+  return result.data;
+}
+
+export function subscribeToListing(id: string, onChange: (listing: Listing | null, bids: PublicAuctionBid[]) => void, onError: (error: Error) => void) {
+  let active = true;
+  let pending = false;
+  async function refresh() {
+    if (!active || pending) return;
+    pending = true;
+    try {
+      const result = await getPublicListingDetail(id);
+      if (active) onChange(result.listing as Listing, result.bids);
+    } catch (error) {
+      if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found") && auth?.currentUser) {
+        try { const listing = await getListing(id); if (active) onChange(listing, []); }
+        catch (nextError) { if (active) onError(nextError as Error); }
+      } else if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found")) {
+        if (active) onChange(null, []);
+      } else if (active) onError(error as Error);
+    } finally { pending = false; }
+  }
+  void refresh();
+  const timer = setInterval(() => void refresh(), 10_000);
+  return () => { active = false; clearInterval(timer); };
 }
 
 export async function getListingsBySeller(sellerId: string, includeRemoved = false) {
-  const constraints: QueryConstraint[] = [where("sellerId", "==", sellerId)];
-  if (!includeRemoved) constraints.push(where("status", "==", "active"));
-  constraints.push(orderBy("createdAt", "desc"), limit(50));
-  const snapshot = await getDocs(query(collection(requireDatabase(), "listings"), ...constraints));
-  const listings = snapshot.docs.map(fromDocument);
-  return includeRemoved ? listings : listings.filter((listing) => isActiveInventoryListing(listing));
-}
-
-async function resizeImage(file: File) {
-  if (typeof createImageBitmap !== "function") return { blob: file as Blob, contentType: file.type, extension: file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg" };
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const context = canvas.getContext("2d");
-  if (!context) return { blob: file as Blob, contentType: file.type, extension: "jpg" };
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
-  return blob ? { blob, contentType: "image/webp", extension: "webp" } : { blob: file as Blob, contentType: file.type, extension: "jpg" };
+  if (!includeRemoved) return (await getActiveListings({ sellerId, pageSize: 50 })).listings;
+  if (!auth?.currentUser || auth.currentUser.uid !== sellerId || !functions) throw new Error("Sign in to view your listing history.");
+  const result = await httpsCallable<Record<string, never>, { listings: PublicListing[] }>(functions, "getMyListingHistory")({});
+  return result.data.listings;
 }
 
 async function uploadListingImages(uid: string, listingId: string, files: File[]) {
   const services = requireServices();
-  const uploaded: { url: string; fullPath: string }[] = [];
-  try {
-    for (const file of files) {
-      const processed = await resizeImage(file);
-      const filename = `${crypto.randomUUID()}.${processed.extension}`;
-      const objectRef = ref(services.storage, `users/${uid}/listings/${listingId}/${filename}`);
-      await uploadBytes(objectRef, processed.blob, { contentType: processed.contentType, cacheControl: "public,max-age=31536000,immutable" });
-      const entry = { url: "", fullPath: objectRef.fullPath };
-      uploaded.push(entry);
-      entry.url = await getDownloadURL(objectRef);
-    }
-  } catch (error) {
-    await Promise.allSettled(uploaded.map((item) => deleteObject(ref(services.storage, item.fullPath))));
-    throw error;
-  }
-  return uploaded;
+  return uploadListingImagesWith(uid, listingId, files, {
+    prepare: prepareListingImage,
+    reference: (path) => ref(services.storage, path),
+    upload: (objectRef, blob, contentType) => uploadBytes(objectRef, blob, { contentType, cacheControl: "public,max-age=31536000,immutable" }),
+    downloadUrl: getDownloadURL,
+    remove: deleteObject,
+    uniqueId: () => crypto.randomUUID(),
+  });
 }
 
 export async function createListing(input: ListingInput, files: File[]) {

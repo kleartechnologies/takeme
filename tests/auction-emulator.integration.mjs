@@ -12,6 +12,7 @@ process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT = projectId;
 const functionsRequire = createRequire(new URL("../functions/package.json", import.meta.url));
 const { getFirestore: getAdminFirestore, Timestamp } = functionsRequire("firebase-admin/firestore");
+const { getAuth: getAdminAuth } = functionsRequire("firebase-admin/auth");
 const { _test } = functionsRequire("./lib/index.js");
 const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.com`, projectId, storageBucket: `${projectId}.firebasestorage.app`, appId: "1:123456789:web:demo" };
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -37,7 +38,9 @@ async function uploadFixture(owner, listingId, filename) {
   return getDownloadURL(object);
 }
 
-const [owner, bidderOne, bidderTwo, guest] = await Promise.all([client("auction-owner"), client("auction-bidder-one"), client("auction-bidder-two"), client("auction-guest", false)]);
+const [owner, bidderOne, bidderTwo, observer, adminUser, guest] = await Promise.all([client("auction-owner"), client("auction-bidder-one"), client("auction-bidder-two"), client("auction-observer"), client("auction-admin"), client("auction-guest", false)]);
+await getAdminAuth().setCustomUserClaims(adminUser.auth.currentUser.uid, { admin: true });
+await adminUser.auth.currentUser.getIdToken(true);
 const call = (target, name, data) => httpsCallable(target.functions, name)(data).then((result) => result.data);
 
 const fixedInput = {
@@ -47,19 +50,25 @@ const fixedInput = {
   condition: "Good",
   price: 250,
   listingType: "buy_now",
-  location: "Shah Alam, Selangor",
+  publicLocation: { districtOrCity: "Shah Alam", state: "Selangor", country: "Malaysia" },
 };
 await assert.rejects(() => call(guest, "createFixedListingDraft", fixedInput), /sign in|unauthenticated/i);
 await assert.rejects(() => call(owner, "createFixedListingDraft", { ...fixedInput, sellerId: bidderOne.auth.currentUser.uid }), /invalid fixed-price listing fields/i);
 const fixedDraft = await call(owner, "createFixedListingDraft", fixedInput);
+await assert.rejects(() => call(guest, "removeFixedListing", { listingId: fixedDraft.listingId }), /sign in|unauthenticated/i);
 const buyNowRef = doc(owner.firestore, "listings", fixedDraft.listingId);
 await assert.rejects(() => setDoc(doc(collection(owner.firestore, "listings")), { ...fixedInput, sellerId: owner.auth.currentUser.uid, status: "draft" }), /permission/i);
 const buyNowImage = await uploadFixture(owner, buyNowRef.id, "buy-now.png");
+const buyNowMedia = ref(owner.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/buy-now.png`);
+await assert.rejects(() => getDownloadURL(ref(guest.storage, buyNowMedia.fullPath)), /unauthorized|permission/i, "draft media stays private");
+await assert.rejects(() => getDownloadURL(ref(bidderOne.storage, buyNowMedia.fullPath)), /unauthorized|permission/i, "another user cannot read private draft media");
+assert.ok(await getDownloadURL(buyNowMedia), "owner can read draft media");
 const foreignImage = ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/foreign.png`);
 await assert.rejects(() => uploadBytes(foreignImage, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), /unauthorized|permission/i);
 await assert.rejects(() => deleteObject(ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/buy-now.png`)), /unauthorized|permission/i);
 await assert.rejects(() => call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: ["https://example.com/fake.png"] }), /storage|image/i);
 await call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: [buyNowImage] });
+assert.ok(await getDownloadURL(ref(guest.storage, buyNowMedia.fullPath)), "active media is public");
 await assert.rejects(() => updateDoc(buyNowRef, { categoryId: "invented" }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { price: 0.001 }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { searchTokens: ["unrelated"] }), /permission/i);
@@ -75,6 +84,11 @@ const securedFixed = (await getDoc(buyNowRef)).data();
 assert.equal(securedFixed.title, "Updated camera kit");
 assert.ok(securedFixed.searchTokens.includes("updated"));
 assert.ok(securedFixed.facetKeys.includes("electronics|*|*|*"));
+await adminDb.doc(`listings/${buyNowRef.id}`).update({ status: "sold" });
+assert.ok(await getDownloadURL(ref(guest.storage, buyNowMedia.fullPath)), "sold fixed-price media remains public");
+const wrongSellerMedia = ref(owner.storage, `users/${bidderOne.auth.currentUser.uid}/listings/${buyNowRef.id}/private.png`);
+await assert.rejects(() => uploadBytes(wrongSellerMedia, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), /unauthorized|permission/i, "unrelated account cannot write listing media");
+await assert.rejects(() => getDownloadURL(ref(bidderOne.storage, wrongSellerMedia.fullPath)), /unauthorized|permission|not-found/i, "unrelated account has no listing-media read path");
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", buyNowRef.id), { title: "Cross seller edit" }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { sellerId: bidderOne.auth.currentUser.uid }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { listingType: "auction" }), /permission/i);
@@ -83,7 +97,8 @@ const base = {
   description: "A complete vintage camera kit with lens, strap, and protective case.",
   categoryId: "electronics",
   condition: "Good",
-  location: "Shah Alam, Selangor",
+  listingType: "auction",
+  publicLocation: { districtOrCity: "Shah Alam", state: "Selangor", country: "Malaysia" },
   startingBid: 10_000,
   minimumBidIncrement: 1_000,
 };
@@ -111,13 +126,40 @@ const competing = await Promise.allSettled([
 ]);
 const accepted = competing.filter((result) => result.status === "fulfilled");
 assert.ok(accepted.length >= 1, "At least one competing bid must commit.");
-const auctionSnapshot = await getDoc(doc(owner.firestore, "listings", created.listingId));
+const auctionSnapshot = await adminDb.doc(`listings/${created.listingId}`).get();
 const auction = auctionSnapshot.data();
 assert.equal(auction.bidCount, 2 + accepted.length, "Bid count must match committed bid records.");
-const history = await getDocs(collection(owner.firestore, "listings", created.listingId, "bids"));
+const history = await adminDb.collection(`listings/${created.listingId}/bids`).get();
 assert.equal(history.size, auction.bidCount, "Immutable bid history must contain every accepted bid.");
 assert.equal(auction.currentBid, Math.max(...history.docs.map((entry) => entry.data().amount)), "Highest committed bid must remain authoritative.");
 assert.ok([bidderOne.auth.currentUser.uid, bidderTwo.auth.currentUser.uid].includes(auction.currentBidderId));
+for (const visitor of [guest, bidderOne, bidderTwo, observer]) {
+  await assert.rejects(() => getDoc(doc(visitor.firestore, "listings", created.listingId)), /permission/i);
+  await assert.rejects(() => getDocs(collection(visitor.firestore, "listings", created.listingId, "bids")), /permission/i);
+  await assert.rejects(() => getDoc(doc(visitor.firestore, "listings", created.listingId, "bids", history.docs[0].id)), /permission/i);
+  const detail = await call(visitor, "getPublicListingDetail", { listingId: created.listingId });
+  assert.equal(detail.listing.bidCount, auction.bidCount);
+  assert.equal(detail.bids.length, Math.min(25, auction.bidCount));
+  assert.equal(detail.bids.some((bid) => bid.isOwnBid), Boolean(visitor.auth.currentUser && history.docs.some((bid) => bid.data().bidderId === visitor.auth.currentUser.uid)));
+  assert.ok(!/(currentBidderId|winnerId|bidderId|outbidUserId|buyerId)/.test(JSON.stringify(detail)));
+}
+await assert.rejects(() => getDoc(doc(owner.firestore, "listings", created.listingId)), /permission/i);
+assert.equal((await getDoc(doc(adminUser.firestore, "listings", created.listingId))).data()?.currentBidderId, auction.currentBidderId);
+assert.equal((await getDoc(doc(adminUser.firestore, "listings", created.listingId, "bids", history.docs[0].id))).data()?.bidderId, history.docs[0].data().bidderId);
+const ownerHistory = await call(owner, "getMyListingHistory", {});
+const ownerAuction = ownerHistory.listings.find((listing) => listing.id === created.listingId);
+assert.equal(ownerAuction?.bidCount, auction.bidCount);
+assert.ok(!/(currentBidderId|winnerId|bidderId|outbidUserId|buyerId)/.test(JSON.stringify(ownerAuction)));
+await assert.rejects(() => call(guest, "getAuctionViewerState", { listingId: created.listingId }), /sign in|unauthenticated/i);
+const viewerOne = await call(bidderOne, "getAuctionViewerState", { listingId: created.listingId });
+const viewerTwo = await call(bidderTwo, "getAuctionViewerState", { listingId: created.listingId });
+const observerState = await call(observer, "getAuctionViewerState", { listingId: created.listingId });
+assert.deepEqual(observerState, { isHighestBidder: false, isWinner: false, isOutbid: false, transactionId: null });
+assert.equal(viewerOne.isHighestBidder, auction.currentBidderId === bidderOne.auth.currentUser.uid);
+assert.equal(viewerTwo.isHighestBidder, auction.currentBidderId === bidderTwo.auth.currentUser.uid);
+assert.equal(viewerOne.isOutbid, !viewerOne.isHighestBidder);
+assert.equal(viewerTwo.isOutbid, !viewerTwo.isHighestBidder);
+assert.ok(!/(currentBidderId|winnerId|bidderId|outbidUserId|buyerId)/.test(JSON.stringify(viewerOne)));
 await assert.rejects(() => uploadFixture(owner, created.listingId, "late-change.png"), /unauthorized|permission/i);
 
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", created.listingId), { currentBid: 999_999 }), /permission/i);
@@ -187,6 +229,34 @@ assert.equal(ended.status, "ended");
 assert.equal(ended.winnerId, auction.currentBidderId);
 assert.equal(ended.finalBid, auction.currentBid);
 assert.ok(ended.endedAt);
+await assert.rejects(() => getDoc(doc(guest.firestore, "listings", created.listingId)), /permission/i);
+await assert.rejects(() => getDoc(doc(bidderOne.firestore, "listings", created.listingId)), /permission/i);
+const endedDetail = await call(guest, "getPublicListingDetail", { listingId: created.listingId });
+assert.equal(endedDetail.listing.status, "ended");
+assert.ok(await getDownloadURL(ref(guest.storage, `users/${owner.auth.currentUser.uid}/listings/${created.listingId}/listing.png`)), "ended auction media remains public");
+assert.ok(!/(currentBidderId|winnerId|bidderId|outbidUserId|buyerId)/.test(JSON.stringify(endedDetail)));
+const winnerClient = ended.winnerId === bidderOne.auth.currentUser.uid ? bidderOne : bidderTwo;
+const loserClient = winnerClient === bidderOne ? bidderTwo : bidderOne;
+const winnerState = await call(winnerClient, "getAuctionViewerState", { listingId: created.listingId });
+const loserState = await call(loserClient, "getAuctionViewerState", { listingId: created.listingId });
+assert.equal(winnerState.isWinner, true);
+assert.equal(loserState.isWinner, false);
+assert.equal(loserState.transactionId, null);
+let transactionSnapshot;
+for (let attempt = 0; attempt < 30; attempt += 1) {
+  transactionSnapshot = await adminDb.doc(`transactions/auction-${created.listingId}`).get();
+  if (transactionSnapshot.exists) break;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+assert.ok(transactionSnapshot?.exists, "Auction finalization must create the winner transaction.");
+assert.equal(transactionSnapshot.data().buyerId, ended.winnerId);
+assert.equal(transactionSnapshot.data().sellerId, owner.auth.currentUser.uid);
+const winnerAuthorized = await call(winnerClient, "getAuctionViewerState", { listingId: created.listingId });
+const sellerAuthorized = await call(owner, "getAuctionViewerState", { listingId: created.listingId });
+assert.equal(winnerAuthorized.transactionId, transactionSnapshot.id);
+assert.equal(sellerAuthorized.transactionId, transactionSnapshot.id);
+assert.ok((await getDoc(doc(winnerClient.firestore, "transactions", transactionSnapshot.id))).exists());
+await assert.rejects(() => getDoc(doc(loserClient.firestore, "transactions", transactionSnapshot.id)), /permission/i);
 
 // More than one scheduler page of abandoned drafts must not hide published auctions.
 const floodNow = Timestamp.now();
@@ -226,4 +296,4 @@ await _test.advanceDueAuctions(floodNow);
 assert.deepEqual((await dueEndRef.get()).data(), dueEnded, "Repeating the finalizer is idempotent.");
 
 console.log("Auction callables, concurrency, lifecycle, draft-starvation, idempotence, and direct-write security verified.");
-await Promise.all([owner, bidderOne, bidderTwo, guest].map(({ app }) => deleteApp(app)));
+await Promise.all([owner, bidderOne, bidderTwo, observer, adminUser, guest].map(({ app }) => deleteApp(app)));

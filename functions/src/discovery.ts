@@ -2,6 +2,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { createDiscoverySession, type ServedListing } from "./discovery-session";
 import { publicListing } from "./intelligence";
+import { displayPublicLocation, isPublicListingSafe, validatePublicLocation } from "./general-location";
 import { decayedTrend, hasPersonalization, rankCandidates, RECOMMENDATION_VERSION, similarityScore,
   type Candidate, type CandidateSource, type InterestProfile, type RankedCandidate, type RankableListing } from "./intelligence-domain";
 
@@ -34,13 +35,16 @@ async function generateCandidates(uid: string, profile: InterestProfile | null, 
     const prior = map.get(listing.id);
     map.set(listing.id, { listing, source: prior?.source === "personalized" ? "personalized" : source, trendScore: Math.max(prior?.trendScore ?? 0, trendScore) });
   };
-  for (const item of recent.docs) add(publicListing(item.data(), item.id), "recent");
-  for (const page of categoryPages) for (const item of page.docs) add(publicListing(item.data(), item.id), "personalized");
-  for (const item of auction.docs) add(publicListing(item.data(), item.id), "auction");
+  for (const item of recent.docs) if (isPublicListingSafe(item.data())) add(publicListing(item.data(), item.id), "recent");
+  for (const page of categoryPages) for (const item of page.docs) if (isPublicListingSafe(item.data())) add(publicListing(item.data(), item.id), "personalized");
+  for (const item of auction.docs) if (isPublicListingSafe(item.data())) add(publicListing(item.data(), item.id), "auction");
   const trendMap = new Map(trends.docs.map((item) => [item.id, decayedTrend(Number(item.data().score ?? 0), String(item.data().updatedAt ?? ""), now)]));
-  for (const item of extra) if (item.exists) add(publicListing(item.data()!, item.id), trendMap.has(item.id) ? "trending" : "viewed", trendMap.get(item.id) ?? 0);
+  for (const item of extra) if (item.exists && isPublicListingSafe(item.data()!)) add(publicListing(item.data()!, item.id), trendMap.has(item.id) ? "trending" : "viewed", trendMap.get(item.id) ?? 0);
   const savedIds = new Set(saved.docs.map((item) => item.id));
-  const location = typeof user.data()?.location === "string" ? String(user.data()?.location).trim().slice(0, 80) : "";
+  const profileLocation = user.data()?.location;
+  const parts = typeof profileLocation === "string" ? profileLocation.split(", ") : [];
+  const general = parts.length === 2 ? validatePublicLocation({ districtOrCity: parts[0], state: parts[1], country: "Malaysia" }) : null;
+  const location = general ? displayPublicLocation(general) : "";
   return { candidates: [...map.values()], categories, savedIds, location, recentIds };
 }
 
@@ -106,11 +110,11 @@ export const getMarketplaceSimilar = onCall(async (request) => {
   if (typeof listingId !== "string" || listingId.length < 1 || listingId.length > 128) throw new HttpsError("invalid-argument", "Listing is invalid.");
   const db = getFirestore();
   const referenceDoc = await db.collection("listings").doc(listingId).get();
-  if (!referenceDoc.exists || !["active", "ended", "sold"].includes(String(referenceDoc.data()?.status))) throw new HttpsError("not-found", "Listing is unavailable.");
+  if (!referenceDoc.exists || !["active", "ended", "sold"].includes(String(referenceDoc.data()?.status)) || !isPublicListingSafe(referenceDoc.data()!)) throw new HttpsError("not-found", "Listing is unavailable.");
   const reference = publicListing(referenceDoc.data()!, referenceDoc.id);
   const now = new Date();
   const page = await db.collection("listings").where("status", "==", "active").where("facetKeys", "array-contains", `${reference.categoryId}|*|*|*`).orderBy("createdAt", "desc").limit(24).get();
-  const listings = page.docs.map((item) => publicListing(item.data(), item.id))
+  const listings = page.docs.filter((item) => isPublicListingSafe(item.data())).map((item) => publicListing(item.data(), item.id))
     .filter((item) => item.sellerId !== request.auth?.uid && similarityScore(reference, item, now) > Number.NEGATIVE_INFINITY)
     .sort((a, b) => similarityScore(reference, b, now) - similarityScore(reference, a, now) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)).slice(0, 8);
   const sessionId = request.auth?.uid ? await createDiscoverySession(request.auth.uid, listings.map((item) => ({ id: item.id, source: "similar", sectionId: "more_like_this", reasonId: "same_category" }))) : null;

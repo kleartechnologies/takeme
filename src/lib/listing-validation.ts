@@ -1,5 +1,6 @@
 import type { ListingCondition, ListingInput } from "@/types/marketplace";
 import { categories } from "../data/categories.ts";
+import { parsePublicLocation } from "./general-location.ts";
 
 export const MAX_LISTING_IMAGES = 8;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -67,9 +68,7 @@ export function validateListingInput(input: ListingInput) {
       if (start > Date.now() + MAX_AUCTION_LEAD_MS) errors.push("Auction start must be within 90 days.");
     }
   }
-  if (input.location.trim().length < 2 || input.location.trim().length > 120) errors.push("Location must be between 2 and 120 characters.");
-  if (input.latitude !== undefined && (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)) errors.push("Latitude is invalid.");
-  if (input.longitude !== undefined && (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)) errors.push("Longitude is invalid.");
+  if (!parsePublicLocation(input.publicLocation)) errors.push("Please add your general location before publishing.");
   return errors;
 }
 

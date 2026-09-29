@@ -2,6 +2,7 @@ import { Timestamp, doc, getDoc, serverTimestamp, updateDoc } from "firebase/fir
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase/client";
 import type { UserProfile } from "@/types/marketplace";
+import { formatPublicLocation, parseLegacyGeneralLocation } from "@/lib/general-location";
 
 function toIso(value: unknown) {
   if (value instanceof Timestamp) return value.toDate().toISOString();
@@ -21,9 +22,10 @@ export async function updatePublicProfile(input: { displayName: string; location
   if (!db || !auth?.currentUser) throw new Error("Sign in to edit your profile.");
   const uid = auth.currentUser.uid;
   const displayName = input.displayName.trim();
-  const location = input.location.trim();
+  const normalizedLocation = input.location.trim() ? parseLegacyGeneralLocation(input.location) : null;
+  if (input.location.trim() && !normalizedLocation) throw new Error("Choose a district or city and Malaysian state, not a street address.");
+  const location = normalizedLocation ? formatPublicLocation(normalizedLocation) : "";
   if (displayName.length < 2 || displayName.length > 80) throw new Error("Display name must be 2–80 characters.");
-  if (location.length > 120) throw new Error("Location must be 120 characters or less.");
   if (input.photo && (!storage || !["image/jpeg", "image/png", "image/webp"].includes(input.photo.type) || input.photo.size > 8 * 1024 * 1024)) throw new Error("Choose a JPG, PNG or WebP photo under 8 MB.");
   const update: { displayName: string; location: string; photoURL?: string; updatedAt: ReturnType<typeof serverTimestamp> } = { displayName, location, updatedAt: serverTimestamp() };
   if (input.photo) {

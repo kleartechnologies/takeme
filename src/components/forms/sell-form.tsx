@@ -4,12 +4,17 @@ import { Camera, Gavel, ImagePlus, LoaderCircle, ShoppingBag, X } from "lucide-r
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useForm, useWatch, type UseFormRegister } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useAuth } from "@/components/auth/auth-provider";
 import { FirebaseSetupState, SignInRequired } from "@/components/ui/firebase-state";
 import { categories } from "@/data/categories";
 import { MAX_IMAGE_BYTES, MAX_LISTING_IMAGES, ringgitToSen, senToRinggit, validateImageFiles } from "@/lib/listing-validation";
+import { formatPublicLocation, makePublicLocation, MALAYSIAN_STATES, parseLegacyGeneralLocation } from "@/lib/general-location";
+import { getUserProfile, updatePublicProfile } from "@/lib/services/users";
+import { listMeetupLocations, type MeetupLocation } from "@/lib/services/locations";
+import Link from "next/link";
 import { createListing, updateListing } from "@/lib/services/listings";
+import { ListingImagePipelineError } from "@/lib/listing-image-upload";
 import type { Listing, ListingCondition, ListingInput, ListingType } from "@/types/marketplace";
 
 interface SellValues {
@@ -18,7 +23,10 @@ interface SellValues {
   condition: ListingCondition;
   description: string;
   price: string;
-  location: string;
+  districtOrCity: string;
+  state: string;
+  meetupLocationId: string;
+  saveLocationToProfile: boolean;
   listingType: Extract<ListingType, "buy_now" | "auction">;
   startingBid: string;
   minimumBidIncrement: string;
@@ -52,7 +60,10 @@ export function SellForm({ listing }: { listing?: Listing }) {
       condition: listing?.condition ?? "Good",
       description: listing?.description ?? "",
       price: listing?.listingType === "buy_now" ? String(listing.price) : "",
-      location: listing?.location ?? "",
+      districtOrCity: listing?.publicLocation?.districtOrCity ?? "",
+      state: listing?.publicLocation?.state ?? "",
+      meetupLocationId: listing?.meetupLocationId ?? "",
+      saveLocationToProfile: false,
       listingType: listing?.listingType === "auction" ? "auction" : "buy_now",
       startingBid: listing?.startingBid ? senToRinggit(listing.startingBid) : "",
       minimumBidIncrement: listing?.minimumBidIncrement ? senToRinggit(listing.minimumBidIncrement) : "",
@@ -65,10 +76,30 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const [submitError, setSubmitError] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
+  const [meetups, setMeetups] = useState<MeetupLocation[]>([]);
+  const [profileName, setProfileName] = useState("");
   const { register, handleSubmit, control, setValue, formState: { errors, isDirty } } = useForm<SellValues>({ defaultValues: defaults });
   const listingType = useWatch({ control, name: "listingType" });
   const preview = useWatch({ control });
+  const previewLocation = makePublicLocation(preview.districtOrCity ?? "", preview.state ?? "");
   const photoChanged = photos.some((photo, index) => photo.file || photo.url !== listing?.imageUrls[index]) || photos.length !== (listing?.imageUrls.length ?? 0);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    Promise.all([getUserProfile(user.uid), listMeetupLocations()]).then(([profile, savedMeetups]) => {
+      if (!active) return;
+      setMeetups(savedMeetups);
+      setProfileName(profile?.displayName ?? user.displayName ?? "TAKEME member");
+      if (!listing) {
+        const general = parseLegacyGeneralLocation(profile?.location);
+        if (general) { setValue("districtOrCity", general.districtOrCity); setValue("state", general.state); }
+        const preferred = savedMeetups.find((item) => item.isDefault);
+        if (preferred) setValue("meetupLocationId", preferred.id);
+      }
+    }).catch(() => { /* The seller can still enter a general area without saved defaults. */ });
+    return () => { active = false; };
+  }, [user, listing, setValue]);
 
   useEffect(() => {
     if ((!isDirty && !photoChanged) || busy) return;
@@ -101,6 +132,8 @@ export function SellForm({ listing }: { listing?: Listing }) {
 
   async function submit(values: SellValues) {
     if (photos.length === 0) { setPhotoError("Add at least one image."); document.getElementById("listing-photos")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    const publicLocation = makePublicLocation(values.districtOrCity, values.state);
+    if (!publicLocation) { setSubmitError("Please select a district or city and Malaysian state. Do not enter a street address."); return; }
     let input: ListingInput;
     if (values.listingType === "auction") {
       const startingBid = ringgitToSen(values.startingBid);
@@ -116,17 +149,19 @@ export function SellForm({ listing }: { listing?: Listing }) {
         categoryId: values.categoryId,
         condition: values.condition,
         listingType: "auction",
-        location: values.location,
+        publicLocation,
+        meetupLocationId: values.meetupLocationId || null,
         startingBid,
         minimumBidIncrement,
         auctionStartAt: start.toISOString(),
         auctionEndAt: end.toISOString(),
       };
     } else {
-      input = { title: values.title, description: values.description, categoryId: values.categoryId, condition: values.condition, price: Number(values.price), listingType: "buy_now", location: values.location };
+      input = { title: values.title, description: values.description, categoryId: values.categoryId, condition: values.condition, price: Number(values.price), listingType: "buy_now", publicLocation, meetupLocationId: values.meetupLocationId || null };
     }
     setBusy(true); setSubmitError(""); setProgress(listing ? "Saving changes…" : listingType === "auction" ? "Creating your secure auction…" : "Preparing your listing…");
     try {
+      if (values.saveLocationToProfile) await updatePublicProfile({ displayName: profileName, location: formatPublicLocation(publicLocation) });
       if (listing) {
         await updateListing(listing.id, input, photos);
         router.push(`/listings/${listing.id}?updated=1`);
@@ -137,7 +172,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      setSubmitError(/firebase|firestore|storage|permission-denied/i.test(message) ? "We couldn’t save this listing. Check your connection and try again." : message || "The listing could not be saved. Please try again.");
+      setSubmitError(error instanceof ListingImagePipelineError ? error.message : /firebase|firestore|storage|permission-denied/i.test(message) ? "We couldn’t save this listing. Check your connection and try again." : message || "The listing could not be saved. Please try again.");
       setBusy(false); setProgress("");
     }
   }
@@ -168,18 +203,20 @@ export function SellForm({ listing }: { listing?: Listing }) {
             <p className="sm:col-span-2 rounded-xl bg-[var(--takeme-light-green)] p-3 text-xs leading-5 text-[var(--takeme-dark-green)]">The starting bid is the first bid buyers can place. Each later bid must rise by at least your minimum increment. Auctions are scheduled by default; once bidding starts, timing and bid settings are locked. Payment is not active yet.</p>
           </div>}
         </Section>
-        <Section number="04" title="Add a pickup location" description="Share a useful area or city. TAKEME does not expose your device location.">
-          <LocationField register={register} error={errors.location?.message} />
+        <Section number="04" title="Where is your item located?" description="Buyers see only your district or city and state. TAKEME does not use or expose your device location.">
+          <div className="grid gap-3 sm:grid-cols-2"><Field label="District / City" error={errors.districtOrCity?.message}><input {...register("districtOrCity", { required: "Add your district or city." })} maxLength={60} placeholder="e.g. Jitra" autoComplete="address-level2" /></Field><Field label="State" error={errors.state?.message}><select {...register("state", { required: "Choose a state." })}><option value="">Select state</option>{MALAYSIAN_STATES.map((state) => <option key={state} value={state}>{state}</option>)}</select></Field></div>
+          <p className="mt-3 text-xs leading-5 text-[var(--takeme-gray)]">Your public listing shows only your general area. Your private address is never shown to buyers.</p>
+          <label className="mt-3 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" {...register("saveLocationToProfile")} /> Save this general area to my public profile</label>
+          <div className="mt-5 border-t border-gray-100 pt-5"><h3 className="font-semibold">Meet-up (optional)</h3><p className="mt-1 text-xs leading-5 text-[var(--takeme-gray)]">Choose a place you explicitly saved. Your private address is not selected automatically.</p><select {...register("meetupLocationId")} className="mt-3 min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm"><option value="">No meet-up location on this listing</option>{meetups.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.area}, {item.state}</option>)}</select><Link href="/profile/locations" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[var(--takeme-dark-green)]">Add or manage meet-up locations →</Link></div>
         </Section>
       </div>
-      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Listing preview</p><div className="mt-3 overflow-hidden rounded-2xl border border-gray-200"><div className="relative aspect-[4/3] bg-stone-100">{photos[0] ? <Image src={photos[0].url} alt="Preview of your first listing photo" fill sizes="320px" className="object-cover" unoptimized={!photos[0].existing} /> : <div className="grid h-full place-items-center text-stone-400"><Camera size={32} /></div>}</div><div className="p-3"><p className="line-clamp-2 text-sm font-semibold">{preview.title?.trim() || "Your listing title"}</p><p className="mt-1 font-bold">{listingType === "auction" ? `Starting bid RM ${preview.startingBid || "0.00"}` : `RM ${preview.price || "0.00"}`}</p><p className="mt-1 truncate text-xs text-stone-500">{preview.location || "Your location"}</p></div></div><h2 className="mt-5 text-lg font-bold">Ready to publish?</h2><ul className="mt-3 grid gap-2 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Publishing makes this item visible to buyers. {listingType === "auction" ? "Scheduled auctions accept bids only after they start." : "Checkout is not available yet."}</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
+      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Listing preview</p><div className="mt-3 overflow-hidden rounded-2xl border border-gray-200"><div className="relative aspect-[4/3] bg-stone-100">{photos[0] ? <Image src={photos[0].url} alt="Preview of your first listing photo" fill sizes="320px" className="object-cover" unoptimized={!photos[0].existing} /> : <div className="grid h-full place-items-center text-stone-400"><Camera size={32} /></div>}</div><div className="p-3"><p className="line-clamp-2 text-sm font-semibold">{preview.title?.trim() || "Your listing title"}</p><p className="mt-1 font-bold">{listingType === "auction" ? `Starting bid RM ${preview.startingBid || "0.00"}` : `RM ${preview.price || "0.00"}`}</p><p className="mt-1 truncate text-xs text-stone-500">{previewLocation ? formatPublicLocation(previewLocation) : "Choose your general area"}</p></div></div><h2 className="mt-5 text-lg font-bold">Ready to publish?</h2><ul className="mt-3 grid gap-2 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and general location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Publishing makes this item visible to buyers. {listingType === "auction" ? "Scheduled auctions accept bids only after they start." : "Checkout is not available yet."}</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
     </form>
   );
 }
 
 function Section({ number, title, description, children }: { number: string; title: string; description: string; children: React.ReactNode }) { return <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] sm:p-7"><div className="mb-6 flex gap-4"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--takeme-dark-green)] text-xs font-semibold text-white">{number}</span><div><h2 className="text-xl font-bold tracking-tight">{title}</h2><p className="mt-1 text-sm text-[var(--takeme-gray)]">{description}</p></div></div>{children}</section>; }
 function Field({ label, error, wide, children }: { label: string; error?: string; wide?: boolean; children: React.ReactNode }) { return <label className={`form-field ${wide ? "sm:col-span-2" : ""}`}><span>{label}</span>{children}{error && <span className="field-error" role="alert">{error}</span>}</label>; }
-function LocationField({ register, error }: { register: UseFormRegister<SellValues>; error?: string }) { return <Field label="Location" error={error}><input {...register("location", { required: "Add a location.", minLength: { value: 2, message: "Add a more specific location." }, maxLength: { value: 120, message: "Keep the location under 120 characters." } })} placeholder="e.g. Shah Alam, Selangor" /></Field>; }
 function TypeOption({ title, description, icon, active, disabled, onClick }: { title: string; description: string; icon: React.ReactNode; active: boolean; disabled?: boolean; onClick: () => void }) { return <button type="button" disabled={disabled} onClick={onClick} className={`flex items-center gap-3 rounded-2xl border p-4 text-left ${active ? "border-[var(--takeme-green)] bg-[var(--takeme-light-green)]" : "border-gray-200 bg-gray-50"} disabled:cursor-not-allowed disabled:opacity-50`}><span className={active ? "text-[var(--takeme-dark-green)]" : "text-[var(--takeme-gray)]"}>{icon}</span><span><span className="block text-sm font-semibold">{title}</span><span className="block text-xs text-[var(--takeme-gray)]">{description}</span></span></button>; }
 
 export const listingImageLimits = { maxImages: MAX_LISTING_IMAGES, maxBytes: MAX_IMAGE_BYTES };

@@ -18,7 +18,7 @@ import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { getCategoryName } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { listingCanonicalUrl } from "@/lib/listing-metadata";
-import { getListingsBySeller, subscribeToListing } from "@/lib/services/listings";
+import { getListingsBySeller, subscribeToListing, type PublicAuctionBid } from "@/lib/services/listings";
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { useCurrentTime } from "@/lib/use-current-time";
 import type { Listing } from "@/types/marketplace";
@@ -31,6 +31,7 @@ export function ListingDetailView({ id, created = false }: { id: string; created
   const { user } = useAuth();
   const [state, setState] = useState<{ loading: boolean; listing: Listing | null; related: Listing[]; error: string }>({ loading: true, listing: null, related: [], error: "" });
   const [selectedImage, setSelectedImage] = useState(0);
+  const [bids, setBids] = useState<PublicAuctionBid[]>([]);
   const [shareMessage, setShareMessage] = useState("");
   const trackedView = useRef("");
 
@@ -57,8 +58,9 @@ export function ListingDetailView({ id, created = false }: { id: string; created
     if (!isFirebaseConfigured) return;
     let active = true;
     let contextSeller = "";
-    const unsubscribe = subscribeToListing(id, async (listing) => {
+    const unsubscribe = subscribeToListing(id, async (listing, nextBids) => {
       if (!active) return;
+      setBids(nextBids);
       if (!listing) { setState({ loading: false, listing: null, related: [], error: "not-found" }); return; }
       if (contextSeller === listing.sellerId) {
         setState((current) => ({ ...current, loading: false, listing, error: "" }));
@@ -101,7 +103,8 @@ export function ListingDetailView({ id, created = false }: { id: string; created
           <p className="mt-4 text-3xl font-bold tracking-tight text-[var(--takeme-charcoal)]">{displayAmount}</p>
           {isAuction && <p className="mt-1 text-xs font-semibold text-[var(--takeme-dark-green)]">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"}</p>}
           <p className="mt-3 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p>
-          {isAuction ? <AuctionPanel listing={listing} userId={user?.uid} owner={owner} /> : <ListingDealPanel listing={listing} userId={user?.uid} />}
+          {listing.meetupLocation && <div className="mt-4 rounded-xl bg-stone-50 p-3 text-sm"><p className="font-semibold">Meet-up</p><p>{listing.meetupLocation.name}</p><p className="text-[var(--takeme-gray)]">{listing.meetupLocation.area}, {listing.meetupLocation.state}</p></div>}
+          {isAuction ? <AuctionPanel listing={listing} bids={bids} userId={user?.uid} owner={owner} /> : <ListingDealPanel listing={listing} userId={user?.uid} />}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}
           {owner && listing.status === "active" && (!isAuction || (now > 0 && ["active", "scheduled"].includes(listing.auctionStatus ?? "") && Boolean(listing.auctionEndAt && new Date(listing.auctionEndAt).getTime() > now))) && <div className="mt-3 grid grid-cols-2 gap-2"><Link href={`/listings/${listing.id}/promote?type=boost`} className="button-secondary min-h-12 px-3 text-xs"><Sparkles size={16} /> Boost listing</Link><Link href={`/listings/${listing.id}/promote?type=featured`} className="button-secondary min-h-12 px-3 text-xs"><Star size={16} /> Featured</Link></div>}
           {!owner && listing.status === "active" && <SaveButton listingId={listing.id} />}

@@ -3,6 +3,7 @@ import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/fires
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { createDiscoverySession, verifyDiscoverySession } from "./discovery-session";
+import { displayPublicLocation, isPublicListingSafe, publishableLocation } from "./general-location";
 import {
   applyInterestSignal,
   decayedTrend,
@@ -106,20 +107,20 @@ export function publicListing(data: DocumentData, id: string): RankableListing &
   const iso = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : typeof value === "string" ? value : null;
   return {
     id, sellerId: String(data.sellerId ?? ""), title: String(data.title ?? ""), description: String(data.description ?? ""), categoryId: String(data.categoryId ?? ""),
-    condition: String(data.condition ?? ""), price: Number(data.price ?? 0), listingType: String(data.listingType ?? "buy_now"), location: String(data.location ?? ""),
+    condition: String(data.condition ?? ""), price: Number(data.price ?? 0), listingType: String(data.listingType ?? "buy_now"), location: publishableLocation(data) ? displayPublicLocation(publishableLocation(data)!) : "",
     imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [], status: String(data.status ?? ""), createdAt: iso(data.createdAt) ?? "", updatedAt: iso(data.updatedAt),
     auctionStartAt: iso(data.auctionStartAt), auctionEndAt: iso(data.auctionEndAt), startingBid: data.startingBid ?? null, currentBid: data.currentBid ?? null,
-    currentBidderId: data.currentBidderId ?? null, bidCount: data.bidCount ?? null, minimumBidIncrement: data.minimumBidIncrement ?? null,
-    auctionStatus: data.auctionStatus ?? null, winnerId: data.winnerId ?? null, finalBid: data.finalBid ?? null, endedAt: iso(data.endedAt),
+    bidCount: data.bidCount ?? null, minimumBidIncrement: data.minimumBidIncrement ?? null,
+    auctionStatus: data.auctionStatus ?? null, finalBid: data.finalBid ?? null, endedAt: iso(data.endedAt),
   };
 }
 
 async function listingSignal(listingId: string, type: MarketplaceEventType, extra: Partial<Signal> = {}) {
   const snapshot = await getFirestore().collection("listings").doc(listingId).get();
   const data = snapshot.data();
-  if (!data || !["active", "ended"].includes(data.status)) return null;
+  if (!data || !["active", "ended"].includes(data.status) || !isPublicListingSafe(data)) return null;
   const amount = data.listingType === "buy_now" ? Number(data.price) : Number(data.currentBid || data.startingBid || 0) / 100;
-  return { signal: { type, listingId, categoryId: String(data.categoryId ?? ""), price: amount, location: String(data.location ?? ""), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
+  return { signal: { type, listingId, categoryId: String(data.categoryId ?? ""), price: amount, location: displayPublicLocation(publishableLocation(data)!), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
 }
 
 export const trackMarketplaceEvent = onCall(async (request) => {
@@ -257,11 +258,11 @@ export const getMarketplaceRecommendations = onCall(async (request) => {
   }
   const recent = await db.collection("listings").where("status", "==", "active").where("facetKeys", "array-contains", "*|*|*|*").orderBy("createdAt", "desc").limit(16).get();
   const sources = new Map<string, Candidate>();
-  for (const item of recent.docs) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "recent", trendScore: 0 });
+  for (const item of recent.docs) if (isPublicListingSafe(item.data())) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "recent", trendScore: 0 });
   if (personalized && profile) {
     const categories = Object.entries(profile.category).filter(([, score]) => score > 1).sort((a, b) => b[1] - a[1]).slice(0, 2);
     const pages = await Promise.all(categories.map(([categoryId]) => db.collection("listings").where("status", "==", "active").where("facetKeys", "array-contains", `${categoryId}|*|*|*`).orderBy("createdAt", "desc").limit(8).get()));
-    for (const page of pages) for (const item of page.docs) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "personalized", trendScore: 0 });
+    for (const page of pages) for (const item of page.docs) if (isPublicListingSafe(item.data())) sources.set(item.id, { listing: publicListing(item.data(), item.id), source: "personalized", trendScore: 0 });
   }
   const cutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const trends = await db.collection("listingTrends").where("updatedAt", ">=", cutoff).orderBy("updatedAt", "desc").limit(12).get();
@@ -271,7 +272,7 @@ export const getMarketplaceRecommendations = onCall(async (request) => {
     for (let index = 0; index < trendListings.length; index += 1) {
       const listing = trendListings[index];
       const trend = trends.docs[index];
-      if (!listing?.exists || !trend) continue;
+      if (!listing?.exists || !trend || !isPublicListingSafe(listing.data()!)) continue;
       const previous = sources.get(listing.id);
       const score = decayedTrend(Number(trend.data().score ?? 0), String(trend.data().updatedAt ?? nowIso()), now);
       sources.set(listing.id, { listing: previous?.listing ?? publicListing(listing.data()!, listing.id), source: previous?.source === "personalized" ? "personalized" : "trending", trendScore: score });

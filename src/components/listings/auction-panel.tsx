@@ -4,9 +4,10 @@ import { Clock3, Gavel, LoaderCircle, ShieldCheck, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getMinimumNextBid, ringgitToSen, senToRinggit } from "@/lib/listing-validation";
-import { cancelAuctionListing, placeAuctionBid, subscribeToBidHistory } from "@/lib/services/auctions";
+import { cancelAuctionListing, getAuctionViewerState, placeAuctionBid, type AuctionViewerState } from "@/lib/services/auctions";
+import type { PublicAuctionBid } from "@/lib/services/listings";
 import { useCurrentTime } from "@/lib/use-current-time";
-import type { AuctionStatus, Bid, Listing } from "@/types/marketplace";
+import type { AuctionStatus, Listing } from "@/types/marketplace";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -46,10 +47,10 @@ function relativeTime(value: string, now: number) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export function AuctionPanel({ listing, userId, owner }: { listing: Listing; userId?: string; owner: boolean }) {
+export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listing; bids: PublicAuctionBid[]; userId?: string; owner: boolean }) {
   const now = useCurrentTime();
-  const [bids, setBids] = useState<Bid[]>([]);
-  const [historyError, setHistoryError] = useState("");
+  const [viewerResponse, setViewerResponse] = useState<{ uid: string; state: AuctionViewerState } | null>(null);
+  const viewer = viewerResponse && viewerResponse.uid === userId ? viewerResponse.state : null;
   const minimum = getMinimumNextBid(listing);
   const [amount, setAmount] = useState(() => minimum ? senToRinggit(minimum) : "");
   const [message, setMessage] = useState("");
@@ -58,7 +59,12 @@ export function AuctionPanel({ listing, userId, owner }: { listing: Listing; use
   const [confirmCancel, setConfirmCancel] = useState(false);
   const status = effectiveStatus(listing, now);
 
-  useEffect(() => subscribeToBidHistory(listing.id, setBids, (nextError) => setHistoryError(nextError.message)), [listing.id]);
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    getAuctionViewerState(listing.id).then((state) => { if (active) setViewerResponse({ uid: userId, state }); }).catch(() => { if (active) setViewerResponse(null); });
+    return () => { active = false; };
+  }, [listing.id, listing.bidCount, listing.status, userId]);
 
   const amountSen = ringgitToSen(amount);
   const inputError = useMemo(() => {
@@ -76,6 +82,7 @@ export function AuctionPanel({ listing, userId, owner }: { listing: Listing; use
       const result = await placeAuctionBid(listing.id, amountSen);
       setMessage(`Bid accepted at ${formatSen(result.currentBid)}.`);
       setAmount(senToRinggit(result.currentBid + (listing.minimumBidIncrement ?? 0)));
+      if (userId) getAuctionViewerState(listing.id).then((state) => setViewerResponse({ uid: userId, state })).catch(() => undefined);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Your bid could not be placed.");
     } finally { setBusy(false); }
@@ -88,9 +95,9 @@ export function AuctionPanel({ listing, userId, owner }: { listing: Listing; use
     finally { setBusy(false); }
   }
 
-  const highest = listing.currentBidderId === userId && Boolean(userId);
-  const outbid = Boolean(userId && !highest && bids.some((bid) => bid.bidderId === userId));
-  const hasWinner = Boolean(listing.winnerId || ((listing.bidCount ?? 0) > 0 && status === "ended"));
+  const highest = Boolean(userId && viewer?.isHighestBidder);
+  const outbid = Boolean(userId && viewer?.isOutbid);
+  const hasWinner = (listing.bidCount ?? 0) > 0 && status === "ended";
   const target = status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt;
 
   return <div className="mt-6 grid gap-5">
@@ -109,15 +116,15 @@ export function AuctionPanel({ listing, userId, owner }: { listing: Listing; use
     {status === "scheduled" && <Notice icon={<Clock3 size={18} />} text={`Bidding opens ${new Date(listing.auctionStartAt!).toLocaleString("en-MY")}.`} />}
     {highest && status === "active" && <Notice icon={<Trophy size={18} />} text="You are currently the highest bidder." />}
     {outbid && status === "active" && <Notice icon={<Gavel size={18} />} text="You have been outbid. Place at least the minimum next bid to compete again." />}
-    {status === "ended" && <Notice icon={<Trophy size={18} />} text={!hasWinner ? "This auction ended without any bids." : listing.winnerId === userId ? `You won at ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : owner ? `The auction ended with a final bid of ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : "This auction has ended with a winning bidder."} />}
-    {status === "ended" && hasWinner && (owner || listing.winnerId === userId) && <Link href={`/transactions/auction-${listing.id}`} className="button-primary min-h-11 w-full px-4">View auction transaction</Link>}
+    {status === "ended" && <Notice icon={<Trophy size={18} />} text={!hasWinner ? "This auction ended without any bids." : userId && viewer?.isWinner ? `You won at ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : owner ? `The auction ended with a final bid of ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : "This auction has ended with a winning bidder."} />}
+    {status === "ended" && userId && viewer?.transactionId && <Link href={`/transactions/${viewer.transactionId}`} className="button-primary min-h-11 w-full px-4">View auction transaction</Link>}
     {status === "cancelled" && <Notice icon={<ShieldCheck size={18} />} text="The seller cancelled this auction before a valid winning result was recorded." />}
 
     {owner && (status === "scheduled" || status === "active") && (listing.bidCount ?? 0) === 0 && <div>{confirmCancel ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4"><p className="text-sm font-semibold text-red-800">Cancel this auction?</p><p className="mt-1 text-xs text-red-700">It will remain visible as cancelled history and cannot be restarted.</p><div className="mt-3 flex flex-wrap gap-2"><button disabled={busy} onClick={() => void cancel()} className="button-secondary min-h-11 border-red-200 px-4 text-red-700">Confirm cancellation</button><button disabled={busy} onClick={() => setConfirmCancel(false)} className="button-secondary min-h-11 px-4">Keep auction</button></div></div> : <button onClick={() => setConfirmCancel(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-red-700">Cancel auction</button>}</div>}
     {message && <p className="rounded-xl bg-[var(--takeme-light-green)] p-3 text-sm font-semibold text-[var(--takeme-dark-green)]" role="status">{message}</p>}
     {error && <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{error}</p>}
 
-    <section className="border-t border-gray-100 pt-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Bid history</h2><span className="text-xs text-[var(--takeme-gray)]">Latest 25</span></div>{historyError ? <p className="text-sm text-red-700">Bid history is temporarily unavailable.</p> : bids.length ? <div className="grid gap-2">{bids.map((bid) => <div key={bid.id} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 text-sm"><span className="font-medium">{bid.bidderId === userId ? "You" : "Bidder"}</span><span className="ml-auto font-bold">{formatSen(bid.amount)}</span><span className="w-16 text-right text-xs text-[var(--takeme-gray)]">{relativeTime(bid.createdAt, now)}</span></div>)}</div> : <p className="rounded-xl bg-gray-50 p-4 text-sm text-[var(--takeme-gray)]">No bids yet. The first valid bid can meet the starting bid.</p>}</section>
+    <section className="border-t border-gray-100 pt-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Bid history</h2><span className="text-xs text-[var(--takeme-gray)]">Latest 25</span></div>{bids.length ? <div className="grid gap-2">{bids.map((bid, index) => <div key={`${bid.createdAt}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 text-sm"><span className="font-medium">{bid.isOwnBid ? "You" : "Bidder"}</span><span className="ml-auto font-bold">{formatSen(bid.amount)}</span><span className="w-16 text-right text-xs text-[var(--takeme-gray)]">{relativeTime(bid.createdAt, now)}</span></div>)}</div> : <p className="rounded-xl bg-gray-50 p-4 text-sm text-[var(--takeme-gray)]">No bids yet. The first valid bid can meet the starting bid.</p>}</section>
   </div>;
 }
 

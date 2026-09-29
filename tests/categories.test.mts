@@ -33,8 +33,8 @@ test("category images resolve to supplied files and fallbacks remain explicit", 
 
 test("new category ids validate and produce matching Firestore facet keys", () => {
   for (const { id } of newCategories) {
-    const listing = { title: "Category integration test", description: "A complete local listing description for testing.", categoryId: id, condition: "Good" as const, price: 100, listingType: "buy_now" as const, location: "Kuala Lumpur" };
+    const listing = { title: "Category integration test", description: "A complete local listing description for testing.", categoryId: id, condition: "Good" as const, price: 100, listingType: "buy_now" as const, publicLocation: { districtOrCity: "Kuala Lumpur", state: "W.P. Kuala Lumpur", country: "Malaysia" as const } };
     assert.deepEqual(validateListingInput(listing), []);
-    assert.ok(createFacetKeys(listing).includes(createFacetKey({ categoryId: id })));
+    assert.ok(createFacetKeys({ ...listing, location: "Kuala Lumpur, W.P. Kuala Lumpur" }).includes(createFacetKey({ categoryId: id })));
   }
 });

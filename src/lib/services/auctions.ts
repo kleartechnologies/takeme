@@ -1,16 +1,13 @@
-import { collection, limit, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { db, functions } from "@/lib/firebase/client";
-import type { AuctionListingInput, AuctionStatus, Bid } from "@/types/marketplace";
+import { functions } from "@/lib/firebase/client";
+import type { AuctionListingInput, AuctionStatus } from "@/types/marketplace";
 
 interface AuctionStateResponse {
   currentBid: number;
-  currentBidderId: string | null;
   bidCount: number;
   auctionStatus: AuctionStatus;
   auctionStartAt: string | null;
   auctionEndAt: string | null;
-  winnerId: string | null;
   finalBid: number | null;
   endedAt: string | null;
 }
@@ -57,22 +54,13 @@ export function cancelAuctionListing(listingId: string) {
   return call<{ listingId: string }, AuctionStateResponse>("cancelAuction", { listingId });
 }
 
-export function subscribeToBidHistory(listingId: string, onChange: (bids: Bid[]) => void, onError: (error: Error) => void) {
-  if (!db) {
-    onError(new Error("Firebase is not configured."));
-    return () => undefined;
-  }
-  const bidQuery = query(collection(db, "listings", listingId, "bids"), orderBy("createdAt", "desc"), limit(25));
-  return onSnapshot(bidQuery, (snapshot) => {
-    onChange(snapshot.docs.map((bid) => {
-      const data = bid.data();
-      return {
-        id: bid.id,
-        listingId,
-        bidderId: String(data.bidderId),
-        amount: Number(data.amount),
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
-      };
-    }));
-  }, (error) => onError(new Error(error.message)));
+export interface AuctionViewerState {
+  isHighestBidder: boolean;
+  isWinner: boolean;
+  isOutbid: boolean;
+  transactionId: string | null;
+}
+
+export function getAuctionViewerState(listingId: string) {
+  return call<{ listingId: string }, AuctionViewerState>("getAuctionViewerState", { listingId });
 }

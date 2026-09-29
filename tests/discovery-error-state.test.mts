@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("discovery requires a server-confirmed listing query", () => {
+test("discovery requires a server-confirmed, privacy-filtered public listing projection", () => {
   const service = readFileSync("src/lib/services/listings.ts", "utf8");
   const discovery = service.slice(service.indexOf("export async function getActiveListings"), service.indexOf("export async function getListing"));
-  assert.match(discovery, /getDocsFromServer\(query\(/);
-  assert.doesNotMatch(discovery, /await getDocs\(query\(/);
+  assert.match(discovery, /httpsCallable.*getPublicListingPage/);
+  assert.doesNotMatch(discovery, /getDocs(?:FromServer)?\(query\(/);
 });
 
 test("Explore keeps loading, backend failure, and genuine empty results distinct", () => {

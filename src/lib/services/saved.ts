@@ -15,7 +15,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
-import { fromDocument } from "@/lib/services/listings";
+import { getPublicListingDetail } from "@/lib/services/listings";
 import type { SavedListing } from "@/types/marketplace";
 
 export interface SavedPage {
@@ -66,10 +66,10 @@ export async function getSavedPage(cursor?: QueryDocumentSnapshot<DocumentData> 
   const items = await Promise.all(visible.map(async (saved): Promise<SavedListing> => {
     let listing: SavedListing["listing"] = null;
     try {
-      const result = await getDoc(doc(database, "listings", saved.id));
-      if (result.exists() && ["active", "ended"].includes(result.data().status)) listing = fromDocument(result);
+      const result = await getPublicListingDetail(saved.id);
+      if (["active", "ended"].includes(result.listing.status)) listing = result.listing;
     } catch (error) {
-      if (!(typeof error === "object" && error && "code" in error && String(error.code).includes("permission-denied"))) throw error;
+      if (!(typeof error === "object" && error && "code" in error && (String(error.code).includes("permission-denied") || String(error.code).includes("not-found")))) throw error;
       // The owner may have removed a listing after it was saved. Keep its saved
       // record visible so the buyer can remove it without exposing the listing.
     }

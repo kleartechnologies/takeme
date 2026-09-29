@@ -18,7 +18,7 @@ async function client(label) {
 }
 const owner = await client("rules-owner");
 const other = await client("rules-other");
-const input = { title: "A working camera kit", description: "A complete camera kit with charger and two working batteries.", categoryId: "electronics", condition: "Good", price: 250, listingType: "buy_now", location: "Kuala Lumpur" };
+const input = { title: "A working camera kit", description: "A complete camera kit with charger and two working batteries.", categoryId: "electronics", condition: "Good", price: 250, listingType: "buy_now", publicLocation: { districtOrCity: "Kuala Lumpur", state: "W.P. Kuala Lumpur", country: "Malaysia" } };
 const listingId = (await httpsCallable(owner.functions, "createFixedListingDraft")(input)).data.listingId;
 const ownerRef = doc(owner.firestore, "listings", listingId);
 await assert.rejects(() => updateDoc(doc(other.firestore, "listings", listingId), { title: "Unauthorized edit" }), /permission/i);

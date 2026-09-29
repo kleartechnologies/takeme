@@ -3,6 +3,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { recordMarketplaceSignal, publicListing } from "./intelligence";
+import { isPublicListingSafe } from "./general-location";
 import {
   allocatePromotionPlacements,
   canServePromotion,
@@ -146,7 +147,7 @@ export const getFeaturedPromotions = onCall(async () => {
     if (!listingSnapshot?.exists) continue;
     const listing = listingFromDoc(listingSnapshot.id, listingSnapshot.data()!);
     const promotion = promotionFromDoc(promotionSnapshot.id, promotionSnapshot.data());
-    if (!canServePromotion(promotion, listing, now) || sellerIds.has(listing.sellerId)) continue;
+    if (!canServePromotion(promotion, listing, now) || sellerIds.has(listing.sellerId) || !isPublicListingSafe(listingSnapshot.data()!)) continue;
     items.push({ listing: publicListing(listingSnapshot.data()!, listing.id), promotionId: promotion.id, type: promotion.type });
     sellerIds.add(listing.sellerId);
   }

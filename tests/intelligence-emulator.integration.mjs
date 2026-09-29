@@ -41,9 +41,11 @@ const [seller, buyer, stranger, guest] = await Promise.all([client("intelligence
 const call = (target, name, data) => httpsCallable(target.functions, name)(data).then((result) => result.data);
 const cameraId = `intelligence-camera-${suffix}`;
 const fashionId = `intelligence-fashion-${suffix}`;
-const base = { sellerId: seller.uid, description: "A complete working marketplace item with useful details and images.", condition: "Good", price: 250, listingType: "buy_now", location: "Kuala Lumpur", imageUrls: ["/brand/takeme-app-icon.png"], status: "active", createdAt: new Date(), updatedAt: new Date() };
+const legacyId = `intelligence-legacy-${suffix}`;
+const base = { sellerId: seller.uid, description: "A complete working marketplace item with useful details and images.", condition: "Good", price: 250, listingType: "buy_now", privacyVersion: 2, publicLocation: { districtOrCity: "Kuala Lumpur", state: "W.P. Kuala Lumpur", country: "Malaysia" }, location: "Kuala Lumpur, W.P. Kuala Lumpur", imageUrls: ["/brand/takeme-app-icon.png"], status: "active", createdAt: new Date(), updatedAt: new Date() };
 await admin.doc(`listings/${cameraId}`).set({ ...base, id: cameraId, title: "Vintage camera kit", categoryId: "electronics", facetKeys: ["*|*|*|*", "electronics|*|*|*"] });
 await admin.doc(`listings/${fashionId}`).set({ ...base, id: fashionId, title: "Fashion jacket", categoryId: "fashion", facetKeys: ["*|*|*|*", "fashion|*|*|*"] });
+await admin.doc(`listings/${legacyId}`).set({ ...base, id: legacyId, privacyVersion: 1, title: "Legacy camera", categoryId: "electronics", facetKeys: ["*|*|*|*", "electronics|*|*|*"] });
 
 await assert.rejects(() => call(guest, "trackMarketplaceEvent", { type: "VIEW_LISTING", listingId: cameraId }), /unauthenticated|sign in/i);
 await assert.rejects(() => call(buyer, "trackMarketplaceEvent", { type: "SAVE_LISTING", listingId: cameraId }), /permission|authoritative/i);
@@ -57,10 +59,12 @@ const cold = await call(buyer, "getMarketplaceRecommendations", {});
 assert.equal(cold.mode, "discovery");
 assert.ok(cold.items.length > 0 && cold.items.length <= 8);
 assert.ok(cold.items.every((item) => item.listing.status === "active"));
+assert.ok(cold.items.every((item) => item.listing.id !== legacyId), "legacy listing is excluded from recommendations");
 const coldDiscovery = await call(buyer, "getMarketplaceDiscovery", {});
 assert.equal(coldDiscovery.metadata.personalized, false);
 assert.equal(coldDiscovery.sections[0].id, "for_you");
 assert.ok(coldDiscovery.sections.every((section) => section.listings.length <= 4));
+assert.ok(coldDiscovery.sections.every((section) => section.listings.every((item) => item.listing.id !== legacyId)), "legacy listing is excluded from discovery");
 assert.ok(coldDiscovery.sessionId);
 assert.equal(coldDiscovery.sections.some((section) => section.id === "trending_near_you"), false, "no local lane without a profile location");
 await assert.rejects(() => call(buyer, "getMarketplaceDiscovery", { sectionId: "for_you", cursor: "1000000" }), /invalid|cursor/i);
@@ -93,7 +97,9 @@ assert.equal(personalized.mode, "personalized");
 assert.ok(personalized.items.some((item) => item.listing.id === cameraId));
 const personalizedDiscovery = await call(buyer, "getMarketplaceDiscovery", {});
 assert.equal(personalizedDiscovery.metadata.personalized, true);
-assert.ok(personalizedDiscovery.sections.some((section) => section.id === "because_you_like"));
+assert.ok(personalizedDiscovery.sections.some((section) => section.id === "for_you"));
+assert.equal(new Set(personalizedDiscovery.sections.flatMap((section) => section.listings.map((item) => item.listing.id))).size,
+  personalizedDiscovery.sections.flatMap((section) => section.listings).length, "personalized rails do not duplicate served listings");
 assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "NOT_INTERESTED", listingId: cameraId })).accepted, true);
 assert.ok((await call(buyer, "getMarketplaceDiscovery", {})).sections.every((section) => section.listings.every((item) => item.listing.id !== cameraId)));
 assert.equal((await call(buyer, "trackMarketplaceEvent", { type: "INTEREST_RESTORED", listingId: cameraId })).accepted, true);

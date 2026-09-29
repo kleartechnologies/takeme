@@ -33,7 +33,7 @@ const listingId = `trust-listing-${suffix}`;
 const sellerId = seller.uid;
 const buyerId = buyer.uid;
 await admin.doc(`listings/${listingId}`).set({ id: listingId, sellerId, status: "active", title: "Camera", listingType: "buy_now" });
-await setDoc(doc(seller.db, "users", sellerId), { uid: sellerId, displayName: "Seller", photoURL: null, location: "KL", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+await setDoc(doc(seller.db, "users", sellerId), { uid: sellerId, displayName: "Seller", photoURL: null, location: "Kuala Lumpur, W.P. Kuala Lumpur", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 await setDoc(doc(buyer.db, "users", buyerId), { uid: buyerId, displayName: "Buyer", photoURL: null, location: "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 await assert.rejects(() => updateDoc(doc(buyer.db, "users", sellerId), { displayName: "Impostor" }), /permission/i);
 await assert.rejects(() => updateDoc(doc(seller.db, "users", sellerId), { email: "secret@example.test" }), /permission/i);
@@ -43,7 +43,7 @@ await admin.doc(`users/${sellerId}`).update({ email: "legacy-private@example.tes
 await assert.rejects(() => getDoc(doc(guest.db, "users", sellerId)), /permission/i, "Legacy profiles with private fields must not be readable in full.");
 assert.equal((await getDoc(doc(seller.db, "users", sellerId))).data().email, "legacy-private@example.test", "The owner can still access their legacy profile.");
 await assert.rejects(() => getDocs(collection(guest.db, "users")), /permission/i);
-assert.ok((await getDocs(query(collection(guest.db, "listings"), where("status", "==", "active"), limit(10)))).size >= 1);
+await assert.rejects(() => getDocs(query(collection(guest.db, "listings"), where("status", "==", "active"), limit(10))), /permission/i);
 await admin.doc(`reviews/legacy-${suffix}`).set({ internalNotes: "private" });
 await admin.doc(`featuredListings/legacy-${suffix}`).set({ internalNotes: "private" });
 await assert.rejects(() => getDoc(doc(guest.db, "reviews", `legacy-${suffix}`)), /permission/i);

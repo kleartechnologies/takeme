@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { formatPublicLocation, type PublicLocation } from "./general-location.ts";
 
 export type PublicListingMetadata = {
   status: string;
   title: string;
   description: string;
+  publicLocation?: PublicLocation;
   price?: number;
   listingType?: string;
   startingBid?: number;
@@ -45,8 +47,10 @@ export function buildListingMetadata(id: string, listing: PublicListingMetadata 
   const amount = typeof rawAmount === "number" ? (auction ? rawAmount / 100 : rawAmount) : null;
   const price = amount !== null && Number.isFinite(amount) && amount >= 0 ? `RM${money.format(amount)}` : null;
   const title = `${listing.title.trim().slice(0, 100)}${price ? ` — ${price}` : ""} | TAKEME`;
-  const summary = listing.description?.trim().replace(/\s+/g, " ").slice(0, 155) || "Explore this listing on TAKEME.";
-  const description = price ? `${price} · ${summary}` : summary;
+  const area = listing.publicLocation ? formatPublicLocation(listing.publicLocation) : "Malaysia";
+  // Seller-authored descriptions may contain personal contact details. Never
+  // reuse them in server-generated social previews.
+  const description = `${price ? `${price} · ` : ""}${area} · View this listing on TAKEME.`;
   const image = previewImage(listing, siteUrl);
   return {
     title: { absolute: title },

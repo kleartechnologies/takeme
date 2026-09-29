@@ -29,7 +29,12 @@ service firebase.storage {
     }
 
     match /users/{uid}/listings/{listingId}/{fileName} {
-      allow read: if listing(listingId).status in ['active', 'ended'] || (isOwner(uid) && listing(listingId).sellerId == uid);
+      allow read: if listing(listingId).sellerId == uid
+        && (listing(listingId).status in ['active', 'ended']
+          || (listing(listingId).status == 'sold'
+            && listing(listingId).listingType == 'buy_now'
+            && listing(listingId).privacyVersion == 2)
+          || isOwner(uid));
       allow create, update: if canManageListingMedia(uid, listingId) && validImage();
       allow delete: if canManageListingMedia(uid, listingId);
     }

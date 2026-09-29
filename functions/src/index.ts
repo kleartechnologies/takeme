@@ -1,5 +1,5 @@
 import { getApp, initializeApp } from "firebase-admin/app";
-import { Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
@@ -12,6 +12,8 @@ import {
   type AuctionSettings,
 } from "./auction-domain";
 import { ringgitToSen } from "./transaction-domain";
+import { displayPublicLocation, publishableLocation, validatePublicLocation } from "./general-location";
+import { deleteListingMedia, listingMediaPrefix } from "./listing-media-cleanup";
 
 initializeApp();
 setGlobalOptions({ region: "asia-southeast1", maxInstances: 20 });
@@ -41,11 +43,24 @@ function requireId(value: unknown, field: string) {
   return id;
 }
 
-function optionalCoordinate(value: unknown, field: string) {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < (field === "Latitude" ? -90 : -180) || value > (field === "Latitude" ? 90 : 180)) throw new HttpsError("invalid-argument", `${field} is invalid.`);
-  return value;
+function requirePublicLocation(value: unknown) {
+  const location = validatePublicLocation(value);
+  if (!location) throw new HttpsError("invalid-argument", "Please add your general location before publishing.");
+  return location;
 }
+
+async function selectedMeetup(uid: string, value: unknown) {
+  if (value === undefined || value === null || value === "") return { meetupLocationId: null, meetupLocation: null };
+  const meetupLocationId = requireId(value, "Meet-up location ID");
+  const snapshot = await db.doc(`users/${uid}/meetupLocations/${meetupLocationId}`).get();
+  const data = snapshot.data();
+  if (!data || data.ownerId !== uid) throw new HttpsError("permission-denied", "Choose one of your own meet-up locations.");
+  const location = validatePublicLocation({ districtOrCity: data.area, state: data.state, country: data.country });
+  if (!location || typeof data.name !== "string" || data.name.trim().length < 2 || data.name.trim().length > 80) throw new HttpsError("invalid-argument", "The selected meet-up location is invalid.");
+  return { meetupLocationId, meetupLocation: { name: data.name.trim(), area: location.districtOrCity, state: location.state, country: location.country } };
+}
+
+const legacyPreciseFields = { latitude: FieldValue.delete(), longitude: FieldValue.delete(), coordinates: FieldValue.delete(), gps: FieldValue.delete(), geohash: FieldValue.delete(), address: FieldValue.delete(), addressLine1: FieldValue.delete(), addressLine2: FieldValue.delete(), fullAddress: FieldValue.delete(), street: FieldValue.delete(), streetAddress: FieldValue.delete(), unitNumber: FieldValue.delete(), houseNumber: FieldValue.delete(), postcode: FieldValue.delete(), postalCode: FieldValue.delete(), privateAddress: FieldValue.delete(), exactAddress: FieldValue.delete(), preciseLocation: FieldValue.delete() };
 
 function normalizeSearch(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, " ");
@@ -80,7 +95,10 @@ function parseListingPayload(value: unknown, now = new Date()) {
   if (!ALLOWED_CATEGORIES.has(categoryId)) throw new HttpsError("invalid-argument", "Category is invalid.");
   const condition = requireString(input.condition, "Condition", 1, 20);
   if (!ALLOWED_CONDITIONS.has(condition)) throw new HttpsError("invalid-argument", "Condition is invalid.");
-  const location = requireString(input.location, "Location", 2, 120);
+  const allowed = new Set(["title", "description", "categoryId", "condition", "listingType", "startingBid", "minimumBidIncrement", "auctionStartAt", "auctionEndAt", "publicLocation", "meetupLocationId", "listingId", "imageUrls"]);
+  if (Object.keys(input).some((key) => !allowed.has(key))) throw new HttpsError("invalid-argument", "Invalid auction listing fields.");
+  if (input.listingType !== "auction") throw new HttpsError("invalid-argument", "Listing type is invalid.");
+  const publicLocation = requirePublicLocation(input.publicLocation);
   const settings: AuctionSettings = {
     startingBid: input.startingBid as number,
     minimumBidIncrement: input.minimumBidIncrement as number,
@@ -94,9 +112,8 @@ function parseListingPayload(value: unknown, now = new Date()) {
     description,
     categoryId,
     condition,
-    location,
-    latitude: optionalCoordinate(input.latitude, "Latitude"),
-    longitude: optionalCoordinate(input.longitude, "Longitude"),
+    publicLocation,
+    meetupLocationId: input.meetupLocationId,
     ...settings,
   };
 }
@@ -104,7 +121,7 @@ function parseListingPayload(value: unknown, now = new Date()) {
 function parseFixedPayload(value: unknown, updating = false) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpsError("invalid-argument", "Listing details are required.");
   const input = value as Record<string, unknown>;
-  const allowed = new Set(["title", "description", "categoryId", "condition", "price", "listingType", "location", "latitude", "longitude", ...(updating ? ["listingId", "imageUrls"] : [])]);
+  const allowed = new Set(["title", "description", "categoryId", "condition", "price", "listingType", "publicLocation", "meetupLocationId", ...(updating ? ["listingId", "imageUrls"] : [])]);
   if (Object.keys(input).some((key) => !allowed.has(key)) || input.listingType !== "buy_now") throw new HttpsError("invalid-argument", "Invalid fixed-price listing fields.");
   const title = requireString(input.title, "Title", 6, 80);
   const description = requireString(input.description, "Description", 20, 1200);
@@ -112,13 +129,12 @@ function parseFixedPayload(value: unknown, updating = false) {
   if (!ALLOWED_CATEGORIES.has(categoryId)) throw new HttpsError("invalid-argument", "Category is invalid.");
   const condition = requireString(input.condition, "Condition", 1, 20);
   if (!ALLOWED_CONDITIONS.has(condition)) throw new HttpsError("invalid-argument", "Condition is invalid.");
-  const location = requireString(input.location, "Location", 2, 120);
+  const publicLocation = requirePublicLocation(input.publicLocation);
+  const location = displayPublicLocation(publicLocation);
   const priceSen = ringgitToSen(input.price);
   if (priceSen === null) throw new HttpsError("invalid-argument", "Price must be positive MYR with no more than two decimal places.");
-  const latitude = optionalCoordinate(input.latitude, "Latitude");
-  const longitude = optionalCoordinate(input.longitude, "Longitude");
-  return { title, description, categoryId, condition, location, price: priceSen / 100,
-    ...(latitude === undefined ? {} : { latitude }), ...(longitude === undefined ? {} : { longitude }),
+  return { title, description, categoryId, condition, publicLocation, location, privacyVersion: 2, meetupLocationId: input.meetupLocationId,
+    price: priceSen / 100,
     locationKey: normalizeSearch(location), searchTokens: createSearchTokens(title), facetKeys: createFacetKeys(categoryId, condition, "buy_now", location), listingType: "buy_now" as const };
 }
 
@@ -143,7 +159,7 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
     let objectPath = "";
     try { objectPath = match ? decodeURIComponent(match[2]!) : ""; }
     catch { throw new HttpsError("invalid-argument", "A listing image URL is invalid."); }
-    if (!match || !allowedBuckets.has(match[1]!) || !objectPath.startsWith(`users/${uid}/listings/${listingId}/`) || paths.has(objectPath)) {
+    if (!match || !allowedBuckets.has(match[1]!) || !objectPath.startsWith(listingMediaPrefix(uid, listingId)) || paths.has(objectPath)) {
       throw new HttpsError("invalid-argument", "Listing images must belong to this listing.");
     }
     const bucket = getStorage().bucket(match[1]!);
@@ -165,9 +181,10 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
 export const createFixedListingDraft = onCall(async (request) => {
   const uid = requireUser(request);
   const content = parseFixedPayload(request.data);
+  const meetup = await selectedMeetup(uid, content.meetupLocationId);
   const ref = db.collection(LISTINGS).doc();
   const now = Timestamp.now();
-  await ref.create({ id: ref.id, sellerId: uid, ...content, imageUrls: [], status: "draft", createdAt: now, updatedAt: now });
+  await ref.create({ id: ref.id, sellerId: uid, ...content, ...meetup, imageUrls: [], status: "draft", createdAt: now, updatedAt: now });
   return { listingId: ref.id };
 });
 
@@ -188,6 +205,7 @@ export const publishFixedListing = onCall(async (request) => {
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
     if (data.listingType !== "buy_now" || data.status !== "draft") throw new HttpsError("failed-precondition", "This listing cannot be published.");
+    if (!publishableLocation(data) || data.privacyVersion !== 2) throw new HttpsError("failed-precondition", "Please add your general location before publishing.");
     tx.update(ref, { imageUrls, status: "active", updatedAt: Timestamp.now() });
   });
   return { listingId };
@@ -197,6 +215,7 @@ export const updateFixedListing = onCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   const content = parseFixedPayload(request.data, true);
+  const meetup = await selectedMeetup(uid, content.meetupLocationId);
   await requireFixedOwner(uid, listingId);
   const imageUrls = await verifyListingImages(uid, listingId, request.data?.imageUrls);
   const ref = db.collection(LISTINGS).doc(listingId);
@@ -205,22 +224,37 @@ export const updateFixedListing = onCall(async (request) => {
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
     if (data.listingType !== "buy_now" || !["draft", "active"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be edited.");
-    tx.update(ref, { ...content, imageUrls, updatedAt: Timestamp.now() });
+    tx.update(ref, { ...content, ...meetup, ...legacyPreciseFields, imageUrls, updatedAt: Timestamp.now() });
   });
   return { listingId };
 });
 
+// Cloud Run's browser preflight invoker binding is repaired separately by
+// scripts/repair-remove-fixed-listing-invoker.sh; callable auth remains required.
 export const removeFixedListing = onCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   const ref = db.collection(LISTINGS).doc(listingId);
-  await db.runTransaction(async (tx) => {
+  const imageUrls = await db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
-    if (data.listingType !== "buy_now" || !["draft", "active"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be removed.");
-    tx.update(ref, { status: "removed", updatedAt: Timestamp.now() });
+    if (data.listingType !== "buy_now" || !["draft", "active", "removed"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be removed.");
+    if (data.status !== "removed") tx.update(ref, { status: "removed", updatedAt: Timestamp.now() });
+    return data.imageUrls;
   });
+  const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || getApp().options.projectId;
+  if (!projectId) throw new HttpsError("internal", "Firebase project configuration is missing.");
+  const bucketNames = [`${projectId}.firebasestorage.app`];
+  if (Array.isArray(imageUrls) && imageUrls.some((value) => typeof value === "string" && value.includes(`/b/${projectId}.appspot.com/o/`))) {
+    bucketNames.push(`${projectId}.appspot.com`);
+  }
+  try {
+    for (const bucketName of bucketNames) await deleteListingMedia(getStorage().bucket(bucketName), uid, listingId);
+  } catch {
+    // A repeated owner call can complete cleanup after a transient Storage failure.
+    throw new HttpsError("internal", "The listing was removed, but its images could not be cleaned up. Please retry removal.");
+  }
   return { listingId, status: "removed" };
 });
 
@@ -230,14 +264,14 @@ function listingContent(input: ReturnType<typeof parseListingPayload>) {
     description: input.description,
     categoryId: input.categoryId,
     condition: input.condition,
-    location: input.location,
-    ...(input.latitude === undefined ? {} : { latitude: input.latitude }),
-    ...(input.longitude === undefined ? {} : { longitude: input.longitude }),
+    publicLocation: input.publicLocation,
+    location: displayPublicLocation(input.publicLocation),
+    privacyVersion: 2,
     price: input.startingBid / 100,
     listingType: "auction",
-    locationKey: normalizeSearch(input.location),
+    locationKey: normalizeSearch(displayPublicLocation(input.publicLocation)),
     searchTokens: createSearchTokens(input.title),
-    facetKeys: createFacetKeys(input.categoryId, input.condition, "auction", input.location),
+    facetKeys: createFacetKeys(input.categoryId, input.condition, "auction", displayPublicLocation(input.publicLocation)),
     startingBid: input.startingBid,
     minimumBidIncrement: input.minimumBidIncrement,
     auctionStartAt: Timestamp.fromDate(input.auctionStartAt),
@@ -257,12 +291,10 @@ function serializeAuction(data: DocumentData) {
   const date = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
   return {
     currentBid: Number(data.currentBid ?? 0),
-    currentBidderId: typeof data.currentBidderId === "string" ? data.currentBidderId : null,
     bidCount: Number(data.bidCount ?? 0),
     auctionStatus: data.auctionStatus,
     auctionStartAt: date(data.auctionStartAt),
     auctionEndAt: date(data.auctionEndAt),
-    winnerId: typeof data.winnerId === "string" ? data.winnerId : null,
     finalBid: Number.isSafeInteger(data.finalBid) ? data.finalBid : null,
     endedAt: date(data.endedAt),
   };
@@ -272,6 +304,7 @@ export const createAuctionListing = onCall(async (request) => {
   const uid = requireUser(request);
   const now = new Date();
   const input = parseListingPayload(request.data, now);
+  const meetup = await selectedMeetup(uid, input.meetupLocationId);
   const listingRef = db.collection(LISTINGS).doc();
   const timestamp = Timestamp.fromDate(now);
   const auctionStatus = input.auctionStartAt.getTime() <= now.getTime() ? "active" : "scheduled";
@@ -279,6 +312,7 @@ export const createAuctionListing = onCall(async (request) => {
     id: listingRef.id,
     sellerId: uid,
     ...listingContent(input),
+    ...meetup,
     imageUrls: [],
     status: "draft",
     currentBid: 0,
@@ -305,6 +339,7 @@ export const publishAuctionListing = onCall(async (request) => {
     const data = snapshot.data();
     requireAuctionOwner(data, uid);
     if (data?.status !== "draft" || data.bidCount !== 0) throw new HttpsError("failed-precondition", "This auction cannot be published.");
+    if (!publishableLocation(data) || data.privacyVersion !== 2) throw new HttpsError("failed-precondition", "Please add your general location before publishing.");
     const now = Timestamp.now();
     if (!(data.auctionEndAt instanceof Timestamp) || now.toMillis() >= data.auctionEndAt.toMillis()) {
       throw new HttpsError("failed-precondition", "This auction has already expired.");
@@ -321,6 +356,7 @@ export const updateAuctionListing = onCall(async (request) => {
   const payload = request.data as Record<string, unknown>;
   const listingId = requireId(payload?.listingId, "Listing ID");
   const input = parseListingPayload(payload, new Date());
+  const meetup = await selectedMeetup(uid, input.meetupLocationId);
   const imageUrls = await verifyListingImages(uid, listingId, payload.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
   await db.runTransaction(async (transaction) => {
@@ -331,7 +367,7 @@ export const updateAuctionListing = onCall(async (request) => {
     if (data?.auctionStatus !== "scheduled" || data.bidCount !== 0 || !(data.auctionStartAt instanceof Timestamp) || now.toMillis() >= data.auctionStartAt.toMillis()) {
       throw new HttpsError("failed-precondition", "Auction settings are locked after the auction starts.");
     }
-    transaction.update(listingRef, { ...listingContent(input), imageUrls, auctionStatus: "scheduled", updatedAt: now });
+    transaction.update(listingRef, { ...listingContent(input), ...meetup, ...legacyPreciseFields, imageUrls, auctionStatus: "scheduled", updatedAt: now });
   });
   return { listingId };
 });
@@ -497,6 +533,8 @@ export {
 } from "./engagement";
 
 export { getPublicSellerSummaries } from "./public-sellers";
+export { getPublicListingDetail, getAuctionViewerState, getMyListingHistory } from "./public-listings";
+export { getPublicListingPage } from "./public-listings";
 export { submitMarketplaceReport } from "./reports";
 export { openListingConversation, openTransactionConversation, getConversation, getConversations, getConversationMessages, sendConversationMessage, markConversationSeen, onTransactionConversationCreated } from "./messaging";
 
