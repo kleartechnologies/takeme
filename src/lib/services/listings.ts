@@ -224,9 +224,10 @@ export async function updateListing(id: string, input: ListingInput, orderedPhot
   if (errors.length) throw new Error(errors[0]);
 
   const uploaded = await uploadListingImages(services.user.uid, id, newFiles);
+  let imageUrls: string[] = [];
   try {
     let newIndex = 0;
-    const imageUrls = orderedPhotos.map((photo) => photo.existing ? photo.url : uploaded[newIndex++]?.url ?? "");
+    imageUrls = orderedPhotos.map((photo) => photo.existing ? photo.url : uploaded[newIndex++]?.url ?? "");
     if (input.listingType === "auction") await saveAuction(id, input, imageUrls);
     else await updateFixed(id, input, imageUrls);
   } catch (error) {
@@ -239,6 +240,17 @@ export async function updateListing(id: string, input: ListingInput, orderedPhot
     const objectRef = ref(services.storage, url);
     if (objectRef.fullPath.startsWith(`users/${services.user.uid}/listings/${id}/`)) await deleteObject(objectRef);
   }));
+  return imageUrls;
+}
+
+export async function publishExistingAuctionDraft(id: string, input: ListingInput, orderedPhotos: { url: string; existing: boolean; file?: File }[]) {
+  const services = requireServices();
+  const listing = await getListing(id);
+  if (!listing || listing.sellerId !== services.user.uid) throw new Error("You are not allowed to publish this auction.");
+  if (listing.listingType !== "auction" || listing.status !== "draft" || (listing.bidCount ?? 0) !== 0) throw new Error("This auction draft cannot be published.");
+  const imageUrls = await updateListing(id, input, orderedPhotos);
+  await publishAuction(id, imageUrls);
+  return id;
 }
 
 export async function deleteListing(id: string) {

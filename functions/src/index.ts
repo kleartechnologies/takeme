@@ -364,7 +364,10 @@ export const updateAuctionListing = onCall(async (request) => {
     const data = snapshot.data();
     requireAuctionOwner(data, uid);
     const now = Timestamp.now();
-    if (data?.auctionStatus !== "scheduled" || data.bidCount !== 0 || !(data.auctionStartAt instanceof Timestamp) || now.toMillis() >= data.auctionStartAt.toMillis()) {
+    const resumableDraft = data?.status === "draft" && data.auctionStatus === "scheduled" && data.bidCount === 0;
+    const editablePublishedAuction = data?.status === "active" && data.auctionStatus === "scheduled" && data.bidCount === 0
+      && data.auctionStartAt instanceof Timestamp && now.toMillis() < data.auctionStartAt.toMillis();
+    if (!resumableDraft && !editablePublishedAuction) {
       throw new HttpsError("failed-precondition", "Auction settings are locked after the auction starts.");
     }
     transaction.update(listingRef, { ...listingContent(input), ...meetup, ...legacyPreciseFields, imageUrls, auctionStatus: "scheduled", updatedAt: now });

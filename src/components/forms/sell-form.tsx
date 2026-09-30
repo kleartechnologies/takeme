@@ -13,7 +13,7 @@ import { formatPublicLocation, makePublicLocation, MALAYSIAN_STATES, parseLegacy
 import { getUserProfile, updatePublicProfile } from "@/lib/services/users";
 import { listMeetupLocations, type MeetupLocation } from "@/lib/services/locations";
 import Link from "next/link";
-import { createListing, updateListing } from "@/lib/services/listings";
+import { createListing, publishExistingAuctionDraft, updateListing } from "@/lib/services/listings";
 import { ListingImagePipelineError } from "@/lib/listing-image-upload";
 import type { Listing, ListingCondition, ListingInput, ListingType } from "@/types/marketplace";
 
@@ -50,6 +50,7 @@ function auctionDefaults() {
 }
 
 export function SellForm({ listing }: { listing?: Listing }) {
+  const auctionDraft = listing?.listingType === "auction" && listing.status === "draft";
   const router = useRouter();
   const { user, loading, configured } = useAuth();
   const defaults = useMemo<SellValues>(() => {
@@ -159,10 +160,13 @@ export function SellForm({ listing }: { listing?: Listing }) {
     } else {
       input = { title: values.title, description: values.description, categoryId: values.categoryId, condition: values.condition, price: Number(values.price), listingType: "buy_now", publicLocation, meetupLocationId: values.meetupLocationId || null };
     }
-    setBusy(true); setSubmitError(""); setProgress(listing ? "Saving changes…" : listingType === "auction" ? "Creating your secure auction…" : "Preparing your listing…");
+    setBusy(true); setSubmitError(""); setProgress(auctionDraft ? "Preparing your draft auction…" : listing ? "Saving changes…" : listingType === "auction" ? "Creating your secure auction…" : "Preparing your listing…");
     try {
       if (values.saveLocationToProfile) await updatePublicProfile({ displayName: profileName, location: formatPublicLocation(publicLocation) });
-      if (listing) {
+      if (auctionDraft && listing) {
+        await publishExistingAuctionDraft(listing.id, input, photos);
+        router.push(`/listings/${listing.id}?created=1`);
+      } else if (listing) {
         await updateListing(listing.id, input, photos);
         router.push(`/listings/${listing.id}?updated=1`);
       } else {
@@ -210,7 +214,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
           <div className="mt-5 border-t border-gray-100 pt-5"><h3 className="font-semibold">Meet-up (optional)</h3><p className="mt-1 text-xs leading-5 text-[var(--takeme-gray)]">Choose a place you explicitly saved. Your private address is not selected automatically.</p><select {...register("meetupLocationId")} className="mt-3 min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm"><option value="">No meet-up location on this listing</option>{meetups.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.area}, {item.state}</option>)}</select><Link href="/profile/locations" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[var(--takeme-dark-green)]">Add or manage meet-up locations →</Link></div>
         </Section>
       </div>
-      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Listing preview</p><div className="mt-3 overflow-hidden rounded-2xl border border-gray-200"><div className="relative aspect-[4/3] bg-stone-100">{photos[0] ? <Image src={photos[0].url} alt="Preview of your first listing photo" fill sizes="320px" className="object-cover" unoptimized={!photos[0].existing} /> : <div className="grid h-full place-items-center text-stone-400"><Camera size={32} /></div>}</div><div className="p-3"><p className="line-clamp-2 text-sm font-semibold">{preview.title?.trim() || "Your listing title"}</p><p className="mt-1 font-bold">{listingType === "auction" ? `Starting bid RM ${preview.startingBid || "0.00"}` : `RM ${preview.price || "0.00"}`}</p><p className="mt-1 truncate text-xs text-stone-500">{previewLocation ? formatPublicLocation(previewLocation) : "Choose your general area"}</p></div></div><h2 className="mt-5 text-lg font-bold">Ready to publish?</h2><ul className="mt-3 grid gap-2 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and general location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Publishing makes this item visible to buyers. {listingType === "auction" ? "Scheduled auctions accept bids only after they start." : "Checkout is not available yet."}</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
+      <aside className="h-fit rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-sm)] lg:sticky lg:top-24"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">Listing preview</p>{auctionDraft && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">This auction is an unpublished draft. Review its schedule and images before publishing.</p>}<div className="mt-3 overflow-hidden rounded-2xl border border-gray-200"><div className="relative aspect-[4/3] bg-stone-100">{photos[0] ? <Image src={photos[0].url} alt="Preview of your first listing photo" fill sizes="320px" className="object-cover" unoptimized={!photos[0].existing} /> : <div className="grid h-full place-items-center text-stone-400"><Camera size={32} /></div>}</div><div className="p-3"><p className="line-clamp-2 text-sm font-semibold">{preview.title?.trim() || "Your listing title"}</p><p className="mt-1 font-bold">{listingType === "auction" ? `Starting bid RM ${preview.startingBid || "0.00"}` : `RM ${preview.price || "0.00"}`}</p><p className="mt-1 truncate text-xs text-stone-500">{previewLocation ? formatPublicLocation(previewLocation) : "Choose your general area"}</p></div></div><h2 className="mt-5 text-lg font-bold">Ready to publish?</h2><ul className="mt-3 grid gap-2 text-sm leading-5 text-[var(--takeme-gray)]"><li>• Images are clear and belong to you</li><li>• Condition and defects are described honestly</li><li>• {listingType === "auction" ? "Auction timing and bid settings are accurate" : "Price and general location are accurate"}</li></ul><div className="mt-5 rounded-xl bg-gray-100 p-3 text-xs leading-5 text-[var(--takeme-gray)]">Publishing makes this item visible to buyers. {listingType === "auction" ? "Scheduled auctions accept bids only after they start." : "Checkout is not available yet."}</div>{submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold leading-5 text-red-700" role="alert">{submitError}</p>}{progress && <p className="mt-4 text-center text-xs font-semibold text-[var(--takeme-dark-green)]" role="status">{progress}</p>}<button disabled={busy} className="button-primary mt-5 h-12 w-full" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{auctionDraft ? "Publish draft auction" : listing ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing"}</button></aside>
     </form>
   );
 }
