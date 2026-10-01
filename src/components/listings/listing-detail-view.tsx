@@ -99,10 +99,10 @@ export function ListingDetailView({ id, created = false }: { id: string; created
         </section>
         <aside className="h-fit min-w-0 rounded-3xl border border-gray-200 bg-white p-5 shadow-[var(--takeme-shadow-md)] sm:p-7 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[var(--takeme-light-green)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">{isAuction ? "Auction" : "Fixed price"}</span><span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-[var(--takeme-gray)]">{listing.condition}</span></div>
-          <h1 className="mt-5 text-2xl font-bold leading-tight tracking-[-0.035em] sm:text-3xl">{listing.title}</h1>
-          <p className="mt-4 text-3xl font-bold tracking-tight text-[var(--takeme-charcoal)]">{displayAmount}</p>
+          <p className="mt-5 text-3xl font-bold tracking-tight text-[var(--takeme-dark-green)] sm:text-4xl">{displayAmount}</p>
           {isAuction && <p className="mt-1 text-xs font-semibold text-[var(--takeme-dark-green)]">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"}</p>}
-          <p className="mt-3 flex items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}</p>
+          <h1 className="mt-3 text-2xl font-bold leading-tight tracking-[-0.035em] sm:text-3xl">{listing.title}</h1>
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--takeme-gray)]"><MapPin size={17} className="text-[var(--takeme-dark-green)]" />{listing.location}<span aria-hidden="true" className="text-gray-300">·</span>{getCategoryName(listing.categoryId)}</p>
           {listing.meetupLocation && <div className="mt-4 rounded-xl bg-stone-50 p-3 text-sm"><p className="font-semibold">Meet-up</p><p>{listing.meetupLocation.name}</p><p className="text-[var(--takeme-gray)]">{listing.meetupLocation.area}, {listing.meetupLocation.state}</p></div>}
           {isAuction ? <AuctionPanel listing={listing} bids={bids} userId={user?.uid} owner={owner} /> : <ListingDealPanel listing={listing} userId={user?.uid} />}
           {owner && (!isAuction || auctionEditable) && <Link href={`/listings/${listing.id}/edit`} className="button-secondary mt-3 h-12 w-full">Edit your listing</Link>}

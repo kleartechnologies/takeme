@@ -51,8 +51,8 @@ export function Header() {
     <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
       <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>
       <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
-      {pathname === "/explore" && <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>}
-      <SearchForm hideOnMobile={pathname === "/explore"} />
+      <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
+      <SearchForm hideOnMobile />
       <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
         <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>
         <Link href="/for-you" className="nav-link" aria-current={pathname === "/for-you" ? "page" : undefined}>For You</Link>
@@ -63,8 +63,9 @@ export function Header() {
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
         {user && <button type="button" onClick={() => void logout()} aria-label="Sign out" className="icon-button"><LogOut size={18} /></button>}
       </nav>
-      <div className="-mr-1 shrink-0 lg:hidden"><Link href={accountHref} aria-label={user ? "Your profile" : "Log in"} className="icon-button"><UserRound size={20} /></Link></div>
+      <div className="-mr-1 flex shrink-0 items-center lg:hidden"><Link href="/saved" aria-label="Saved listings" className="icon-button"><Heart size={20} /></Link><Link href="/updates" aria-label={unreadCount ? `Updates, ${unreadCount} unread` : "Updates"} className="icon-button relative"><Bell size={20} />{unreadCount > 0 && <span className="absolute right-0 top-0 size-2.5 rounded-full bg-red-600" />}</Link></div>
     </div>
+    {pathname === "/" && <div className="page-shell pb-2 lg:hidden"><SearchForm /></div>}
     {open && <nav id="marketplace-menu" className="border-t border-gray-200 bg-white px-5 py-3 lg:hidden" aria-label="Mobile menu"><div className="mx-auto grid max-w-7xl gap-0.5">
       {menuLinks.map((link) => <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{link.label}</Link>)}
       <Link href={accountHref} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{user ? "My Listings" : "Log in or register"}</Link>

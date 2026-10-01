@@ -55,20 +55,20 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
     if (promotion) trackPromotionIntent("PROMOTION_CLICK", promotion, listing.id, promotionContext);
   };
   return (
-    <article ref={card} className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[var(--takeme-shadow-sm)] transition duration-300 hover:-translate-y-1 hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]">
+    <article ref={card} className="group flex h-full min-w-0 flex-col overflow-hidden rounded-[1.35rem] border border-[var(--takeme-border)] bg-white shadow-[var(--takeme-shadow-sm)] transition duration-300 hover:-translate-y-1 hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]">
       <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
         <Link href={`/listings/${listing.id}`} onClick={recordClick} aria-label={`View ${listing.title}`} className="relative block h-full w-full">
           {listing.imageUrls[0] && <Image src={listing.imageUrls[0]} alt={listing.title} fill sizes={sizes} loading={priority ? "eager" : "lazy"} className="object-cover transition duration-500 group-hover:scale-[1.04]" />}
         </Link>
         <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5 sm:left-3 sm:top-3">
-          <span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:text-[11px] ${isAuction ? "bg-[var(--takeme-dark-green)] text-white" : "bg-white/95 text-[var(--takeme-charcoal)]"}`}>{isAuction ? auctionLabel(listing) : "Fixed price"}</span>
+          <span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-wide shadow-sm sm:text-[11px] ${isAuction ? "bg-orange-600 text-white" : "bg-white/95 text-[var(--takeme-dark-green)]"}`}>{isAuction ? auctionLabel(listing) : "Fixed price"}</span>
           {promotion && <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/95 px-2 py-1 text-[9px] font-semibold text-[var(--takeme-dark-green)] sm:text-[11px]">{promotion.type === "featured" ? <Star size={11} /> : <Sparkles size={11} />}{promotion.type === "featured" ? "Featured · paid" : "Boosted · paid"}</span>}
         </div>
         <div className="absolute right-2 top-2 sm:right-3 sm:top-3"><SaveButton listingId={listing.id} initialSaved={initialSaved} onChange={onSavedChange} compact /></div>
       </div>
-      <Link href={`/listings/${listing.id}`} onClick={recordClick} className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-4">
+      <Link href={`/listings/${listing.id}`} onClick={recordClick} className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
         <p className="line-clamp-2 min-h-10 text-xs font-semibold leading-5 tracking-[-0.01em] text-[var(--takeme-charcoal)] sm:text-base">{listing.title}</p>
-        <p className="mt-1 text-base font-bold tracking-tight text-[var(--takeme-charcoal)] sm:text-lg">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}{isAuction && <span className="ml-1 text-[10px] font-medium text-[var(--takeme-gray)]">{(listing.bidCount ?? 0) > 0 ? "current bid" : "starting bid"}</span>}</p>
+        <p className="mt-1 text-base font-bold tracking-tight text-[var(--takeme-dark-green)] sm:text-xl">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}{isAuction && <span className="ml-1 text-[10px] font-medium text-[var(--takeme-gray)]">{(listing.bidCount ?? 0) > 0 ? "current bid" : "starting bid"}</span>}</p>
         {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
         <PublicSellerSummary uid={listing.sellerId} variant="card" />
         <div className="mt-auto flex items-center justify-between gap-1 pt-2 text-[10px] text-[var(--takeme-gray)] sm:gap-2 sm:pt-3 sm:text-xs">

@@ -16,6 +16,7 @@
   --takeme-shadow-md: 0 18px 44px rgb(31 41 55 / 0.09);
   --takeme-transition: 180ms ease;
   --takeme-touch-target: 2.75rem;
+  --takeme-space-section: clamp(1.5rem, 3vw, 2.5rem);
   --background: var(--takeme-off-white);
   --foreground: var(--takeme-charcoal);
 }
@@ -56,6 +57,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .button-secondary:hover { border-color: var(--takeme-green); background: var(--takeme-light-green); color: var(--takeme-dark-green); }
 .icon-button { display: grid; width: var(--takeme-touch-target); height: var(--takeme-touch-target); place-items: center; border-radius: 9999px; color: var(--takeme-gray); transition: var(--takeme-transition); cursor: pointer; }
 .icon-button:hover { background: var(--takeme-light-green); color: var(--takeme-dark-green); }
+.icon-button:disabled, .button-secondary:disabled { cursor: not-allowed; opacity: .5; }
+.surface-card { border: 1px solid var(--takeme-border); border-radius: var(--takeme-radius-lg); background: #fff; box-shadow: var(--takeme-shadow-sm); }
+.price-emphasis { color: var(--takeme-dark-green); font-weight: 700; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.status-pill { display: inline-flex; align-items: center; gap: .35rem; border-radius: 9999px; padding: .3rem .7rem; font-size: .7rem; font-weight: 600; line-height: 1.4; }
+.action-sheet { max-height: min(90dvh, 52rem); overscroll-behavior: contain; }
 
 .input-shell { display: flex; height: 3rem; align-items: center; gap: .65rem; border: 1px solid var(--takeme-border); border-radius: var(--takeme-radius-sm); background: #fff; padding-inline: .9rem; color: var(--takeme-gray); transition: var(--takeme-transition); }
 .input-shell:focus-within { border-color: var(--takeme-green); box-shadow: 0 0 0 3px rgb(0 200 83 / 0.12); }

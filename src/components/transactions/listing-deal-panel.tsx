@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { getListingDealState, respondToOffer, submitOffer } from "@/lib/services/transactions";
 import { ringgitToSen } from "@/lib/listing-validation";
 import { useCurrentTime } from "@/lib/use-current-time";
+import { ActionSheet } from "@/components/ui/action-sheet";
 import type { Listing, MarketplaceOffer, MarketplaceTransaction, PaymentMethod } from "@/types/marketplace";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" });
@@ -25,6 +26,7 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [offerOpen, setOfferOpen] = useState(false);
   const seller = userId === listing.sellerId;
 
   async function refresh() {
@@ -47,6 +49,7 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
       await submitOffer(listing.id, type, paymentMethod, sen ?? undefined);
       await refresh();
       setNotice("Request sent. No payment was taken and no transaction is complete.");
+      setOfferOpen(false);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not send your request."); }
     finally { setBusy(false); }
   }
@@ -75,18 +78,26 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
       </div></fieldset>
       <label className="form-field"><span>Agreed payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => void send("buy_now")} className="button-primary min-h-12 w-full px-4">Request at {money.format(listing.price)}</button>
-      <div className="flex gap-2"><label className="form-field min-w-0 flex-1"><span>Or make an offer (RM)</span><input type="number" inputMode="decimal" min="0.01" max={listing.price} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" /></label><button type="button" disabled={busy || !amount} onClick={() => void send("offer")} className="button-secondary min-h-12 self-end px-4">Send offer</button></div>
+      <button type="button" disabled={busy} onClick={() => { setError(""); setOfferOpen(true); }} className="button-secondary min-h-12 w-full px-4">Make an offer</button>
     </div>}
     {userId && !loading && seller && !offers.length && !transaction && <p className="mt-3 text-sm text-[var(--takeme-gray)]">No requests yet.</p>}
     <div className="mt-3 space-y-3">{offers.map((offer) => {
       const expired = now > 0 && new Date(offer.expiresAt).getTime() <= now;
       const open = !expired && ["submitted", "countered"].includes(offer.status);
-      return <div key={offer.id} className="rounded-xl border border-gray-200 bg-white p-3 text-sm"><p className="font-semibold">{offer.type === "buy_now" ? "Fixed-price request" : "Offer"} · {money.format(offer.quotedAmountSen / 100)}</p><p className="mt-1 text-xs text-[var(--takeme-gray)]">{expired && open ? "Expired" : offer.status.replaceAll("_", " ")} · {methods.find((item) => item.value === offer.paymentMethod)?.label ?? "Agreed outside TAKEME"}</p>
+      return <div key={offer.id} className="rounded-xl border border-gray-200 bg-white p-3 text-sm"><p className="font-semibold text-[var(--takeme-dark-green)]">{offer.type === "buy_now" ? "Fixed-price request" : "Offer"} · {money.format(offer.quotedAmountSen / 100)}</p><p className="mt-1 text-xs text-[var(--takeme-gray)]">{expired && ["submitted", "countered"].includes(offer.status) ? "Expired" : offer.status.replaceAll("_", " ")} · {methods.find((item) => item.value === offer.paymentMethod)?.label ?? "Agreed outside TAKEME"}</p>
         {open && seller && offer.status === "submitted" && <div className="mt-3 grid gap-2"><div className="flex gap-2"><button disabled={busy} onClick={() => void respond(offer.id, "accept")} className="button-primary min-h-11 flex-1 px-3">Accept deal</button><button disabled={busy} onClick={() => void respond(offer.id, "reject")} className="button-secondary min-h-11 flex-1 px-3">Reject</button></div>{offer.type === "offer" && <div className="flex gap-2"><input type="number" inputMode="decimal" min="0.01" step="0.01" value={counter} onChange={(event) => setCounter(event.target.value)} aria-label="Counter amount in ringgit" className="input-shell min-h-11 min-w-0 flex-1 px-3" placeholder="Counter RM" /><button disabled={busy || !counter} onClick={() => void respond(offer.id, "counter")} className="button-secondary min-h-11 px-3">Counter</button></div>}</div>}
         {open && !seller && <div className="mt-3 flex gap-2">{offer.status === "countered" && <button disabled={busy} onClick={() => void respond(offer.id, "accept")} className="button-primary min-h-11 flex-1 px-3">Accept counter</button>}<button disabled={busy} onClick={() => void respond(offer.id, "withdraw")} className="button-secondary min-h-11 flex-1 px-3">Withdraw</button></div>}
       </div>;
     })}</div>
     {notice && <p role="status" className="mt-3 text-sm text-[var(--takeme-dark-green)]">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+    {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><form onSubmit={(event) => { event.preventDefault(); if (!busy) void send("offer"); }} className="grid gap-4">
+      <div className="rounded-2xl bg-[var(--takeme-light-green)] p-4"><p className="text-xs text-[var(--takeme-gray)]">Listed price</p><p className="mt-1 text-2xl font-bold text-[var(--takeme-dark-green)]">{money.format(listing.price)}</p></div>
+      <label className="form-field"><span>Your offer (RM)</span><input required disabled={busy} type="number" inputMode="decimal" min="0.01" max={listing.price} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" /></label>
+      <label className="form-field"><span>Proposed payment method</span><select disabled={busy} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+      <p className="text-xs leading-6 text-[var(--takeme-gray)]">This sends a request to the seller. No payment is taken. An accepted offer is not a completed transaction.</p>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <button type="submit" disabled={busy || !amount} className="button-primary min-h-12 w-full">{busy ? "Sending…" : "Send offer"}</button>
+    </form></ActionSheet>}
   </section>;
 }

@@ -4,11 +4,15 @@ import test from "node:test";
 
 const source = (path: string) => readFileSync(path, "utf8");
 
-test("V1 discovery exposes supported tabs without a Free listing control", () => {
+test("V1 discovery exposes supported rails without a Free listing control", () => {
   const home = source("src/components/home/home-marketplace.tsx");
   const explore = source("src/components/listings/explore-browser.tsx");
-  assert.match(home, /type Tab = "top" \| "nearby" \| "auctions"/);
-  assert.match(home, /id: "top"[\s\S]*id: "nearby"[\s\S]*id: "auctions"/);
+  const page = source("src/app/page.tsx");
+  const endingSoon = source("src/components/home/ending-soon-marketplace.tsx");
+  assert.match(home, /Fresh Finds/);
+  assert.match(home, /Near You/);
+  assert.match(page, /<HomeMarketplace[\s\S]*<NearYouMarketplace[\s\S]*<EndingSoonMarketplace/);
+  assert.match(endingSoon, /auctionStatus: "active"/);
   assert.doesNotMatch(home, /id: "free"|tab === "free"|Free Items/);
   assert.match(explore, /All listing types/);
   assert.match(explore, /Fixed price/);

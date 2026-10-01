@@ -7,6 +7,7 @@ import { getMinimumNextBid, ringgitToSen, senToRinggit } from "@/lib/listing-val
 import { cancelAuctionListing, getAuctionViewerState, placeAuctionBid, type AuctionViewerState } from "@/lib/services/auctions";
 import type { PublicAuctionBid } from "@/lib/services/listings";
 import { useCurrentTime } from "@/lib/use-current-time";
+import { ActionSheet } from "@/components/ui/action-sheet";
 import type { AuctionStatus, Listing } from "@/types/marketplace";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57,6 +58,7 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [bidOpen, setBidOpen] = useState(false);
   const status = effectiveStatus(listing, now);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
     try {
       const result = await placeAuctionBid(listing.id, amountSen);
       setMessage(`Bid accepted at ${formatSen(result.currentBid)}.`);
+      setBidOpen(false);
       setAmount(senToRinggit(result.currentBid + (listing.minimumBidIncrement ?? 0)));
       if (userId) getAuctionViewerState(listing.id).then((state) => setViewerResponse({ uid: userId, state })).catch(() => undefined);
     } catch (nextError) {
@@ -101,7 +104,7 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
   const target = status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt;
 
   return <div className="mt-6 grid gap-5">
-    <div className="rounded-2xl bg-[var(--takeme-charcoal)] p-5 text-white">
+    <div className="rounded-2xl bg-[linear-gradient(125deg,var(--takeme-charcoal),var(--takeme-dark-green))] p-5 text-white">
       <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-white/65">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
       <p className="mt-3 font-mono text-2xl font-bold tracking-tight">{status === "cancelled" ? "Cancelled" : status === "ended" ? "Ended" : countdown(target, now)}</p>
       <p className="mt-2 text-xs text-white/65">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
@@ -109,7 +112,15 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
 
     <div className="grid grid-cols-2 gap-3"><Metric label={(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Bids" value={String(listing.bidCount ?? 0)} /></div>
 
-    {status === "active" && !owner && userId && <form onSubmit={submitBid} className="rounded-2xl border border-[var(--takeme-green)]/25 bg-[var(--takeme-light-green)] p-4"><label className="form-field"><span>Your bid (RM)</span><input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" type="number" min="0.01" step="0.01" aria-invalid={Boolean(inputError)} /></label><p className="mt-2 text-xs text-[var(--takeme-gray)]">Minimum next bid: <strong className="text-[var(--takeme-dark-green)]">{formatSen(minimum)}</strong></p>{inputError && <p className="field-error mt-2">{inputError}</p>}<button disabled={busy || Boolean(inputError) || !amount} className="button-primary mt-4 h-11 w-full" type="submit">{busy ? <LoaderCircle size={17} className="animate-spin" /> : <Gavel size={17} />} Place Bid</button></form>}
+    {status === "active" && !owner && userId && <button type="button" onClick={() => { setError(""); setAmount(senToRinggit(minimum)); setBidOpen(true); }} className="button-primary min-h-12 w-full"><Gavel size={18} /> Place bid</button>}
+    {bidOpen && status === "active" && !owner && userId && <ActionSheet title="Place your bid" description={listing.title} busy={busy} onClose={() => setBidOpen(false)}><form onSubmit={submitBid}>
+      <div className="mb-5 grid grid-cols-2 gap-3"><Metric label="Current / starting bid" value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Minimum next bid" value={formatSen(minimum)} /></div>
+      <label className="form-field"><span>Your bid (RM)</span><input disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" type="number" min={minimum / 100} step="0.01" aria-invalid={Boolean(inputError)} aria-describedby="bid-amount-feedback" /></label>
+      <p id="bid-amount-feedback" className={inputError ? "field-error mt-2" : "mt-2 text-xs text-[var(--takeme-gray)]"}>{inputError || `Bid increment: ${formatSen(listing.minimumBidIncrement ?? 0)}. Server validation controls acceptance.`}</p>
+      {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <p className="mt-5 text-xs leading-6 text-[var(--takeme-gray)]">Placing a bid does not take payment. A winning auction uses the existing standard settlement flow.</p>
+      <button disabled={busy || Boolean(inputError) || !amount} className="button-primary mt-4 min-h-12 w-full" type="submit">{busy ? <LoaderCircle size={17} className="animate-spin" /> : <Gavel size={17} />} Confirm bid{amountSen ? ` — ${formatSen(amountSen)}` : ""}</button>
+    </form></ActionSheet>}
 
     {status === "active" && !userId && !owner && <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm"><p className="font-semibold">Ready to bid?</p><p className="mt-1 text-[var(--takeme-gray)]">Sign in first so the server can securely verify your bid.</p><Link href={`/login?next=/listings/${listing.id}`} className="button-primary mt-4 min-h-11 px-4">Log in to bid</Link></div>}
     {owner && status === "active" && <Notice icon={<ShieldCheck size={18} />} text={(listing.bidCount ?? 0) > 0 ? "You cannot bid on your own auction, and it can no longer be cancelled because bidding has started." : "You cannot bid on your own auction. You may cancel it while it has no bids."} />}
@@ -128,5 +139,5 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-200 p-3"><p className="text-xs font-medium text-[var(--takeme-gray)]">{label}</p><p className="mt-1 font-bold">{value}</p></div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-[var(--takeme-shadow-sm)]"><p className="text-xs font-medium text-[var(--takeme-gray)]">{label}</p><p className="mt-1 text-lg font-bold text-[var(--takeme-dark-green)]">{value}</p></div>; }
 function Notice({ icon, text }: { icon: React.ReactNode; text: string }) { return <p className="flex gap-2 rounded-xl bg-gray-50 p-3 text-sm leading-6 text-[var(--takeme-gray)]"><span className="mt-0.5 shrink-0 text-[var(--takeme-dark-green)]">{icon}</span>{text}</p>; }
