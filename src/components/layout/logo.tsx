@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/" className="inline-flex shrink-0 items-center" aria-label="TAKEME home">
+    <Link href="/" className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center" aria-label="TAKEME home">
       <Image
         src="/brand/takeme-app-icon.png"
         alt="TAKEME"

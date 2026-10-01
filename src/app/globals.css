@@ -5,7 +5,7 @@
   --takeme-dark-green: #006233;
   --takeme-light-green: #e8f5e9;
   --takeme-charcoal: #1f2937;
-  --takeme-gray: #6b7280;
+  --takeme-gray: #626975;
   --takeme-off-white: #fafafa;
   --takeme-border: #e5e7eb;
   --takeme-radius-sm: 0.75rem;
@@ -38,7 +38,7 @@ body {
 }
 button, a, input, select, textarea { outline-color: var(--takeme-green); }
 button, a { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 3px solid color-mix(in srgb, var(--takeme-green) 45%, transparent); outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--takeme-dark-green); outline-offset: 3px; }
 
 .page-shell { width: min(100% - 2rem, 80rem); margin-inline: auto; }
 .page-title { font-size: clamp(2rem, 5vw, 3.75rem); font-weight: 700; line-height: 1.04; letter-spacing: -0.045em; }
@@ -72,6 +72,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .form-field > input, .form-field > select, .form-field > textarea { width: 100%; min-height: 2.875rem; border: 1px solid var(--takeme-border); border-radius: var(--takeme-radius-sm); background: #fff; padding: .75rem .85rem; color: var(--takeme-charcoal); font-size: .9rem; font-weight: 400; outline: none; transition: var(--takeme-transition); }
 .form-field > textarea { min-height: 8rem; resize: vertical; }
 .form-field > input:focus, .form-field > select:focus, .form-field > textarea:focus { border-color: var(--takeme-green); box-shadow: 0 0 0 3px rgb(0 200 83 / 0.12); }
+.input-shell input:focus-visible, .form-field > input:focus-visible, .form-field > select:focus-visible, .form-field > textarea:focus-visible { outline: 3px solid var(--takeme-dark-green); outline-offset: 3px; }
 .field-error { font-size: .75rem; color: #b91c1c; font-weight: 500; }
 
 .banner-track { scrollbar-width: none; }

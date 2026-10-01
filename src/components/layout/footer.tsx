@@ -17,7 +17,7 @@ export function Footer() {
         </div>
         <div>
           <p className="text-sm font-bold text-white">Marketplace</p>
-          <div className="mt-3 grid gap-2 text-sm"><Link href="/explore">Explore</Link><Link href="/sell">Sell an item</Link><Link href="/profile">Your profile</Link><Link href="/help/tiers">How tiers work</Link></div>
+          <div className="mt-3 grid gap-2 text-sm [&>a]:flex [&>a]:min-h-11 [&>a]:items-center"><Link href="/explore">Explore</Link><Link href="/sell">Sell an item</Link><Link href="/profile">Your profile</Link><Link href="/help/tiers">How tiers work</Link></div>
         </div>
         <div>
           <p className="text-sm font-bold text-white">Marketplace status</p>

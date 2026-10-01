@@ -16,7 +16,7 @@ function formatSen(value: number) {
   return money.format(value / 100);
 }
 
-function effectiveStatus(listing: Listing, now: number): AuctionStatus {
+export function effectiveStatus(listing: Listing, now: number): AuctionStatus {
   if (listing.auctionStatus === "cancelled" || listing.auctionStatus === "ended") return listing.auctionStatus;
   if (now === 0) return listing.auctionStatus ?? "scheduled";
   if (listing.auctionEndAt && now >= new Date(listing.auctionEndAt).getTime()) return "ended";
@@ -102,12 +102,15 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
   const outbid = Boolean(userId && viewer?.isOutbid);
   const hasWinner = (listing.bidCount ?? 0) > 0 && status === "ended";
   const target = status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt;
+  const emptyBidHistory = status === "ended" || status === "cancelled"
+    ? "No bids were placed."
+    : "No bids yet. The first valid bid can meet the starting bid.";
 
   return <div className="mt-6 grid gap-5">
     <div className="rounded-2xl bg-[linear-gradient(125deg,var(--takeme-charcoal),var(--takeme-dark-green))] p-5 text-white">
-      <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-white/65">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
+      <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
       <p className="mt-3 font-mono text-2xl font-bold tracking-tight">{status === "cancelled" ? "Cancelled" : status === "ended" ? "Ended" : countdown(target, now)}</p>
-      <p className="mt-2 text-xs text-white/65">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
+      <p className="mt-2 text-xs text-white/80">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
     </div>
 
     <div className="grid grid-cols-2 gap-3"><Metric label={(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Bids" value={String(listing.bidCount ?? 0)} /></div>
@@ -125,8 +128,8 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
     {status === "active" && !userId && !owner && <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm"><p className="font-semibold">Ready to bid?</p><p className="mt-1 text-[var(--takeme-gray)]">Sign in first so the server can securely verify your bid.</p><Link href={`/login?next=/listings/${listing.id}`} className="button-primary mt-4 min-h-11 px-4">Log in to bid</Link></div>}
     {owner && status === "active" && <Notice icon={<ShieldCheck size={18} />} text={(listing.bidCount ?? 0) > 0 ? "You cannot bid on your own auction, and it can no longer be cancelled because bidding has started." : "You cannot bid on your own auction. You may cancel it while it has no bids."} />}
     {status === "scheduled" && <Notice icon={<Clock3 size={18} />} text={`Bidding opens ${new Date(listing.auctionStartAt!).toLocaleString("en-MY")}.`} />}
-    {highest && status === "active" && <Notice icon={<Trophy size={18} />} text="You are currently the highest bidder." />}
-    {outbid && status === "active" && <Notice icon={<Gavel size={18} />} text="You have been outbid. Place at least the minimum next bid to compete again." />}
+    {highest && status === "active" && <Notice tone="success" icon={<Trophy size={18} />} text="You are currently the highest bidder." />}
+    {outbid && status === "active" && <Notice tone="warning" icon={<Gavel size={18} />} text="You have been outbid. Place at least the minimum next bid to compete again." />}
     {status === "ended" && <Notice icon={<Trophy size={18} />} text={!hasWinner ? "This auction ended without any bids." : userId && viewer?.isWinner ? `You won at ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : owner ? `The auction ended with a final bid of ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : "This auction has ended with a winning bidder."} />}
     {status === "ended" && userId && viewer?.transactionId && <Link href={`/transactions/${viewer.transactionId}`} className="button-primary min-h-11 w-full px-4">View auction transaction</Link>}
     {status === "cancelled" && <Notice icon={<ShieldCheck size={18} />} text="The seller cancelled this auction before a valid winning result was recorded." />}
@@ -135,9 +138,9 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
     {message && <p className="rounded-xl bg-[var(--takeme-light-green)] p-3 text-sm font-semibold text-[var(--takeme-dark-green)]" role="status">{message}</p>}
     {error && <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{error}</p>}
 
-    <section className="border-t border-gray-100 pt-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Bid history</h2><span className="text-xs text-[var(--takeme-gray)]">Latest 25</span></div>{bids.length ? <div className="grid gap-2">{bids.map((bid, index) => <div key={`${bid.createdAt}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 text-sm"><span className="font-medium">{bid.isOwnBid ? "You" : "Bidder"}</span><span className="ml-auto font-bold">{formatSen(bid.amount)}</span><span className="w-16 text-right text-xs text-[var(--takeme-gray)]">{relativeTime(bid.createdAt, now)}</span></div>)}</div> : <p className="rounded-xl bg-gray-50 p-4 text-sm text-[var(--takeme-gray)]">No bids yet. The first valid bid can meet the starting bid.</p>}</section>
+    <section className="border-t border-gray-100 pt-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Bid history</h2><span className="text-xs text-[var(--takeme-gray)]">Latest 25</span></div>{bids.length ? <div className="grid gap-2">{bids.map((bid, index) => <div key={`${bid.createdAt}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 text-sm"><span className="font-medium">{bid.isOwnBid ? "You" : "Bidder"}</span><span className="ml-auto font-bold">{formatSen(bid.amount)}</span><span className="w-16 text-right text-xs text-[var(--takeme-gray)]">{relativeTime(bid.createdAt, now)}</span></div>)}</div> : <p className="rounded-xl bg-gray-50 p-4 text-sm text-[var(--takeme-gray)]">{emptyBidHistory}</p>}</section>
   </div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-[var(--takeme-shadow-sm)]"><p className="text-xs font-medium text-[var(--takeme-gray)]">{label}</p><p className="mt-1 text-lg font-bold text-[var(--takeme-dark-green)]">{value}</p></div>; }
-function Notice({ icon, text }: { icon: React.ReactNode; text: string }) { return <p className="flex gap-2 rounded-xl bg-gray-50 p-3 text-sm leading-6 text-[var(--takeme-gray)]"><span className="mt-0.5 shrink-0 text-[var(--takeme-dark-green)]">{icon}</span>{text}</p>; }
+function Notice({ icon, text, tone = "neutral" }: { icon: React.ReactNode; text: string; tone?: "neutral" | "success" | "warning" }) { return <p role="status" className={`flex gap-3 rounded-2xl p-4 text-sm leading-6 ${tone === "success" ? "bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]" : tone === "warning" ? "bg-amber-50 text-amber-900" : "bg-gray-50 text-[var(--takeme-gray)]"}`}><span aria-hidden="true" className="mt-0.5 shrink-0">{icon}</span>{text}</p>; }

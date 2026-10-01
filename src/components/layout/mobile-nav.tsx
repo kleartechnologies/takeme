@@ -20,7 +20,7 @@ export function MobileNav() {
       <div className="mx-auto grid max-w-lg grid-cols-5">
         {items.map(({ href, label, icon: Icon, featured }) => {
           const active = pathname === href || (href === "/explore" && pathname.startsWith("/listings/"));
-          const content = <><span className={featured ? "grid size-14 place-items-center rounded-full bg-[var(--takeme-green)] text-white shadow-[0_8px_20px_rgb(0_200_83_/_0.28)]" : "grid size-7 place-items-center"}><Icon size={featured ? 27 : 20} strokeWidth={featured ? 2.5 : 2} /></span><span>{label}</span></>;
+          const content = <><span className={featured ? "grid size-14 place-items-center rounded-full bg-[var(--takeme-green)] text-[var(--takeme-charcoal)] shadow-[0_8px_20px_rgb(0_200_83_/_0.28)]" : "grid size-7 place-items-center"}><Icon size={featured ? 27 : 20} strokeWidth={featured ? 2.5 : 2} /></span><span>{label}</span></>;
           const className = `flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold min-[375px]:text-[11px] ${featured ? "-mt-6" : ""} ${active ? "text-[var(--takeme-dark-green)]" : "text-[var(--takeme-gray)]"}`;
           return <Link key={label} href={href} aria-current={active ? "page" : undefined} className={className}>{content}</Link>;
         })}

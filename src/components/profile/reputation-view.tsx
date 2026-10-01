@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { ShoppingBag, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getPublicReviews, getReputationPolicy, reportPublicReview, type ReputationPolicy } from "@/lib/services/transactions";
@@ -45,10 +46,11 @@ export function ReputationView({ uid, compact = false, initialSummary, publicSel
     try { await reportPublicReview(reviewId, reason, details); setReportNotice("Review report submitted for moderation."); setReporting(""); setDetails(""); }
     catch { setReportNotice("Could not submit the report. Please try again."); }
   }
-  if (loading) return <div className="mt-6 min-h-28 animate-pulse rounded-2xl bg-stone-100" />;
-  if (error || !policy || (publicSellerOnly && !summary)) return <div className="mt-6"><p className="text-sm text-[var(--takeme-gray)]">{error || "Reputation is unavailable."}</p><button type="button" className="button-secondary mt-3 min-h-11 px-4" onClick={() => { if (publicSellerOnly) clearPublicSellerSummaryCache(); setRetry((value) => value + 1); }}>Retry</button></div>;
+  if (loading) return <div role="status" aria-label="Loading reputation" className="mt-6 min-h-28 animate-pulse rounded-3xl bg-[var(--takeme-light-green)]"><span className="sr-only">Loading reputation…</span></div>;
+  if (error || !policy || (publicSellerOnly && !summary)) return <div className="surface-card mt-6 p-5"><p role="alert" className="text-sm text-[var(--takeme-gray)]">{error || "Reputation is unavailable."}</p><button type="button" className="button-secondary mt-3 min-h-11 px-4" onClick={() => { if (publicSellerOnly) clearPublicSellerSummaryCache(); setRetry((value) => value + 1); }}>Retry reputation</button></div>;
   return <section className="mt-7" aria-label="Marketplace reputation">
     {!compact && <div className="mb-4"><h2 className="text-xl font-bold">{publicSellerOnly ? "Seller reputation" : "Marketplace reputation"}</h2><p className="mt-1 text-xs text-[var(--takeme-gray)]">{publicSellerOnly ? "Based on confirmed sales and published buyer reviews." : "Buyer and seller activity are separate. Only mutually confirmed completed transactions count."}</p></div>}
+    {!publicSellerOnly && !compact && <p className="mb-4 rounded-2xl bg-[var(--takeme-light-green)] p-4 text-xs leading-6 text-[var(--takeme-dark-green)]">Your private reputation dashboard. Purchases and sales earn separate credit; public seller profiles show seller trust only.</p>}
     <div className={`grid gap-3 ${compact || publicSellerOnly ? "" : "md:grid-cols-2"}`}>{!publicSellerOnly && <RoleCard role="buyer" data={summary?.buyer} policy={policy} compact={compact} />}<RoleCard role="seller" data={summary?.seller} policy={policy} compact={compact} /></div>
     {!compact && <><Link href="/help/tiers" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">How TAKEME tiers work</Link>
       <div className="mt-5"><h3 className="text-lg font-bold">Published reviews</h3><p className="mt-1 text-xs text-[var(--takeme-gray)]">Reviews appear after both parties submit or the review window closes.</p>
@@ -67,8 +69,8 @@ function RoleCard({ role, data, policy, compact }: { role: "buyer" | "seller"; d
   const nextTier = tiers.find((item) => count < policy.thresholds[item]);
   const nextThreshold = nextTier ? policy.thresholds[nextTier] : policy.thresholds.platinum;
   const percent = nextTier ? Math.max(0, Math.min(100, (count - currentThreshold) / (nextThreshold - currentThreshold) * 100)) : 100;
-  return <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4"><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--takeme-gray)]">{role} reputation</p><p className="mt-1 font-bold capitalize">{tier ? `${tier} ${role}` : `No ${role} tier yet`}</p></div>{tier && <Image src={`/brand/tiers/${tier}.png`} alt={`${tier} tier badge`} width={110} height={44} className="h-11 w-auto max-w-[110px] object-contain" />}</div>
-    <p className="mt-2 text-sm">{count} completed {role === "buyer" ? "purchases" : "sales"}{data?.reviewCount ? ` · ${data.averageRating?.toFixed(1) ?? "—"} ★ from ${data.reviewCount} reviews` : " · No ratings yet"}</p>
+  return <div className="surface-card min-w-0 overflow-hidden p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--takeme-dark-green)]">{role === "buyer" ? <ShoppingBag size={17} aria-hidden="true" /> : <Store size={17} aria-hidden="true" />}{role} reputation</p><p className="mt-2 text-lg font-bold capitalize">{tier ? `${tier} ${role}` : `No ${role} tier yet`}</p></div>{tier && <Image src={`/brand/tiers/${tier}.png`} alt={`${tier} tier badge`} width={110} height={44} className="h-11 w-auto max-w-[110px] object-contain" />}</div>
+    <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-[var(--takeme-light-green)] p-3"><p className="text-2xl font-bold text-[var(--takeme-dark-green)]">{count}</p><p className="mt-1 text-xs text-[var(--takeme-gray)]">Completed {role === "buyer" ? "purchases" : "sales"}</p></div><div className="rounded-2xl bg-stone-50 p-3"><p className="text-2xl font-bold">{data?.reviewCount ? `${data.averageRating?.toFixed(1) ?? "—"} ★` : "—"}</p><p className="mt-1 text-xs text-[var(--takeme-gray)]">{data?.reviewCount ? `${data.reviewCount} published reviews` : "No ratings yet"}</p></div></div>
     {!compact && <><div className="mt-4 flex justify-between gap-2 text-xs font-semibold capitalize"><span>{tier ?? "Start"}</span><span>{nextTier ?? "Platinum"}</span></div><div role="progressbar" aria-label={`${role} tier progress`} aria-valuemin={currentThreshold} aria-valuemax={nextThreshold} aria-valuenow={Math.min(count, nextThreshold)} className="mt-2 h-2.5 overflow-hidden rounded-full bg-stone-200"><div className="h-full rounded-full bg-[var(--takeme-green)]" style={{ width: `${percent}%` }} /></div><p className="mt-2 text-xs text-[var(--takeme-gray)]">{nextTier ? `${count} / ${nextThreshold} · ${nextThreshold - count} more completed ${role === "buyer" ? "purchases" : "sales"} to ${nextTier}` : `${count} completed ${role === "buyer" ? "purchases" : "sales"} · Highest current tier`}</p></>}
   </div>;
 }

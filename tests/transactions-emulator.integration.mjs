@@ -79,8 +79,16 @@ await assert.rejects(() => setDoc(doc(buyer.db, `transactions/${transactionId}/r
 await assert.rejects(() => call(buyer, "submitTransactionReview", { transactionId, rating: 5, tags: [], comment: "" }), /complete|window/i);
 await assert.rejects(() => call(outsider, "confirmTransactionCompletion", { transactionId }), /not yours|permission/i);
 
-const confirmations = await Promise.all([call(buyer, "confirmTransactionCompletion", { transactionId }), call(seller, "confirmTransactionCompletion", { transactionId })]);
-assert.ok(confirmations.some((result) => result.status === "completed"));
+const buyerConfirmation = await call(buyer, "confirmTransactionCompletion", { transactionId });
+assert.equal(buyerConfirmation.status, "in_progress");
+assert.ok((await transactionRef.get()).data().buyerConfirmedAt);
+assert.equal((await transactionRef.get()).data().sellerConfirmedAt, null);
+assert.equal((await transactionRef.get()).data().status, "in_progress");
+assert.equal((await admin.doc(`trustSummaries/${buyer.uid}`).get()).data()?.buyer?.completedCount ?? 0, 0);
+assert.equal((await admin.doc(`trustSummaries/${seller.uid}`).get()).data()?.seller?.completedCount ?? 0, 0);
+await assert.rejects(() => call(buyer, "submitTransactionReview", { transactionId, rating: 5, tags: [], comment: "Too early" }), /complete|window/i);
+const sellerConfirmation = await call(seller, "confirmTransactionCompletion", { transactionId });
+assert.equal(sellerConfirmation.status, "completed");
 assert.equal((await transactionRef.get()).data().status, "completed");
 assert.equal((await call(buyer, "confirmTransactionCompletion", { transactionId })).alreadyConfirmed, true);
 assert.equal((await admin.doc(`trustSummaries/${buyer.uid}`).get()).data().buyer.completedCount, 1);

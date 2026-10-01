@@ -50,14 +50,14 @@ export function Header() {
   return <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl">
     <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
       <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>
-      <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
-      <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
+      <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="inline-flex min-h-11 items-center text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
+      <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="inline-flex min-h-11 items-center truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
       <SearchForm hideOnMobile />
       <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
         <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>
         <Link href="/for-you" className="nav-link" aria-current={pathname === "/for-you" ? "page" : undefined}>For You</Link>
         <Link href="/saved" className="icon-button" aria-label="Saved listings" aria-current={pathname === "/saved" ? "page" : undefined}><Heart size={20} /></Link>
-        <Link href="/sell" className="button-primary h-10 px-5">Sell</Link>
+        <Link href="/sell" className="button-primary min-h-11 px-5">Sell</Link>
         <Link href="/updates" className="icon-button relative" aria-label={unreadCount ? `Updates, ${unreadCount} unread` : "Updates"} aria-current={pathname === "/updates" ? "page" : undefined}><Bell size={19} />{unreadCount > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-700 px-1 text-[10px] leading-5 text-white">{unreadCount > 99 ? "99+" : unreadCount}</span>}</Link>
         <Link href="/messages" className="icon-button" aria-label="Messages" aria-current={pathname.startsWith("/messages") ? "page" : undefined}><MessageSquare size={19} /></Link>
         <Link href={accountHref} aria-label={user ? "Me, your profile" : "Me, log in"} className="icon-button"><UserRound size={20} /></Link>
