@@ -28,7 +28,7 @@
 .error { background: #fef2f2; color: #b91c1c; border-radius: 12px; padding: 10px 12px; font-size: 12px; }
 .conversation { height: calc(100dvh - 60px - env(safe-area-inset-bottom)); min-height: 420px; display: flex; flex-direction: column; background: #f7f8f6; }
 .chatHeader { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-height: 66px; background: white; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
-.identity { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.identity { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 10px; }
 .avatar { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #e8f5e9; color: var(--takeme-dark-green); overflow: hidden; flex-shrink: 0; }
 .identity strong { display: flex; align-items: center; gap: 4px; font-size: 14px; }
 .identity small { display: block; color: var(--takeme-gray); font-size: 10px; margin-top: 2px; }

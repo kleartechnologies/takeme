@@ -46,6 +46,8 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
   const alive = useRef(true), sendRequest = useRef(false), olderRequest = useRef(false);
   const pendingRefresh = useRef<Promise<void> | null>(null);
   const history = useRef<HTMLElement>(null);
+  const composer = useRef<HTMLFormElement>(null);
+  const restoreComposerFocus = useRef(false);
   const followBottom = useRef(true);
   const loadedOlder = useRef(false);
   const fetchCurrent = useCallback(async () => {
@@ -92,6 +94,12 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
     return () => { alive.current = false; clearInterval(interval); document.removeEventListener("visibilitychange", update); };
   }, [refresh]);
   useEffect(() => { if (followBottom.current && history.current) history.current.scrollTop = history.current.scrollHeight; }, [messages, offers, transaction]);
+  useEffect(() => {
+    if (!sending && restoreComposerFocus.current) {
+      restoreComposerFocus.current = false;
+      if (document.activeElement === document.body) composer.current?.querySelector<HTMLTextAreaElement>("textarea:not([disabled])")?.focus();
+    }
+  }, [sending]);
   async function older() {
     if (!cursor || olderRequest.current) return;
     olderRequest.current = true; setOlderBusy(true); followBottom.current = false;
@@ -106,6 +114,7 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
   }
   async function send() {
     if (!body.trim() || sendRequest.current || conversation?.status === "closed") return;
+    restoreComposerFocus.current = Boolean(composer.current?.contains(document.activeElement));
     sendRequest.current = true; setSending(true); setError("");
     try { await sendConversationMessage(id, body); if (!alive.current) return; setBody(""); followBottom.current = true; await refresh(); }
     catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Message could not be sent."); }
@@ -130,7 +139,7 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
     <div className={styles.chatBottom}>
       {error && <div role="alert" className={styles.error}>{error}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div>}
       {dealError ? <div role="alert" className={styles.error}>{dealError}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div> : <ConversationDeals {...dealProps} placement="actions" />}
-      <form className={styles.composer} onSubmit={(event) => { event.preventDefault(); void send(); }}><label className="sr-only" htmlFor="message-body">Your message</label><textarea id="message-body" value={body} disabled={sending || conversation.status === "closed"} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={1} placeholder={conversation.status === "closed" ? "Conversation closed" : "Type a message…"} /><button type="submit" disabled={sending || !body.trim() || conversation.status === "closed"} aria-label={sending ? "Sending message" : "Send message"} className={styles.send}><Send size={21} /></button></form>
+      <form ref={composer} className={styles.composer} onSubmit={(event) => { event.preventDefault(); void send(); }}><label className="sr-only" htmlFor="message-body">Your message</label><textarea id="message-body" value={body} disabled={sending || conversation.status === "closed"} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={1} placeholder={conversation.status === "closed" ? "Conversation closed" : "Type a message…"} /><button type="submit" disabled={sending || !body.trim() || conversation.status === "closed"} aria-label={sending ? "Sending message" : "Send message"} className={styles.send}><Send size={21} /></button></form>
       <p className={styles.composerNote}>{sending ? "Sending…" : `${body.length}/2000`}</p>
     </div>
     {menu && <ActionSheet title="Conversation options" description="Only public identity and participant-scoped deal information are shown." onClose={() => setMenu(false)}><div className="grid gap-2"><Link href={`/sellers/${conversation.otherId}`} className="button-secondary min-h-11">View public profile</Link><Link href={`/listings/${conversation.listingId}`} className="button-secondary min-h-11">View listing</Link>{transaction && <Link href={`/transactions/${transaction.id}`} className="button-secondary min-h-11">View Deal</Link>}<ReportAction targetType="conversation" targetId={id} label="Report conversation" /><ReportAction targetType="user" targetId={conversation.otherId} label="Report user" /><p className="text-xs leading-6 text-[var(--takeme-gray)]">Never share passwords or verification codes. Use Report if something feels wrong.</p></div></ActionSheet>}

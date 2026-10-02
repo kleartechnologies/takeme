@@ -4,12 +4,12 @@ import { X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
 
 /** Shared, keyboard-accessible presentation for existing marketplace actions. */
-export function ActionSheet({ title, description, children, onClose, busy = false }: { title: string; description?: string; children: React.ReactNode; onClose: () => void; busy?: boolean }) {
+export function ActionSheet({ title, description, children, onClose, busy = false, fallbackFocus }: { title: string; description?: string; children: React.ReactNode; onClose: () => void; busy?: boolean; fallbackFocus?: () => HTMLElement | null }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialog = useRef<HTMLElement>(null);
-  const closeState = useRef({ busy, onClose });
-  useEffect(() => { closeState.current = { busy, onClose }; }, [busy, onClose]);
+  const closeState = useRef({ busy, onClose, fallbackFocus });
+  useEffect(() => { closeState.current = { busy, onClose, fallbackFocus }; }, [busy, onClose, fallbackFocus]);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
@@ -25,7 +25,12 @@ export function ActionSheet({ title, description, children, onClose, busy = fals
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKeyDown); previous?.focus(); };
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      if (previous?.isConnected) previous?.focus();
+      else closeState.current.fallbackFocus?.()?.focus();
+    };
   }, []);
   return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[var(--takeme-charcoal)]/50 backdrop-blur-sm sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} aria-busy={busy} tabIndex={-1} className="action-sheet w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[var(--takeme-shadow-md)] sm:rounded-[2rem] sm:p-7">
