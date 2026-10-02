@@ -6,6 +6,7 @@ export interface ConversationSummary {
   buyerId: string; sellerId: string; otherId: string; otherName: string;
   transactionId: string | null; status: string; latestMessage: string | null;
   lastMessageAt: string | null; updatedAt: string | null; unreadCount?: number;
+  unreadBy?: Record<string, number>;
 }
 export interface ConversationMessage { id: string; senderId: string; body: string; createdAt: string | null }
 export interface Page<T> { items: T[]; cursor: string | null; hasMore: boolean }

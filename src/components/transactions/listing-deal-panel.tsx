@@ -6,6 +6,7 @@ import { getListingDealState, respondToOffer, submitOffer } from "@/lib/services
 import { ringgitToSen } from "@/lib/listing-validation";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { ListingContextCard } from "@/components/listings/listing-context-card";
+import { OfferRequestForm } from "./offer-request-form";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import type { Listing, MarketplaceOffer, MarketplaceTransaction, PaymentMethod } from "@/types/marketplace";
 
@@ -90,13 +91,6 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
     })}</div>
     {notice && <p role="status" className="mt-3 text-sm text-[var(--takeme-dark-green)]">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
-    {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><form onSubmit={(event) => { event.preventDefault(); if (!busy) void send("offer"); }} className="grid gap-4">
-      <ListingContextCard title={listing.title} image={listing.imageUrls[0]} detail={listing.condition} price={money.format(listing.price)} />
-      <label className="form-field"><span>Your offer (RM)</span><input required disabled={busy} type="number" inputMode="decimal" min="0.01" max={listing.price} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" /></label>
-      <label className="form-field"><span>Proposed payment method</span><select disabled={busy} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-      <p className="text-xs leading-6 text-[var(--takeme-gray)]">This sends a request to the seller. No payment is taken. An accepted offer is not a completed transaction.</p>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      <button type="submit" disabled={busy || !amount} className="button-primary min-h-12 w-full">{busy ? "Sending…" : "Send offer"}</button>
-    </form></ActionSheet>}
+    {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><ListingContextCard title={listing.title} image={listing.imageUrls[0]} detail={listing.condition} price={money.format(listing.price)} /><OfferRequestForm amount={amount} setAmount={setAmount} maximum={listing.price} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} busy={busy} error={error} onSubmit={() => void send("offer")} /></ActionSheet>}
   </section>;
 }

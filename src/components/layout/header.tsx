@@ -48,8 +48,10 @@ export function Header() {
   const accountHref = user ? "/profile" : "/login?next=/profile";
   const discoveryHeader = pathname === "/" || pathname === "/explore";
   const profileHeader = pathname.startsWith("/profile") || pathname.startsWith("/sellers/");
+  const messagesHeader = pathname === "/messages";
+  const conversationHeader = pathname.startsWith("/messages/");
 
-  return <header className={`${discoveryHeader || profileHeader ? "home-header " : ""}sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl`}>
+  return <header className={`${conversationHeader ? "hidden lg:block " : ""}${discoveryHeader || profileHeader || messagesHeader ? "home-header " : ""}sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl`}>
     <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
       {!discoveryHeader && !profileHeader && <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>}
       <div className="hidden items-center lg:flex"><Logo compact /></div>

@@ -6,7 +6,7 @@ import { Logo } from "./logo";
 
 export function Footer() {
   const pathname = usePathname();
-  if (pathname.startsWith("/admin")) return null;
+  if (pathname.startsWith("/admin") || pathname.startsWith("/messages")) return null;
   return (
     <footer className={`${pathname === "/" || pathname === "/explore" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") ? "hidden lg:block " : ""}border-t border-gray-200 bg-white pb-24 pt-7 text-[var(--takeme-gray)] lg:pb-10`}>
       <div className="page-shell grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">

@@ -2,31 +2,80 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { ImageIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getConversations, type ConversationSummary } from "@/lib/services/conversations";
+import { getPublicListingDetail, type PublicListing } from "@/lib/services/listings";
+import { getListingDealState } from "@/lib/services/transactions";
+import { conversationDealState, messageTime } from "@/lib/messaging-presentation";
+import { discoveryPrice } from "@/lib/listing-display";
+import { useCurrentTime } from "@/lib/use-current-time";
+import { money } from "./product-context-card";
+import styles from "./messaging.module.css";
 
-export function MessagesInbox() {
+type Context = { listing: PublicListing | null; hasOffer: boolean; hasDeal: boolean; unavailable: boolean };
+export function ConversationRow({ item, context, active, now }: { item: ConversationSummary; context?: Context; active: boolean; now: number }) {
+  const unread = (item.unreadCount ?? 0) > 0;
+  return <Link href={`/messages/${item.id}`} className={styles.row} aria-current={active ? "page" : undefined}>
+    <span className={styles.thumbnail}>{(context?.listing?.imageUrls[0] ?? item.listingImage) ? <Image src={(context?.listing?.imageUrls[0] ?? item.listingImage)!} alt="" fill sizes="62px" className="object-cover" /> : <ImageIcon size={22} />}</span>
+    <span className={styles.rowText}><span className={styles.rowTop}><strong>{item.otherName}</strong><time dateTime={item.updatedAt ?? undefined}>{messageTime(item.lastMessageAt ?? item.updatedAt, now, true)}</time></span>
+      <span className={`${styles.preview} ${unread ? "font-semibold" : ""}`}>{item.latestMessage ?? (context?.hasDeal ? "Deal agreed · View details" : context?.hasOffer ? "Offer · View details" : "Start the conversation")}</span>
+      <span className={styles.rowBottom}><span>{item.listingTitle}</span>{context?.listing && <span className={styles.price}>{money(discoveryPrice(context.listing))}</span>}{unread && <span className={styles.unread} aria-label={`${item.unreadCount} unread messages`}>{item.unreadCount! > 99 ? "99+" : item.unreadCount}</span>}</span>
+    </span>
+  </Link>;
+}
+
+export function MessagesInbox({ activeId }: { activeId?: string }) {
   const { user, loading: authLoading } = useAuth();
+  const now = useCurrentTime(60_000);
   const [items, setItems] = useState<ConversationSummary[]>([]);
+  const [contexts, setContexts] = useState<Record<string, Context>>({});
+  const [filter, setFilter] = useState("All");
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const load = useCallback(async (next: string | null = null) => {
-    setLoading(true); setError("");
-    try { const page = await getConversations(next); setItems((current) => next ? [...current, ...page.items] : page.items); setCursor(page.cursor); setHasMore(page.hasMore); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Messages could not be loaded."); }
-    finally { setLoading(false); }
+  const alive = useRef(true), inFlight = useRef(false);
+  const load = useCallback(async (next: string | null = null, quiet = false) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    if (!quiet) setLoading(true);
+    try {
+      const page = await getConversations(next);
+      if (!alive.current) return;
+      setError("");
+      setItems((current) => next ? [...current.filter((item) => !page.items.some((fresh) => fresh.id === item.id)), ...page.items] : quiet ? [...page.items, ...current.filter((item) => !page.items.some((fresh) => fresh.id === item.id))] : page.items);
+      if (!quiet) { setCursor(page.cursor); setHasMore(page.hasMore); }
+      const enriched = await Promise.all(page.items.map(async (item) => {
+        const [listing, state] = await Promise.allSettled([getPublicListingDetail(item.listingId), getListingDealState(item.listingId)]);
+        const deal = state.status === "fulfilled" ? conversationDealState(item, state.value) : null;
+        return [item.id, { listing: listing.status === "fulfilled" ? listing.value.listing : null, hasOffer: Boolean(deal?.offers.length), hasDeal: Boolean(deal?.transaction), unavailable: state.status === "rejected" }] as const;
+      }));
+      if (alive.current) setContexts((current) => ({ ...current, ...Object.fromEntries(enriched) }));
+    } catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Messages could not be loaded."); }
+    finally { inFlight.current = false; if (alive.current) setLoading(false); }
   }, []);
-  useEffect(() => { if (user) queueMicrotask(() => void load()); }, [user, load]);
-  if (authLoading) return <div className="h-64 animate-pulse rounded-3xl bg-stone-100" />;
-  if (!user) return <section className="rounded-3xl border border-gray-200 bg-white p-6 text-center"><h1 className="page-title">Messages</h1><p className="mt-3 text-sm text-[var(--takeme-gray)]">Sign in to ask sellers about listings and coordinate your deals.</p><Link className="button-primary mt-5 min-h-11 px-5" href="/login?next=%2Fmessages">Log in</Link></section>;
-  return <div className="mx-auto max-w-2xl"><h1 className="page-title">Messages</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">Conversations about listings and agreed exchanges.</p>
-    {error && <div role="alert" className="mt-5 rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}<button type="button" className="ml-3 min-h-11 font-bold underline" onClick={() => void load(cursor)}>Retry</button></div>}
-    {loading && !items.length && <div className="mt-5 h-44 animate-pulse rounded-2xl bg-stone-100" />}
-    {!loading && !error && !items.length && <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-6 text-center"><h2 className="font-bold">No conversations yet</h2><p className="mt-2 text-sm text-[var(--takeme-gray)]">Open a listing and tap Message Seller to get started.</p><Link className="button-secondary mt-4 min-h-11 px-5" href="/explore">Explore listings</Link></div>}
-    <div className="mt-5 divide-y divide-gray-100 rounded-2xl bg-white">{items.map((item) => <Link key={item.id} href={`/messages/${item.id}`} className="flex min-h-24 items-center gap-3 rounded-xl bg-white px-2 py-4 transition hover:bg-[var(--takeme-light-green)] focus-visible:outline-2 focus-visible:outline-[var(--takeme-dark-green)]"><span className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-stone-100">{item.listingImage && <Image src={item.listingImage} alt="" fill sizes="64px" className="object-cover" />}</span><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><strong className="truncate text-sm">{item.otherName}</strong>{item.unreadCount ? <span className="rounded-full bg-[var(--takeme-dark-green)] px-2 py-0.5 text-xs font-bold text-white">{item.unreadCount}</span> : null}</span><span className="mt-1 block truncate text-xs text-[var(--takeme-gray)]">{item.latestMessage ?? "No messages yet"}</span><span className="mt-1 block truncate text-xs font-medium text-[var(--takeme-dark-green)]">{item.listingTitle}</span></span><time className="self-start whitespace-nowrap text-[10px] text-[var(--takeme-gray)]">{item.updatedAt ? new Date(item.updatedAt).toLocaleDateString("en-MY") : ""}</time></Link>)}</div>
-    {hasMore && <button type="button" disabled={loading} className="button-secondary mt-4 min-h-11 w-full" onClick={() => void load(cursor)}>Load more conversations</button>}
+  useEffect(() => {
+    alive.current = true;
+    if (!user) return;
+    queueMicrotask(() => void load());
+    // Messaging is callable-backed; direct Firestore listeners are deliberately denied.
+    const refresh = () => { if (document.visibilityState === "visible") void load(null, true); };
+    const timer = window.setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { alive.current = false; clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, [user, load]);
+  const visible = items.filter((item) => filter === "All" || (filter === "Buying" && item.buyerId === user?.uid) || (filter === "Selling" && item.sellerId === user?.uid) || (filter === "Offers" && contexts[item.id]?.hasOffer));
+  return <div className={styles.inbox}><h1 className={styles.inboxTitle}>Messages</h1>
+    {!authLoading && !user ? <div className={styles.empty}><h2>Your private inbox</h2><p>Sign in to chat about listings and agreed deals.</p><Link className="button-primary min-h-11 px-5 mt-4" href="/login?next=%2Fmessages">Log in</Link></div> : <>
+      <div className={styles.filters} aria-label="Filter conversations">{["All", "Buying", "Selling", "Offers"].map((value) => <button key={value} type="button" aria-pressed={value === filter} onClick={() => setFilter(value)}>{value}</button>)}</div>
+      {error && <div role="alert" className={styles.error}>{error}<button type="button" className="min-h-11 underline ml-3 font-semibold" onClick={() => void load()}>Retry</button></div>}
+      {(authLoading || loading) && !items.length && Array.from({ length: 6 }, (_, index) => <div key={index} className={`${styles.skeleton} animate-pulse`} aria-hidden="true"><div className="h-16 w-16 rounded-xl bg-gray-100" /><div className="flex-1 space-y-2 pt-1"><div className="h-3 w-2/3 rounded bg-gray-100" /><div className="h-3 rounded bg-gray-100" /><div className="h-3 w-1/2 rounded bg-gray-100" /></div></div>)}
+      {filter === "Offers" && Object.values(contexts).some((context) => context.unavailable) && <p role="status" className="text-xs text-[var(--takeme-gray)] py-2">Some offer details are unavailable. Refresh to try again.</p>}
+      {!authLoading && !loading && !error && !visible.length && <div className={styles.empty}><Image src="/brand/mascot-2d-happy.png" alt="" width={96} height={96} /><h2>{items.length ? `No ${filter.toLowerCase()} conversations` : "No messages yet"}</h2><p>{items.length ? "Try another filter or load more conversations." : "When you chat with buyers or sellers, your conversations will appear here."}</p>{!items.length && <Link className="button-secondary min-h-11 px-5 mt-4" href="/explore">Explore TAKEME</Link>}</div>}
+      {visible.map((item) => <ConversationRow key={item.id} item={item} context={contexts[item.id]} active={activeId === item.id} now={now} />)}
+      {hasMore && <button type="button" disabled={loading} className="button-secondary min-h-11 w-full mt-4" onClick={() => void load(cursor)}>{loading ? "Loading…" : "Load more conversations"}</button>}
+    </>}
   </div>;
 }

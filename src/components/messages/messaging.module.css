@@ -1,0 +1,86 @@
+.shell { max-width: 1320px; margin: 0 auto; background: white; color: var(--takeme-charcoal); }
+.inboxPanel { min-width: 0; }
+.chatPanel { min-width: 0; }
+.inboxRoute .chatPanel, .chatRoute .inboxPanel { display: none; }
+.inboxRoute .inboxPanel { min-height: calc(100dvh - 104px); }
+.inbox { padding: 12px 16px 24px; }
+.inboxTitle { font-size: 24px; font-weight: 700; letter-spacing: -.8px; margin-bottom: 10px; }
+.filters { display: flex; gap: 7px; margin-bottom: 10px; }
+.filters button { flex: 1; min-width: 0; min-height: 44px; border-radius: 24px; background: #f3f4f6; font-size: 12px; color: #4b5563; }
+.filters button[aria-pressed="true"] { background: var(--takeme-dark-green); color: white; font-weight: 600; }
+.row { display: flex; align-items: center; gap: 11px; min-height: 88px; padding: 10px 0; border-bottom: 1px solid #f0f1f3; }
+.row:hover, .row[aria-current="page"] { background: #f1faf4; }
+.thumbnail { position: relative; width: 62px; height: 66px; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #f3f4f6; display: grid; place-items: center; color: var(--takeme-gray); }
+.rowText { flex: 1; min-width: 0; }
+.rowTop { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.rowTop strong { font-size: 14px; letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowTop time { color: var(--takeme-gray); font-size: 10px; white-space: nowrap; }
+.preview { display: block; font-size: 12px; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 3px 0; }
+.rowBottom { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #4b5563; }
+.rowBottom > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.price { background: #e8f5e9; color: var(--takeme-dark-green); border-radius: 8px; padding: 1px 5px; white-space: nowrap; }
+.unread { min-width: 22px; height: 22px; display: grid; place-items: center; padding: 0 4px; border-radius: 50%; background: var(--takeme-dark-green); color: white; font-weight: 600; font-size: 11px; }
+.empty { text-align: center; padding: 32px 20px; }
+.empty img { margin: 0 auto 14px; }
+.empty h2 { font-size: 17px; font-weight: 600; }
+.empty p { font-size: 13px; color: var(--takeme-gray); line-height: 1.7; margin-top: 8px; }
+.skeleton { display: flex; gap: 12px; padding: 12px 0; }
+.error { background: #fef2f2; color: #b91c1c; border-radius: 12px; padding: 10px 12px; font-size: 12px; }
+.conversation { height: calc(100dvh - 60px - env(safe-area-inset-bottom)); min-height: 420px; display: flex; flex-direction: column; background: #f7f8f6; }
+.chatHeader { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-height: 66px; background: white; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
+.identity { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.avatar { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #e8f5e9; color: var(--takeme-dark-green); overflow: hidden; flex-shrink: 0; }
+.identity strong { display: flex; align-items: center; gap: 4px; font-size: 14px; }
+.identity small { display: block; color: var(--takeme-gray); font-size: 10px; margin-top: 2px; }
+.productPinned { background: white; padding: 8px 12px 10px; box-shadow: 0 3px 9px #1f293707; flex-shrink: 0; }
+.productCard { display: flex; gap: 10px; align-items: center; border: 1px solid #eef0f2; background: white; border-radius: 14px; padding: 10px; }
+.productImage { width: 66px; height: 66px; border-radius: 9px; position: relative; overflow: hidden; background: #f3f4f6; display: grid; place-items: center; flex-shrink: 0; }
+.productText { flex: 1; min-width: 0; }
+.productText strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.5; }
+.productText > span { display: block; font-size: 10px; color: var(--takeme-gray); margin: 3px 0; }
+.productText b { color: var(--takeme-dark-green); font-size: 17px; }
+.productText small { display: block; font-size: 10px; font-weight: 400; }
+.viewItem { min-height: 44px; display: grid; place-items: center; padding: 0 10px; font-size: 10px; font-weight: 600; background: var(--takeme-dark-green); color: white; border-radius: 12px; flex-shrink: 0; max-width: 78px; text-align: center; }
+.history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 12px; }
+.safety { font-size: 10px; text-align: center; color: var(--takeme-gray); margin: 0 8px 16px; line-height: 1.6; }
+.messageList { display: flex; flex-direction: column; gap: 10px; }
+.bubble { max-width: 85%; border-radius: 16px; padding: 10px 12px 7px; font-size: 13px; line-height: 1.65; box-shadow: 0 1px 2px #1f293708; }
+.incoming { align-self: flex-start; background: white; border-bottom-left-radius: 4px; }
+.outgoing { align-self: flex-end; background: #e8f5e9; border-bottom-right-radius: 4px; }
+.bubble p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble time { color: #6b7280; font-size: 9px; display: block; text-align: right; margin-top: 3px; }
+.bubble details { margin-top: 3px; }
+.bubble summary { min-height: 44px; font-size: 10px; cursor: pointer; color: #4b5563; }
+.chatBottom { background: white; border-top: 1px solid #e5e7eb; flex-shrink: 0; padding: 8px 12px 10px; }
+.composer { display: flex; align-items: flex-end; gap: 8px; padding-top: 8px; }
+.composer textarea { flex: 1; min-width: 0; min-height: 44px; max-height: 108px; border-radius: 22px; background: #f3f4f6; padding: 12px 15px; font-size: 16px; resize: none; }
+.send { background: var(--takeme-dark-green); color: white; border-radius: 50%; width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; }
+.send:disabled { background: #e5e7eb; color: #6b7280; }
+.composerNote { font-size: 9px; color: var(--takeme-gray); text-align: right; margin-top: 3px; }
+.eventCard { border: 1px solid #e5e7eb; border-radius: 16px; background: white; padding: 14px; margin: 14px auto 0; max-width: 410px; }
+.eventHeading { display: flex; align-items: center; gap: 8px; color: var(--takeme-dark-green); }
+.eventHeading h3 { font-size: 13px; font-weight: 600; }
+.eventCard > b { display: block; font-size: 22px; color: var(--takeme-dark-green); margin-top: 8px; }
+.eventCard > p { font-size: 12px; line-height: 1.7; color: #4b5563; margin-top: 5px; }
+.sheetAmount { border: 1px solid #e5e7eb; border-radius: 14px; background: #f9fafb; display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
+.sheetAmount span { font-size: 14px; color: #4b5563; }
+.sheetAmount input { font-size: 26px; font-weight: 600; min-width: 0; width: 100%; min-height: 44px; outline: none; }
+.sheetAmount:focus-within { outline: 2px solid var(--takeme-dark-green); outline-offset: 2px; }
+.sheetActions { display: grid; gap: 10px; margin-top: 20px; }
+.sheetActions :global(.button-secondary) { border-color: var(--takeme-dark-green); color: var(--takeme-dark-green); }
+.sheetActions button:disabled { opacity: .55; cursor: not-allowed; }
+.decline { min-height: 44px; border: 1px solid #d1d5db; border-radius: 999px; color: #b91c1c; font-size: 13px; font-weight: 600; background: white; }
+.shell :is(a,button,input,textarea,summary,select):focus-visible { outline: 2px solid var(--takeme-dark-green); outline-offset: 3px; }
+@media (min-width: 1024px) {
+  .shell { display: grid; grid-template-columns: 360px minmax(0,1fr); height: calc(100dvh - 68px); min-height: 560px; border-inline: 1px solid #e5e7eb; }
+  .inboxRoute .chatPanel, .chatRoute .inboxPanel { display: block; }
+  .inboxPanel { overflow-y: auto; border-right: 1px solid #e5e7eb; }
+  .conversation { height: 100%; min-height: 0; }
+  .chatPanel { min-height: 0; overflow: hidden; }
+  .productPinned { padding: 12px 20px; }
+  .history { padding: 20px 28px; }
+  .chatBottom { padding: 10px 24px 16px; }
+  .inbox { padding-top: 20px; }
+  .empty { height: 100%; display: grid; align-content: center; justify-items: center; }
+}
+@media (max-width: 359px) { .productImage { width: 54px; height: 58px; } .productCard { gap: 7px; padding: 8px; } .viewItem { max-width: 65px; padding: 0 7px; } }
