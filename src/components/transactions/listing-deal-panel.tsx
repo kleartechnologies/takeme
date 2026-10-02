@@ -16,7 +16,7 @@ const methods: { value: PaymentMethod; label: string }[] = [
   { value: "external", label: "External payment" }, { value: "other", label: "Other agreed method" },
 ];
 
-export function ListingDealPanel({ listing, userId }: { listing: Listing; userId?: string }) {
+export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { listing: Listing; userId?: string; hideMakeOffer?: boolean }) {
   const now = useCurrentTime(30_000);
   const [offers, setOffers] = useState<MarketplaceOffer[]>([]);
   const [transaction, setTransaction] = useState<MarketplaceTransaction | null>(null);
@@ -78,7 +78,7 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
       </div></fieldset>
       <label className="form-field"><span>Agreed payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => void send("buy_now")} className="button-primary min-h-12 w-full px-4">Request at {money.format(listing.price)}</button>
-      <button type="button" disabled={busy} onClick={() => { setError(""); setOfferOpen(true); }} className="button-secondary min-h-12 w-full px-4">Make an offer</button>
+      {!hideMakeOffer && <button type="button" disabled={busy} onClick={() => { setError(""); setOfferOpen(true); }} className="button-secondary min-h-12 w-full px-4">Make an offer</button>}
     </div>}
     {userId && !loading && seller && !offers.length && !transaction && <p className="mt-3 text-sm text-[var(--takeme-gray)]">No requests yet.</p>}
     <div className="mt-3 space-y-3">{offers.map((offer) => {

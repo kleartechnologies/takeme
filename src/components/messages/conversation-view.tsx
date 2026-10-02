@@ -18,14 +18,14 @@ import { ProductContextCard } from "./product-context-card";
 import { ConversationDeals } from "./conversation-deals";
 import styles from "./messaging.module.css";
 
-export function ConversationView({ id }: { id: string }) {
+export function ConversationView({ id, makeOffer = false }: { id: string; makeOffer?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="h-80 animate-pulse bg-gray-50" />;
-  if (!user) return <div className={styles.empty}><h2>Private conversation</h2><Link href={`/login?next=${encodeURIComponent(`/messages/${id}`)}`} className="button-primary mt-5 min-h-11 px-5">Log in</Link></div>;
-  return <ConversationSession key={`${user.uid}:${id}`} id={id} userId={user.uid} />;
+  if (!user) return <div className={styles.empty}><h2>Private conversation</h2><Link href={`/login?next=${encodeURIComponent(`/messages/${id}${makeOffer ? "?offer=1" : ""}`)}`} className="button-primary mt-5 min-h-11 px-5">Log in</Link></div>;
+  return <ConversationSession key={`${user.uid}:${id}`} id={id} userId={user.uid} makeOffer={makeOffer} />;
 }
 
-function ConversationSession({ id, userId }: { id: string; userId: string }) {
+function ConversationSession({ id, userId, makeOffer }: { id: string; userId: string; makeOffer: boolean }) {
   const now = useCurrentTime(30_000);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [profile, setProfile] = useState<PublicSellerSummary | null>(null);
@@ -120,9 +120,9 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
     catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Message could not be sent."); }
     finally { sendRequest.current = false; if (alive.current) setSending(false); }
   }
-  if (loading && !conversation) return <div className={styles.conversation}><div className="h-16 bg-white animate-pulse" /><div className="m-3 h-24 rounded-xl bg-gray-100 animate-pulse" /><div className="m-3 h-16 w-2/3 rounded-2xl bg-white animate-pulse" /></div>;
+  if (loading) return <div className={styles.conversation}><div className="h-16 bg-white animate-pulse" /><div className="m-3 h-24 rounded-xl bg-gray-100 animate-pulse" /><div className="m-3 h-16 w-2/3 rounded-2xl bg-white animate-pulse" /></div>;
   if (!conversation) return <div className={styles.empty}><p role="alert" className={styles.error}>{error || "Conversation unavailable."}</p><button type="button" className="button-secondary mt-3 min-h-11 px-5" onClick={() => void refresh()}>Retry</button><Link href="/messages" className="min-h-11 inline-flex items-center mt-3 text-sm">Back to Messages</Link></div>;
-  const dealProps = { conversation, listing, offers, transaction, reviewed, userId, now, refresh };
+  const dealProps = { conversation, listing, offers, transaction, reviewed, userId, now, refresh, makeOffer };
   return <div className={styles.conversation}>
     <header className={styles.chatHeader}><Link href="/messages" aria-label="Back to Messages" className="icon-button lg:hidden"><ArrowLeft size={20} /></Link><Link className={styles.identity} href={`/sellers/${conversation.otherId}`}>
       <span className={styles.avatar}>{profile?.photoURL ? <Image src={profile.photoURL} alt="" fill sizes="40px" className="object-cover" /> : <UserRound size={22} />}</span><span className="min-w-0"><strong className="truncate">{conversation.otherName}{profile?.verificationStatus === "verified" && <ShieldCheck size={14} aria-label="Verified" className="text-[var(--takeme-dark-green)] shrink-0" />}</strong>{profile && userId === conversation.buyerId && <small>{profile.sellerRating != null ? <><Star size={11} className="inline text-amber-600" /> {profile.sellerRating.toFixed(1)} ({profile.sellerReviewCount} seller reviews)</> : "No seller reviews yet"}</small>}</span></Link>
@@ -138,7 +138,7 @@ function ConversationSession({ id, userId }: { id: string; userId: string }) {
     </section>
     <div className={styles.chatBottom}>
       {error && <div role="alert" className={styles.error}>{error}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div>}
-      {dealError ? <div role="alert" className={styles.error}>{dealError}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div> : <ConversationDeals {...dealProps} placement="actions" />}
+      {dealError ? <div role="alert" className={styles.error}>{dealError}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div> : <ConversationDeals key={makeOffer ? "offer" : "chat"} {...dealProps} placement="actions" />}
       <form ref={composer} className={styles.composer} onSubmit={(event) => { event.preventDefault(); void send(); }}><label className="sr-only" htmlFor="message-body">Your message</label><textarea id="message-body" value={body} disabled={sending || conversation.status === "closed"} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={1} placeholder={conversation.status === "closed" ? "Conversation closed" : "Type a message…"} /><button type="submit" disabled={sending || !body.trim() || conversation.status === "closed"} aria-label={sending ? "Sending message" : "Send message"} className={styles.send}><Send size={21} /></button></form>
       <p className={styles.composerNote}>{sending ? "Sending…" : `${body.length}/2000`}</p>
     </div>

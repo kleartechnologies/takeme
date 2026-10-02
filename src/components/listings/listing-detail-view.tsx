@@ -14,7 +14,6 @@ import { SellerTrustSignal } from "@/components/profile/seller-trust-signal";
 import { MessageSellerAction } from "@/components/messages/message-seller-action";
 import { ReportAction } from "@/components/trust/report-action";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
-import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { getCategoryName } from "@/data/categories";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { listingCanonicalUrl } from "@/lib/listing-metadata";
@@ -22,6 +21,7 @@ import { getListingsBySeller, subscribeToListing, type PublicAuctionBid } from "
 import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import { useCurrentTime } from "@/lib/use-current-time";
 import type { Listing } from "@/types/marketplace";
+import { StandardProductDetail } from "./standard-product-detail";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 2 });
 const senMoney = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,6 +30,7 @@ export function ListingDetailView({ id, created = false }: { id: string; created
   const now = useCurrentTime();
   const { user } = useAuth();
   const [state, setState] = useState<{ loading: boolean; listing: Listing | null; related: Listing[]; error: string }>({ loading: true, listing: null, related: [], error: "" });
+  const [retry, setRetry] = useState(0);
   const [selectedImage, setSelectedImage] = useState(0);
   const [bids, setBids] = useState<PublicAuctionBid[]>([]);
   const [shareMessage, setShareMessage] = useState("");
@@ -70,22 +71,24 @@ export function ListingDetailView({ id, created = false }: { id: string; created
       try {
         const related = await getListingsBySeller(listing.sellerId);
         if (active) setState({ loading: false, listing, related: related.filter((item) => item.id !== listing.id), error: "" });
-      } catch (error) {
-        if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) });
+      } catch {
+        if (active) setState({ loading: false, listing, related: [], error: "" });
       }
     }, (error) => { if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) }); });
     return () => { active = false; unsubscribe(); };
-  }, [id]);
+  }, [id, user?.uid, retry]);
 
   if (!isFirebaseConfigured) return <main className="page-shell py-10"><FirebaseSetupState /></main>;
-  if (state.loading) return <main className="page-shell py-10"><div className="grid gap-4 lg:grid-cols-[1.35fr_0.85fr]"><ListingSkeleton /><div className="min-h-96 animate-pulse rounded-3xl bg-stone-100" /></div></main>;
+  if (state.loading) return <DetailSkeleton />;
   if (state.error === "not-found") return <NotFoundState />;
-  if (state.error) return <main className="page-shell py-10"><ErrorState message={state.error === "permission-denied" ? "This listing is unavailable or you do not have permission to view it." : state.error} /></main>;
+  if (state.error) return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-2xl font-bold">This listing isn’t available</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">{state.error === "permission-denied" ? "It may be private, sold or removed." : state.error}</p><div className="mt-5 flex justify-center gap-3"><Link href="/explore" className="button-primary min-h-11 px-5">Explore listings</Link><button type="button" className="button-secondary min-h-11 px-5" onClick={() => { setState(current => ({ ...current, loading: true, error: "" })); setRetry(value => value + 1); }}>Retry</button></div></div></main>;
   const listing = state.listing!;
   const owner = user?.uid === listing.sellerId;
   const isAuction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
   const auctionEditable = isAuction && listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0 && Boolean(listing.auctionStartAt && (now === 0 || now < new Date(listing.auctionStartAt).getTime()));
   const displayAmount = isAuction ? senMoney.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price);
+
+  if (!isAuction) return <StandardProductDetail key={`${listing.id}:${user?.uid ?? "guest"}`} listing={listing} related={state.related} userId={user?.uid} created={created} share={share} shareMessage={shareMessage} />;
 
   return (
     <main className="page-shell py-3 md:py-7">
@@ -122,5 +125,9 @@ export function ListingDetailView({ id, created = false }: { id: string; created
 }
 
 function Fact({ label, value }: { label: string; value: string }) { return <div><p className="text-xs font-semibold text-[var(--takeme-gray)]">{label}</p><p className="mt-1 capitalize font-bold text-stone-700">{value}</p></div>; }
-function NotFoundState() { return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-3xl font-bold">Listing not found</h1><p className="mt-2 text-[var(--takeme-gray)]">It may have been removed or the link is incorrect.</p><Link href="/explore" className="button-primary mt-6 h-11 px-6">Explore active listings</Link></div></main>; }
+function NotFoundState() { return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-2xl font-bold">This listing isn’t available</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">It may be private, sold or removed, or the link may be incorrect.</p><Link href="/explore" className="button-primary mt-6 h-11 px-6">Explore active listings</Link></div></main>; }
 function firebaseErrorMessage(error: unknown) { if (typeof error === "object" && error && "code" in error && String(error.code).includes("permission-denied")) return "permission-denied"; return "We couldn’t load this listing. Please try again."; }
+
+function DetailSkeleton() {
+  return <main className="page-shell py-3 md:py-7" role="status" aria-label="Loading listing"><div aria-hidden="true" className="grid gap-5 lg:grid-cols-[1.2fr_1fr] animate-pulse"><div className="aspect-[8/5] lg:aspect-[4/3] rounded-2xl bg-stone-100" /><div className="space-y-4 p-4"><div className="h-6 w-4/5 rounded bg-stone-100" /><div className="h-9 w-2/5 rounded bg-stone-100" /><div className="h-5 w-1/4 rounded bg-stone-100" /><div className="h-12 rounded bg-stone-100" /><div className="h-28 rounded-2xl bg-stone-100" /><div className="h-12 rounded-full bg-stone-100" /></div><div className="h-40 rounded-2xl bg-stone-100" /><div className="h-40 rounded-2xl bg-stone-100" /></div></main>;
+}

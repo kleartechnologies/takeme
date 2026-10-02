@@ -14,5 +14,5 @@ export async function generateMetadata({ params }: ListingPageProps): Promise<Me
 
 export default async function ListingPage({ params, searchParams }: ListingPageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  return <ListingDetailView id={id} created={query.created === "1"} />;
+  return <ListingDetailView key={id} id={id} created={query.created === "1"} />;
 }

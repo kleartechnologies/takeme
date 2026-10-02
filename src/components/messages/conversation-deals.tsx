@@ -14,8 +14,8 @@ import styles from "./messaging.module.css";
 import { OfferRequestForm, offerPaymentMethods } from "@/components/transactions/offer-request-form";
 
 const methods = offerPaymentMethods;
-export function ConversationDeals({ conversation, listing, offers, transaction, reviewed, userId, now, refresh, placement }: { conversation: ConversationSummary; listing: PublicListing | null; offers: MarketplaceOffer[]; transaction: MarketplaceTransaction | null; reviewed: boolean | null; userId: string; now: number; refresh: () => Promise<void>; placement: "events" | "actions" }) {
-  const [sheet, setSheet] = useState<"make" | "view" | "counter" | null>(null);
+export function ConversationDeals({ conversation, listing, offers, transaction, reviewed, userId, now, refresh, placement, makeOffer = false }: { conversation: ConversationSummary; listing: PublicListing | null; offers: MarketplaceOffer[]; transaction: MarketplaceTransaction | null; reviewed: boolean | null; userId: string; now: number; refresh: () => Promise<void>; placement: "events" | "actions"; makeOffer?: boolean }) {
+  const [sheet, setSheet] = useState<"make" | "view" | "counter" | null>(() => makeOffer && placement === "actions" && userId !== conversation.sellerId && listing?.listingType === "buy_now" && listing.status === "active" && !transaction && !offers.some(offer => offerIsOpen(offer, now)) ? "make" : null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = offers.find((offer) => offer.id === selectedId) ?? null;
   const [amount, setAmount] = useState("");
