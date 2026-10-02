@@ -10,18 +10,18 @@ const UnreadCountContext = createContext(0);
 export function UnreadCountProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
-  const [count, setCount] = useState(0);
+  const [summary, setSummary] = useState({ uid: "", count: 0 });
   useEffect(() => {
     if (!user || pathname.startsWith("/admin")) return;
     let active = true;
-    const refresh = () => { getUnreadCount().then((data) => { if (active) setCount(data.unreadCount); }).catch(() => {}); };
+    const refresh = () => { getUnreadCount().then((data) => { if (active) setSummary({ uid: user.uid, count: data.unreadCount }); }).catch(() => {}); };
     refresh();
     const visibility = () => { if (document.visibilityState === "visible") refresh(); };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("takeme:notifications-changed", refresh);
     return () => { active = false; document.removeEventListener("visibilitychange", visibility); window.removeEventListener("takeme:notifications-changed", refresh); };
   }, [user, pathname]);
-  return <UnreadCountContext.Provider value={user && !pathname.startsWith("/admin") ? count : 0}>{children}</UnreadCountContext.Provider>;
+  return <UnreadCountContext.Provider value={user && summary.uid === user.uid && !pathname.startsWith("/admin") ? summary.count : 0}>{children}</UnreadCountContext.Provider>;
 }
 
 export function useUnreadCount() { return useContext(UnreadCountContext); }

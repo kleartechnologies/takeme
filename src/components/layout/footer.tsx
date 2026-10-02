@@ -8,7 +8,7 @@ export function Footer() {
   const pathname = usePathname();
   if (pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin") || pathname.startsWith("/messages")) return null;
   return (
-    <footer className={`${pathname === "/" || pathname === "/explore" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") ? "hidden lg:block " : ""}border-t border-gray-200 bg-white pb-24 pt-7 text-[var(--takeme-gray)] lg:pb-10`}>
+    <footer className={`${pathname === "/" || pathname === "/explore" || pathname === "/updates" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") ? "hidden lg:block " : ""}border-t border-gray-200 bg-white pb-24 pt-7 text-[var(--takeme-gray)] lg:pb-10`}>
       <div className="page-shell grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
           <div className="inline-flex rounded-xl bg-white p-1.5"><Logo compact /></div>
