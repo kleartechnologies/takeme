@@ -24,8 +24,8 @@ export function EndingSoonMarketplace() {
     return () => { active = false; };
   }, []);
   if (!loaded || listings.length === 0) return null;
-  return <section className="border-t border-gray-200 py-7" aria-labelledby="ending-soon-title">
+  return <section className="py-5" aria-labelledby="ending-soon-title">
     <div className="mb-4 flex items-end justify-between gap-3"><div><h2 id="ending-soon-title" className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><Flame className="text-orange-600" size={22} /> Ending Soon</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">Active auctions with the nearest end times in this set.</p></div><Link href="/explore?type=auction&auction=active" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">See all <ArrowRight size={15} /></Link></div>
-    <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">{listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div>
+    <div className="marketplace-rail">{listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div>
   </section>;
 }

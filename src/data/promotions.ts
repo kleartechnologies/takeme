@@ -1,12 +1,12 @@
 // Portable marketplace promotion content; presentation lives in the carousel.
 export const marketplacePromotions = [
   {
-    titleLines: ["Same Stuff.", "A Brighter Tomorrow."],
+    titleLines: ["Give good stuff", "a second life."],
     supporting: "Buy. Sell. Give. Reuse.",
     action: "Explore Now",
     href: "/explore",
     theme: "brand",
-    images: ["/categories/laptop-computers.png", "/categories/fashion.png", "/categories/books.png"],
+    images: ["/brand/mascot-3d-wink.png", "/categories/laptop-computers.png", "/categories/home-living.png"],
   },
   {
     titleLines: ["Got Stuff", "to Sell?"],
@@ -22,7 +22,7 @@ export const marketplacePromotions = [
     action: "Explore Auctions",
     href: "/explore?type=auction",
     theme: "auctions",
-    images: ["/categories/games-consoles.png", "/categories/hobbies & collectibles.png"],
+    images: ["/categories/games-consoles.png", "/categories/hobbies%20%26%20collectibles.png"],
   },
   {
     titleLines: ["Find Something", "Great."],

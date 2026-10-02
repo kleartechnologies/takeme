@@ -4,11 +4,11 @@ import test from "node:test";
 
 const source = (path: string) => readFileSync(path, "utf8");
 
-test("buyer selection is honest, disabled, and has no protected checkout action", () => {
+test("V1 buyer selection exposes standard settlement without future protected checkout", () => {
   const panel = source("src/components/transactions/listing-deal-panel.tsx");
-  assert.match(panel, /TAKEME Protected Transaction/);
-  assert.match(panel, /Protected payments coming soon/);
-  assert.match(panel, /disabled/);
+  assert.doesNotMatch(panel, /TAKEME Protected Transaction|Protected payments coming soon/);
+  assert.match(panel, /Standard transaction/);
+  assert.match(panel, /TAKEME does not process this payment/);
   assert.doesNotMatch(panel, />Pay now</i);
 });
 

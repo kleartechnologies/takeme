@@ -30,20 +30,20 @@ function TierBadge({ seller, compact = false }: { seller: SellerSummary; compact
 }
 
 function CardSeller({ seller }: { seller: SellerSummary }) {
-  return <div className="mt-2 min-h-10 border-t border-stone-100 pt-2" aria-label={`Seller ${seller.displayName}, ${sellerRatingLabel(seller)}, ${completedSalesLabel(seller.sellerCompletedTransactionCount)}${seller.sellerTier ? `, ${seller.sellerTier} tier` : ""}`}>
+  return <div className="mt-2 min-h-10 pt-1" aria-label={`Seller ${seller.displayName}, ${sellerRatingLabel(seller)}, ${completedSalesLabel(seller.sellerCompletedTransactionCount)}${seller.sellerTier ? `, ${seller.sellerTier} tier` : ""}`}>
     <div className="flex min-w-0 items-center justify-between gap-1.5"><span className="truncate text-[10px] font-semibold text-stone-700 sm:text-xs">{seller.displayName}</span><TierBadge seller={seller} compact /></div>
     <p className="mt-0.5 truncate text-[9px] text-[var(--takeme-gray)] sm:text-[11px]">{sellerRatingLabel(seller)} · {completedSalesLabel(seller.sellerCompletedTransactionCount)}</p>
   </div>;
 }
 
 function DetailSeller({ seller }: { seller: SellerSummary }) {
-  return <section className="mt-5 min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-stone-50 p-4" aria-label="Seller trust summary">
+  return <section className="mt-5 min-w-0 max-w-full overflow-hidden border-y border-gray-100 bg-white py-3" aria-label="Seller trust summary">
     <Link href={`/sellers/${seller.uid}`} className="flex min-h-12 w-full min-w-0 items-center gap-2 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--takeme-dark-green)] sm:gap-3">
       <span className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-white">{seller.photoURL ? <Image src={seller.photoURL} alt="" fill sizes="48px" className="object-cover" /> : <UserRound size={21} />}</span>
       <span className="min-w-0 flex-1"><span className="flex items-center gap-1.5"><span className="truncate text-sm font-bold">{seller.displayName}</span>{seller.verificationStatus === "verified" && <BadgeCheck size={16} aria-label="Verified seller" className="shrink-0 text-[var(--takeme-dark-green)]" />}</span><span className="mt-0.5 block text-xs text-stone-500">View seller profile</span></span>
       <TierBadge seller={seller} />
     </Link>
-    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-stone-200 pt-3 text-xs font-semibold text-stone-700"><span>{sellerRatingLabel(seller)}</span><span>{completedSalesLabel(seller.sellerCompletedTransactionCount)} completed</span></div>
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-stone-700"><span>{sellerRatingLabel(seller)}</span><span>{completedSalesLabel(seller.sellerCompletedTransactionCount)} completed</span></div>
     <p className="mt-2 break-words text-[11px] leading-4 text-[var(--takeme-gray)]">Seller reputation uses completed sales and published buyer reviews. Buyer reputation is tracked separately.</p>
     <Link href="/help/tiers" className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">How seller tiers work</Link>
   </section>;

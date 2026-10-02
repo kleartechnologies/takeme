@@ -50,8 +50,8 @@ export function Header() {
   return <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl">
     <div className="page-shell flex h-14 min-w-0 items-center gap-2 lg:h-[4.25rem] lg:gap-5">
       <div className="-ml-1 shrink-0 lg:hidden"><button type="button" className="icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="marketplace-menu" aria-label={open ? "Close menu" : "Open menu"}>{open ? <X size={21} /> : <Menu size={21} />}</button></div>
-      <div className="hidden items-center gap-2 lg:flex"><Logo compact /><Link href="/" className="inline-flex min-h-11 items-center text-lg font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
-      <div className="flex min-w-0 flex-1 items-center gap-2 lg:hidden"><Logo compact /><Link href="/" className="inline-flex min-h-11 items-center truncate text-base font-extrabold tracking-[-0.04em] text-[var(--takeme-dark-green)]">TAKEME</Link></div>
+      <div className="hidden items-center lg:flex"><Logo compact /></div>
+      <div className="flex min-w-0 flex-1 items-center lg:hidden"><Logo compact /></div>
       <SearchForm hideOnMobile />
       <nav className="hidden shrink-0 items-center gap-2 lg:flex" aria-label="Main navigation">
         <Link href="/explore" className="nav-link" aria-current={pathname === "/explore" ? "page" : undefined}>Explore</Link>

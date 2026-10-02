@@ -23,6 +23,7 @@ test("preserves existing category identifiers and adds the two new categories ex
 test("category images resolve to supplied files and fallbacks remain explicit", () => {
   for (const category of categories) {
     if (category.icon.startsWith("/")) {
+      assert.ok(!category.icon.includes("&"), `${category.id} URL encodes query delimiters for image optimization`);
       assert.ok(existsSync(path.resolve("public", decodeURIComponent(category.icon).slice(1))), `${category.id} asset exists`);
     } else {
       assert.ok(["Wrench", "Shapes"].includes(category.icon), `${category.id} uses an existing fallback icon`);

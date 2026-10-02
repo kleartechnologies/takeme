@@ -1,11 +1,11 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getListingDealState, respondToOffer, submitOffer } from "@/lib/services/transactions";
 import { ringgitToSen } from "@/lib/listing-validation";
 import { useCurrentTime } from "@/lib/use-current-time";
+import { ListingContextCard } from "@/components/listings/listing-context-card";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import type { Listing, MarketplaceOffer, MarketplaceTransaction, PaymentMethod } from "@/types/marketplace";
 
@@ -74,7 +74,6 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
     {userId && !loading && !seller && !transaction && listing.status === "active" && !offers.some((offer) => ["submitted", "countered"].includes(offer.status) && (!now || new Date(offer.expiresAt).getTime() > now)) && <div className="mt-4 space-y-3">
       <fieldset><legend className="text-xs font-semibold text-stone-700">Transaction option</legend><div className="mt-2 grid gap-2">
         <label className="flex min-h-12 items-center gap-3 rounded-xl border border-[var(--takeme-green)] bg-white p-3 text-sm"><input type="radio" checked readOnly name={`settlement-${listing.id}`} className="accent-[var(--takeme-dark-green)]" /><span><strong className="block">Standard transaction</strong><span className="text-xs text-[var(--takeme-gray)]">Confirm the exchange with the seller. TAKEME does not process payment.</span></span></label>
-        <div className="rounded-xl border border-gray-200 bg-stone-100 p-3 text-sm text-stone-600" aria-disabled="true"><div className="flex items-start gap-3"><input type="radio" disabled name={`settlement-${listing.id}`} className="mt-1" /><span><strong className="flex items-center gap-1.5 text-stone-700"><ShieldCheck size={16} /> TAKEME Protected Transaction</strong><span className="mt-1 block text-xs leading-5">Future eligible purchases will use a payment provider, seller fulfilment, buyer receipt confirmation, dispute review and conditional payout release.</span></span></div><button type="button" disabled className="button-secondary mt-3 min-h-11 w-full cursor-not-allowed px-3 text-xs">Protected payments coming soon</button><p className="mt-2 text-[10px] leading-4">Designed to support eligible purchases and disputes under TAKEME&apos;s applicable terms. Protection terms, fees and eligibility require review.</p></div>
       </div></fieldset>
       <label className="form-field"><span>Agreed payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => void send("buy_now")} className="button-primary min-h-12 w-full px-4">Request at {money.format(listing.price)}</button>
@@ -92,7 +91,7 @@ export function ListingDealPanel({ listing, userId }: { listing: Listing; userId
     {notice && <p role="status" className="mt-3 text-sm text-[var(--takeme-dark-green)]">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><form onSubmit={(event) => { event.preventDefault(); if (!busy) void send("offer"); }} className="grid gap-4">
-      <div className="rounded-2xl bg-[var(--takeme-light-green)] p-4"><p className="text-xs text-[var(--takeme-gray)]">Listed price</p><p className="mt-1 text-2xl font-bold text-[var(--takeme-dark-green)]">{money.format(listing.price)}</p></div>
+      <ListingContextCard title={listing.title} image={listing.imageUrls[0]} detail={listing.condition} price={money.format(listing.price)} />
       <label className="form-field"><span>Your offer (RM)</span><input required disabled={busy} type="number" inputMode="decimal" min="0.01" max={listing.price} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount" /></label>
       <label className="form-field"><span>Proposed payment method</span><select disabled={busy} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <p className="text-xs leading-6 text-[var(--takeme-gray)]">This sends a request to the seller. No payment is taken. An accepted offer is not a completed transaction.</p>

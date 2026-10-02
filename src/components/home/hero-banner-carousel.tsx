@@ -25,8 +25,7 @@ export function HeroBannerCarousel({ headingLevel = 2 }: { headingLevel?: 1 | 2 
           const Heading = index === 0 && headingLevel === 1 ? "h1" : "h2";
           return (
           <div key={banner.theme} className={`marketplace-banner marketplace-banner--${banner.theme} relative flex w-full shrink-0 snap-start items-center overflow-hidden rounded-2xl lg:rounded-3xl`} role="group" aria-roledescription="slide" aria-label={`${index + 1} of ${marketplacePromotions.length}: ${banner.action}`}>
-            <div className="relative z-10 w-[68%] pl-4 sm:pl-8 lg:pl-14">
-              <p className="banner-kicker">TAKEME MARKETPLACE</p>
+            <div className="relative z-10 w-[59%] pl-4 sm:pl-8 lg:pl-10">
               <Heading className="banner-title">{banner.titleLines[0]}<br />{banner.titleLines[1]}</Heading>
               <p className="banner-supporting">{banner.supporting}</p>
               <Link href={banner.href} className="banner-action group inline-flex items-center gap-1.5 rounded-full font-semibold focus-visible:outline-offset-2">{banner.action}<ArrowRight className="size-3 transition group-hover:translate-x-0.5 sm:size-4" aria-hidden="true" /></Link>
@@ -41,7 +40,7 @@ export function HeroBannerCarousel({ headingLevel = 2 }: { headingLevel?: 1 | 2 
           </div>
         ); })}
       </div>
-      <div className="mt-2.5 flex justify-center gap-1.5" aria-label="Choose a promotion">
+      <div className="flex justify-center" aria-label="Choose a promotion">
         {marketplacePromotions.map((banner, index) => <button key={banner.theme} type="button" onClick={() => goTo(index)} aria-label={`Show promotion ${index + 1}: ${banner.action}`} aria-current={current === index ? "true" : undefined} className="banner-pagination-button grid place-items-center rounded-full"><span className={`block h-1.5 rounded-full transition-all ${current === index ? "w-5 bg-[var(--takeme-dark-green)]" : "w-1.5 bg-gray-300"}`} /></button>)}
       </div>
     </section>

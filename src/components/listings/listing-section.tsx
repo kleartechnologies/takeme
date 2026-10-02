@@ -5,7 +5,7 @@ import { ListingCard } from "./listing-card";
 
 export function ListingSection({ eyebrow, title, description, listings }: { eyebrow?: string; title: string; description?: string; listings: Listing[] }) {
   return (
-    <section className="py-9 md:py-12">
+    <section className="py-6 md:py-8">
       <div className="mb-5 flex items-end justify-between gap-4 md:mb-7">
         <div>
           {eyebrow && <p className="eyebrow">{eyebrow}</p>}
@@ -14,7 +14,7 @@ export function ListingSection({ eyebrow, title, description, listings }: { eyeb
         </div>
         <Link href={title === "Explore auctions" ? "/explore?type=auction" : "/explore"} className="flex min-h-11 shrink-0 items-center gap-1 text-sm font-semibold text-[var(--takeme-charcoal)] hover:text-[var(--takeme-dark-green)]">View all <ArrowRight size={16} /></Link>
       </div>
-      <div className="grid gap-3 min-[380px]:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+      <div className="consumer-grid">
         {listings.slice(0, 4).map((listing) => <ListingCard key={listing.id} listing={listing} />)}
       </div>
     </section>

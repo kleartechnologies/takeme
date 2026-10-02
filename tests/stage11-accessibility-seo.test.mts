@@ -33,13 +33,13 @@ test("small auth control and auction badge retain accessible target/contrast tre
 test("configured text/button color pairs meet normal-text contrast", () => {
   const css = source("src/app/globals.css");
   const auction = source("src/components/listings/auction-panel.tsx");
-  assert.equal((auction.match(/text-white\/80/g) ?? []).length, 2, "Small gradient labels retain readable opacity");
+  assert.match(auction, /bg-red-50 p-4 text-red-800/, "Auction countdown retains high-contrast state styling");
   const token = (name: string) => css.match(new RegExp(`--takeme-${name}: #(\\w{6})`))![1];
   const luminance = (hex: string) => {
     const rgb = hex.match(/../g)!.map((part) => parseInt(part, 16) / 255).map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
     return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
   };
-  for (const [foreground, background] of [[token("gray"), "ffffff"], [token("gray"), token("light-green")], [token("charcoal"), token("green")], ["ffffff", token("dark-green")], [token("dark-green"), token("light-green")], ["ffffff", "c2410c"]]) {
+  for (const [foreground, background] of [[token("gray"), "ffffff"], [token("gray"), token("light-green")], [token("charcoal"), token("green")], ["ffffff", token("dark-green")], [token("dark-green"), token("light-green")], ["ffffff", "c2410c"], ["991b1b", "fef2f2"]]) {
     const a = luminance(foreground), b = luminance(background);
     assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5, `${foreground}/${background}`);
   }

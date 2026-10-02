@@ -106,11 +106,11 @@ export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listin
     ? "No bids were placed."
     : "No bids yet. The first valid bid can meet the starting bid.";
 
-  return <div className="mt-6 grid gap-5">
-    <div className="rounded-2xl bg-[linear-gradient(125deg,var(--takeme-charcoal),var(--takeme-dark-green))] p-5 text-white">
-      <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
-      <p className="mt-3 font-mono text-2xl font-bold tracking-tight">{status === "cancelled" ? "Cancelled" : status === "ended" ? "Ended" : countdown(target, now)}</p>
-      <p className="mt-2 text-xs text-white/80">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
+  return <div className="mt-4 grid gap-3">
+    <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800">
+      <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
+      <p className="mt-2 font-mono text-2xl font-bold tracking-tight">{status === "cancelled" ? "Cancelled" : status === "ended" ? "Ended" : countdown(target, now)}</p>
+      <p className="mt-2 text-xs text-red-800">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
     </div>
 
     <div className="grid grid-cols-2 gap-3"><Metric label={(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Bids" value={String(listing.bidCount ?? 0)} /></div>
