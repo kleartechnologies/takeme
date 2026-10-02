@@ -1,146 +1,185 @@
 "use client";
 
-import { Clock3, Gavel, LoaderCircle, ShieldCheck, Trophy } from "lucide-react";
+import { AlertCircle, Clock3, Flame, Gavel, LoaderCircle, MessageCircle, Minus, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { getMinimumNextBid, ringgitToSen, senToRinggit } from "@/lib/listing-validation";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { getMinimumNextBid, MAX_MONEY_SEN, ringgitToSen, senToRinggit } from "@/lib/listing-validation";
+import { auctionClock, effectiveStatus, ENDING_SOON_MS, quickBidAmounts } from "@/lib/auction-presentation";
 import { cancelAuctionListing, getAuctionViewerState, placeAuctionBid, type AuctionViewerState } from "@/lib/services/auctions";
+import { openListingConversation } from "@/lib/services/conversations";
 import type { PublicAuctionBid } from "@/lib/services/listings";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { ActionSheet } from "@/components/ui/action-sheet";
-import type { AuctionStatus, Listing } from "@/types/marketplace";
+import type { Listing } from "@/types/marketplace";
+import productStyles from "./standard-product.module.css";
+import styles from "./auction.module.css";
 
-const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export { effectiveStatus } from "@/lib/auction-presentation";
+const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const formatSen = (value: number) => money.format(value / 100);
+const date = (value?: string | null) => value ? new Date(value).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" }) : "Time unavailable";
 
-function formatSen(value: number) {
-  return money.format(value / 100);
+export function AuctionStatusBadge({ listing }: { listing: Listing }) {
+  const status = effectiveStatus(listing, useCurrentTime());
+  const text = listing.status === "draft" ? "Draft auction" : listing.status === "removed" ? "Auction unavailable" : status === "active" ? "Live auction" : status === "scheduled" ? "Auction starts soon" : status === "cancelled" ? "Auction cancelled" : "Auction ended";
+  return <span className={styles.badge} data-live={status === "active" && listing.status === "active" || undefined}><Flame size={14} aria-hidden="true" />{text}</span>;
 }
 
-export function effectiveStatus(listing: Listing, now: number): AuctionStatus {
-  if (listing.auctionStatus === "cancelled" || listing.auctionStatus === "ended") return listing.auctionStatus;
-  if (now === 0) return listing.auctionStatus ?? "scheduled";
-  if (listing.auctionEndAt && now >= new Date(listing.auctionEndAt).getTime()) return "ended";
-  if (listing.auctionStartAt && now < new Date(listing.auctionStartAt).getTime()) return "scheduled";
-  return "active";
-}
-
-function countdown(target: string | undefined, now: number) {
-  if (!target || now === 0) return "—";
-  const remaining = Math.max(0, new Date(target).getTime() - now);
-  const seconds = Math.floor(remaining / 1000);
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  const secs = seconds % 60;
-  if (days > 0) return `${String(days).padStart(2, "0")}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(secs).padStart(2, "0")}s`;
-  if (hours > 0) return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(secs).padStart(2, "0")}s`;
-  if (minutes > 0) return `${String(minutes).padStart(2, "0")}m ${String(secs).padStart(2, "0")}s`;
-  return `${String(secs).padStart(2, "0")}s`;
-}
-
-function relativeTime(value: string, now: number) {
-  const seconds = Math.max(0, Math.floor((now - new Date(value).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-export function AuctionPanel({ listing, bids, userId, owner }: { listing: Listing; bids: PublicAuctionBid[]; userId?: string; owner: boolean }) {
-  const now = useCurrentTime();
-  const [viewerResponse, setViewerResponse] = useState<{ uid: string; state: AuctionViewerState } | null>(null);
-  const viewer = viewerResponse && viewerResponse.uid === userId ? viewerResponse.state : null;
-  const minimum = getMinimumNextBid(listing);
-  const [amount, setAmount] = useState(() => minimum ? senToRinggit(minimum) : "");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [bidOpen, setBidOpen] = useState(false);
+function AuctionCountdown({ listing, now }: { listing: Listing; now: number }) {
   const status = effectiveStatus(listing, now);
-
-  useEffect(() => {
-    if (!userId) return;
-    let active = true;
-    getAuctionViewerState(listing.id).then((state) => { if (active) setViewerResponse({ uid: userId, state }); }).catch(() => { if (active) setViewerResponse(null); });
-    return () => { active = false; };
-  }, [listing.id, listing.bidCount, listing.status, userId]);
-
-  const amountSen = ringgitToSen(amount);
-  const inputError = useMemo(() => {
-    if (!amount) return "";
-    if (!amountSen) return "Use a positive amount with no more than 2 decimal places.";
-    if (amountSen < minimum) return `Minimum next bid is ${formatSen(minimum)}.`;
-    return "";
-  }, [amount, amountSen, minimum]);
-
-  async function submitBid(event: React.FormEvent) {
-    event.preventDefault();
-    if (!amountSen || inputError) return;
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const result = await placeAuctionBid(listing.id, amountSen);
-      setMessage(`Bid accepted at ${formatSen(result.currentBid)}.`);
-      setBidOpen(false);
-      setAmount(senToRinggit(result.currentBid + (listing.minimumBidIncrement ?? 0)));
-      if (userId) getAuctionViewerState(listing.id).then((state) => setViewerResponse({ uid: userId, state })).catch(() => undefined);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Your bid could not be placed.");
-    } finally { setBusy(false); }
-  }
-
-  async function cancel() {
-    setBusy(true); setError("");
-    try { await cancelAuctionListing(listing.id); setMessage("Auction cancelled."); setConfirmCancel(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "The auction could not be cancelled."); }
-    finally { setBusy(false); }
-  }
-
-  const highest = Boolean(userId && viewer?.isHighestBidder);
-  const outbid = Boolean(userId && viewer?.isOutbid);
-  const hasWinner = (listing.bidCount ?? 0) > 0 && status === "ended";
-  const target = status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt;
-  const emptyBidHistory = status === "ended" || status === "cancelled"
-    ? "No bids were placed."
-    : "No bids yet. The first valid bid can meet the starting bid.";
-
-  return <div className="mt-4 grid gap-3">
-    <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-red-800">
-      <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">{status === "scheduled" ? "Starts in" : status === "active" ? "Time remaining" : "Auction status"}</span><span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold capitalize">{status === "active" && listing.auctionEndAt && now > 0 && new Date(listing.auctionEndAt).getTime() - now < 3_600_000 ? "Ending soon" : status}</span></div>
-      <p className="mt-2 font-mono text-2xl font-bold tracking-tight">{status === "cancelled" ? "Cancelled" : status === "ended" ? "Ended" : countdown(target, now)}</p>
-      <p className="mt-2 text-xs text-red-800">Times are displayed in your local timezone. Server time controls bid acceptance.</p>
-    </div>
-
-    <div className="grid grid-cols-2 gap-3"><Metric label={(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Bids" value={String(listing.bidCount ?? 0)} /></div>
-
-    {status === "active" && !owner && userId && <button type="button" onClick={() => { setError(""); setAmount(senToRinggit(minimum)); setBidOpen(true); }} className="button-primary min-h-12 w-full"><Gavel size={18} /> Place bid</button>}
-    {bidOpen && status === "active" && !owner && userId && <ActionSheet title="Place your bid" description={listing.title} busy={busy} onClose={() => setBidOpen(false)}><form onSubmit={submitBid}>
-      <div className="mb-5 grid grid-cols-2 gap-3"><Metric label="Current / starting bid" value={formatSen((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0)} /><Metric label="Minimum next bid" value={formatSen(minimum)} /></div>
-      <label className="form-field"><span>Your bid (RM)</span><input disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" type="number" min={minimum / 100} step="0.01" aria-invalid={Boolean(inputError)} aria-describedby="bid-amount-feedback" /></label>
-      <p id="bid-amount-feedback" className={inputError ? "field-error mt-2" : "mt-2 text-xs text-[var(--takeme-gray)]"}>{inputError || `Bid increment: ${formatSen(listing.minimumBidIncrement ?? 0)}. Server validation controls acceptance.`}</p>
-      {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      <p className="mt-5 text-xs leading-6 text-[var(--takeme-gray)]">Placing a bid does not take payment. A winning auction uses the existing standard settlement flow.</p>
-      <button disabled={busy || Boolean(inputError) || !amount} className="button-primary mt-4 min-h-12 w-full" type="submit">{busy ? <LoaderCircle size={17} className="animate-spin" /> : <Gavel size={17} />} Confirm bid{amountSen ? ` — ${formatSen(amountSen)}` : ""}</button>
-    </form></ActionSheet>}
-
-    {status === "active" && !userId && !owner && <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm"><p className="font-semibold">Ready to bid?</p><p className="mt-1 text-[var(--takeme-gray)]">Sign in first so the server can securely verify your bid.</p><Link href={`/login?next=/listings/${listing.id}`} className="button-primary mt-4 min-h-11 px-4">Log in to bid</Link></div>}
-    {owner && status === "active" && <Notice icon={<ShieldCheck size={18} />} text={(listing.bidCount ?? 0) > 0 ? "You cannot bid on your own auction, and it can no longer be cancelled because bidding has started." : "You cannot bid on your own auction. You may cancel it while it has no bids."} />}
-    {status === "scheduled" && <Notice icon={<Clock3 size={18} />} text={`Bidding opens ${new Date(listing.auctionStartAt!).toLocaleString("en-MY")}.`} />}
-    {highest && status === "active" && <Notice tone="success" icon={<Trophy size={18} />} text="You are currently the highest bidder." />}
-    {outbid && status === "active" && <Notice tone="warning" icon={<Gavel size={18} />} text="You have been outbid. Place at least the minimum next bid to compete again." />}
-    {status === "ended" && <Notice icon={<Trophy size={18} />} text={!hasWinner ? "This auction ended without any bids." : userId && viewer?.isWinner ? `You won at ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : owner ? `The auction ended with a final bid of ${formatSen(listing.finalBid ?? listing.currentBid ?? 0)}.` : "This auction has ended with a winning bidder."} />}
-    {status === "ended" && userId && viewer?.transactionId && <Link href={`/transactions/${viewer.transactionId}`} className="button-primary min-h-11 w-full px-4">View auction transaction</Link>}
-    {status === "cancelled" && <Notice icon={<ShieldCheck size={18} />} text="The seller cancelled this auction before a valid winning result was recorded." />}
-
-    {owner && (status === "scheduled" || status === "active") && (listing.bidCount ?? 0) === 0 && <div>{confirmCancel ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4"><p className="text-sm font-semibold text-red-800">Cancel this auction?</p><p className="mt-1 text-xs text-red-700">It will remain visible as cancelled history and cannot be restarted.</p><div className="mt-3 flex flex-wrap gap-2"><button disabled={busy} onClick={() => void cancel()} className="button-secondary min-h-11 border-red-200 px-4 text-red-700">Confirm cancellation</button><button disabled={busy} onClick={() => setConfirmCancel(false)} className="button-secondary min-h-11 px-4">Keep auction</button></div></div> : <button onClick={() => setConfirmCancel(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-red-700">Cancel auction</button>}</div>}
-    {message && <p className="rounded-xl bg-[var(--takeme-light-green)] p-3 text-sm font-semibold text-[var(--takeme-dark-green)]" role="status">{message}</p>}
-    {error && <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{error}</p>}
-
-    <section className="border-t border-gray-100 pt-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Bid history</h2><span className="text-xs text-[var(--takeme-gray)]">Latest 25</span></div>{bids.length ? <div className="grid gap-2">{bids.map((bid, index) => <div key={`${bid.createdAt}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 text-sm"><span className="font-medium">{bid.isOwnBid ? "You" : "Bidder"}</span><span className="ml-auto font-bold">{formatSen(bid.amount)}</span><span className="w-16 text-right text-xs text-[var(--takeme-gray)]">{relativeTime(bid.createdAt, now)}</span></div>)}</div> : <p className="rounded-xl bg-gray-50 p-4 text-sm text-[var(--takeme-gray)]">{emptyBidHistory}</p>}</section>
+  const clock = auctionClock(status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt, now);
+  if (status === "ended" || status === "cancelled") return null;
+  return <div className={styles.countdown} aria-label={`${status === "scheduled" ? "Starts" : "Ends"} in ${clock ? `${clock.days} days, ${clock.hours} hours, ${clock.minutes} minutes, ${clock.seconds} seconds` : "loading"}`}>
+    <span>{status === "scheduled" ? "Starts in" : "Ends in"}</span><strong aria-hidden="true">{clock ? `${clock.days ? `${clock.days}d ` : ""}${[clock.hours, clock.minutes, clock.seconds].map(n => String(n).padStart(2, "0")).join(":")}` : "—"}</strong><small aria-hidden="true">HR　 MIN　 SEC</small>
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-[var(--takeme-shadow-sm)]"><p className="text-xs font-medium text-[var(--takeme-gray)]">{label}</p><p className="mt-1 text-lg font-bold text-[var(--takeme-dark-green)]">{value}</p></div>; }
-function Notice({ icon, text, tone = "neutral" }: { icon: React.ReactNode; text: string; tone?: "neutral" | "success" | "warning" }) { return <p role="status" className={`flex gap-3 rounded-2xl p-4 text-sm leading-6 ${tone === "success" ? "bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]" : tone === "warning" ? "bg-amber-50 text-amber-900" : "bg-gray-50 text-[var(--takeme-gray)]"}`}><span aria-hidden="true" className="mt-0.5 shrink-0">{icon}</span>{text}</p>; }
+export function AuctionPanel({ listing, userId, owner, onChange }: { listing: Listing; userId?: string; owner: boolean; onChange: () => void }) {
+  const now = useCurrentTime();
+  const router = useRouter();
+  const version = `${listing.id}:${listing.bidCount}:${listing.currentBid}:${listing.auctionStatus}:${listing.status}:${listing.auctionEndAt}`;
+  const [response, setResponse] = useState<{ uid: string; version: string; state: AuctionViewerState } | null>(null);
+  const viewer = response && response.uid === userId && response.version === version ? response.state : null;
+  const [viewerError, setViewerError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [amount, setAmount] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const actionFallback = useRef<HTMLAnchorElement>(null);
+  const cancelledFocus = useRef(false);
+  const [sheet, setSheet] = useState<"bid" | "cancel" | null>(null);
+  const status = effectiveStatus(listing, now);
+  const minimum = getMinimumNextBid(listing);
+  const increment = listing.minimumBidIncrement ?? 0;
+  const clock = auctionClock(listing.auctionEndAt, now);
+  const endingSoon = status === "active" && Boolean(clock && clock.remaining > 0 && clock.remaining <= ENDING_SOON_MS);
+  const amountSen = ringgitToSen(amount);
+  const inputError = !amountSen ? "Enter a positive MYR amount with up to 2 decimal places." : amountSen < minimum ? `Minimum next bid is ${formatSen(minimum)}.` : "";
+  const quick = quickBidAmounts(minimum, increment, MAX_MONEY_SEN);
+  const canBid = listing.status === "active" && status === "active" && now > 0 && Boolean(clock && clock.remaining > 0) && !owner && minimum > 0 && minimum <= MAX_MONEY_SEN;
+  const finalized = listing.auctionStatus === "ended" && listing.status === "ended";
+  const highest = canBid && viewer?.isHighestBidder;
+  const outbid = canBid && viewer?.isOutbid;
+  const bidValue = (listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0;
+  const bidLabel = (listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid";
+  const editable = owner && (listing.bidCount ?? 0) === 0 && (listing.status === "draft" || status === "scheduled" && listing.auctionStatus === "scheduled");
+  const cancellable = owner && (listing.bidCount ?? 0) === 0 && (listing.status === "draft" && !["ended", "cancelled"].includes(listing.auctionStatus ?? "") || listing.status === "active" && ["scheduled", "active"].includes(status));
+
+  useEffect(() => {
+    if (cancelledFocus.current && !cancellable) { cancelledFocus.current = false; actionFallback.current?.focus(); }
+  }, [cancellable]);
+
+  // The listing's existing ten-second refresh drives private viewer comparisons too.
+  // Scope responses to their public snapshot so a newly outbid viewer cannot show stale winning UI.
+  useEffect(() => {
+    if (!userId || !["active", "ended", "sold"].includes(listing.status)) return;
+    let active = true;
+    getAuctionViewerState(listing.id).then(state => { if (active) { setResponse({ uid: userId, version, state }); setViewerError(false); } }).catch(() => { if (active) { setResponse(null); setViewerError(true); } });
+    return () => { active = false; };
+  }, [listing, userId, version, retry]);
+
+  function openBid() {
+    if (!canBid || pending.current) return;
+    if (!userId) { router.push(`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`); return; }
+    setAmount(senToRinggit(minimum)); setError(""); setSheet("bid");
+  }
+  async function submitBid(event: React.FormEvent) {
+    event.preventDefault();
+    if (!canBid || !userId || !amountSen || inputError || pending.current) return;
+    pending.current = true; setBusy(true); setError(""); setMessage("");
+    try {
+      const result = await placeAuctionBid(listing.id, amountSen);
+      setMessage(`Bid accepted at ${formatSen(result.currentBid)}. Your current position is checked against the latest auction data.`);
+      setSheet(null); onChange();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Your bid could not be placed."); onChange(); }
+    finally { pending.current = false; setBusy(false); }
+  }
+  async function cancel() {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setError("");
+    try {
+      await cancelAuctionListing(listing.id); setSheet(null);
+      // Cancelled drafts become private removed history, outside the public detail contract.
+      if (listing.status === "draft") { router.push("/profile/listings?tab=past"); return; }
+      cancelledFocus.current = true; setMessage("Auction cancelled."); onChange();
+    }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "The auction could not be cancelled."); }
+    finally { pending.current = false; setBusy(false); }
+  }
+  async function chat() {
+    if (pending.current) return;
+    if (!userId) { router.push(`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`); return; }
+    pending.current = true; setBusy(true); setError("");
+    try { router.push(`/messages/${await openListingConversation(listing.id)}`); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not open Chat."); }
+    finally { pending.current = false; setBusy(false); }
+  }
+  const primary = highest ? "Raise your bid" : outbid ? `Bid ${formatSen(minimum)}` : userId ? "Place Bid" : "Log in to bid";
+  const action = <button type="button" disabled={busy} className="button-primary" onClick={openBid}><Gavel size={17} aria-hidden="true" />{primary}</button>;
+  return <div className={styles.panel} data-ending-soon={endingSoon || undefined}>
+    {highest && <div className={`${styles.statusCard} ${styles.winning}`} role="status"><Trophy size={25} aria-hidden="true" /><div><strong>You’re the highest bidder!</strong><p className={endingSoon ? styles.urgentText : undefined}>{endingSoon ? "Final moments! Auction ends soon." : "Keep an eye on the auction."}</p></div></div>}
+    {outbid && <div className={`${styles.statusCard} ${styles.outbid}`} role="status"><AlertCircle size={23} aria-hidden="true" /><div><strong>You’ve been outbid!</strong><p>Someone placed a higher bid.</p></div></div>}
+    {endingSoon && !highest && <p className={styles.urgency}><Flame size={16} aria-hidden="true" /><strong>Final moments!</strong> Auction ends soon.</p>}
+    {listing.status === "draft" ? <div className={styles.ended}><h2>Private auction draft</h2><p>Review the timing and images before publishing. This draft is not open for bidding.</p><div className={styles.finalBid}><span>Starting bid</span><strong>{formatSen(listing.startingBid ?? 0)}</strong></div></div> : listing.status === "removed" ? <div className={styles.ended}><h2>Auction unavailable</h2><p>This listing is removed and is visible only to its owner.</p></div> : finalized ? <div className={styles.ended}>
+      <div className={styles.resultIcon}>{viewer?.isWinner ? <Trophy size={34} aria-hidden="true" /> : <Clock3 size={30} aria-hidden="true" />}</div>
+      <h2>{viewer?.isWinner ? <>You <em>won!</em></> : "Auction ended"}</h2>
+      <p>{viewer?.isWinner ? "You’re the winning bidder. Arrange the exchange with the seller through your deal." : (listing.bidCount ?? 0) === 0 ? "No bids were placed." : viewer?.isOutbid ? "You weren’t the highest bidder this time." : "Bidding has closed."}</p>
+      {(listing.bidCount ?? 0) > 0 && listing.finalBid != null && <div className={styles.finalBid}><span>{viewer?.isWinner ? "Winning bid" : "Final bid"}</span><strong>{formatSen(listing.finalBid)}</strong><small>An auction result does not confirm payment or a completed sale.</small></div>}
+      <p className={styles.timestamp}><Clock3 size={14} aria-hidden="true" />Ended {date(listing.endedAt)}</p>
+      {viewer?.transactionId && <Link className="button-primary min-h-12 w-full" href={`/transactions/${viewer.transactionId}`}>View Deal</Link>}
+      {viewer?.isWinner && !viewer.transactionId && <p role="status">Your deal is being prepared. It will appear after the server confirms it.</p>}
+    </div> : status === "cancelled" ? <div className={styles.ended}><h2>Auction cancelled</h2><p>The seller cancelled this auction. Bidding is closed.</p></div> : status === "ended" ? <div className={styles.ended}><h2>Bidding closed</h2><p role="status">Waiting for the server to confirm the auction result.</p></div> : <>
+      <div className={styles.summary}>
+        <div><span>{bidLabel}</span><strong className={styles.price}>{formatSen(bidValue)}</strong><a href="#bid-history">{listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"} · View history</a></div>
+        <AuctionCountdown listing={listing} now={now} />
+      </div>
+      {highest && <p className={styles.winningPill}>You’re winning · {formatSen(bidValue)}</p>}
+      {canBid && <div className={styles.primaryAction}>{action}<p>Minimum next bid <strong>{formatSen(minimum)}</strong></p></div>}
+      {status === "scheduled" && <p className={styles.timing}><Clock3 size={16} aria-hidden="true" />Bidding opens {date(listing.auctionStartAt)}.</p>}
+      {owner && <p className={styles.timing}>You cannot bid on your own auction.{(listing.bidCount ?? 0) > 0 ? " Bidding has started, so editing and cancellation are locked." : " You can cancel while there are no bids."}</p>}
+    </>}
+    {userId && viewerError && <p className={styles.feedback} role="alert">Your personal auction status could not be loaded. <button type="button" onClick={() => setRetry(n => n + 1)}>Retry status</button></p>}
+    {message && <p className={styles.feedback} role="status">{message}</p>}
+    {error && sheet !== "bid" && <p className={styles.error} role="alert">{error}</p>}
+    <div className={`${productStyles.actionBar} ${styles.actions}`} aria-label="Auction actions"><div className={productStyles.actionButtons}>
+      {owner ? <>{editable && <Link href={`/listings/${listing.id}/edit`} className="button-secondary">{listing.status === "draft" ? "Resume draft" : "Edit auction"}</Link>}<Link ref={actionFallback} href="/profile/listings" className="button-primary">My listings</Link></> : canBid ? <><button type="button" disabled={busy} onClick={() => void chat()} className="button-secondary"><MessageCircle size={18} aria-hidden="true" />Chat</button><div className={styles.mobileBid}>{action}</div></> : status === "scheduled" && listing.status === "active" ? <><button type="button" disabled={busy} onClick={() => void chat()} className="button-secondary"><MessageCircle size={18} aria-hidden="true" />Chat</button><a href="#item-details" className="button-primary">Auction details</a></> : viewer?.transactionId ? <Link href={`/transactions/${viewer.transactionId}`} className="button-primary">View Deal</Link> : <a ref={actionFallback} href="#similar-items" className="button-secondary">View similar items</a>}
+    </div></div>
+    {cancellable && <button type="button" className={styles.cancel} disabled={busy} onClick={() => { setError(""); setSheet("cancel"); }}>Cancel auction</button>}
+    {owner && listing.status === "active" && ["scheduled", "active"].includes(status) && <Link className={productStyles.textLink} href={`/listings/${listing.id}/promote`}>Promotion options</Link>}
+    {sheet === "bid" && <ActionSheet title="Place your bid" description={listing.title} busy={busy} onClose={() => setSheet(null)} fallbackFocus={() => actionFallback.current}>
+      <form onSubmit={submitBid} className={styles.bidForm}>
+        <div className={styles.sheetMetrics}><div><span>{bidLabel}</span><strong className={styles.currentPrice}>{formatSen(bidValue)}</strong></div><div><span>Minimum next bid</span><strong>{formatSen(minimum)}</strong></div></div>
+        <label className={styles.inputLabel} htmlFor="auction-bid-amount">Your bid (RM)</label>
+        <div className={styles.stepper}><button type="button" aria-label="Decrease bid by one increment" disabled={busy || !amountSen || amountSen - increment < minimum} onClick={() => setAmount(senToRinggit(Math.max(minimum, (amountSen ?? minimum) - increment)))}><Minus size={19} /></button><input id="auction-bid-amount" disabled={busy} value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" type="text" autoComplete="off" aria-invalid={Boolean(inputError)} aria-describedby="bid-amount-feedback" /><button type="button" aria-label="Increase bid by one increment" disabled={busy || !amountSen || amountSen + increment > MAX_MONEY_SEN} onClick={() => setAmount(senToRinggit((amountSen ?? minimum) + increment))}><Plus size={19} /></button></div>
+        <p id="bid-amount-feedback" className={inputError ? styles.error : styles.helper}>{inputError || `Minimum increment ${formatSen(increment)}. Amounts may be higher than the minimum.`}</p>
+        {quick.length > 0 && <fieldset className={styles.quick}><legend>Quick bid amounts</legend><div>{quick.map(value => <button type="button" key={value} disabled={busy} aria-pressed={amountSen === value} onClick={() => setAmount(senToRinggit(value))}>{formatSen(value)}</button>)}</div></fieldset>}
+        {!canBid && <p className={styles.error} role="alert">Bidding is now closed. Your bid has not been submitted.</p>}
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        <button type="submit" disabled={busy || Boolean(inputError) || !canBid} className="button-primary min-h-12 w-full">{busy && <LoaderCircle size={17} className="animate-spin" />}Confirm Bid{amountSen ? ` — ${formatSen(amountSen)}` : ""}</button>
+        <p className={styles.helper}>Confirming submits your bid for server validation. Bids do not take payment. A winning bid creates a deal to arrange with the seller.</p>
+      </form>
+    </ActionSheet>}
+    {sheet === "cancel" && <ActionSheet title="Cancel this auction?" busy={busy} onClose={() => setSheet(null)}><p className="text-sm leading-6">It will remain visible as cancelled history and cannot be restarted.</p>{error && <p role="alert" className={styles.error}>{error}</p>}<div className={styles.cancelActions}><button type="button" disabled={busy} className="button-secondary min-h-12" onClick={() => setSheet(null)}>Keep auction</button><button type="button" disabled={busy} className="button-primary min-h-12" onClick={() => void cancel()}>Confirm cancellation</button></div></ActionSheet>}
+  </div>;
+}
+
+export function BidHistory({ listing, bids }: { listing: Listing; bids: PublicAuctionBid[] }) {
+  const now = useCurrentTime(60_000);
+  const [open, setOpen] = useState(false);
+  function rows(all: boolean) {
+    return <ol className={styles.historyList}>{(all ? bids : bids.slice(0, 5)).map((bid, index) => <li key={`${bid.createdAt}:${index}`}><span className={styles.avatar} aria-hidden="true">{bid.isOwnBid ? "Y" : <Gavel size={17} />}</span><div><strong>{bid.isOwnBid ? "You" : "Anonymous bidder"}</strong>{index === 0 && bid.amount === listing.currentBid && (listing.bidCount ?? 0) > 0 && listing.auctionStatus === "active" && <span className={styles.leader}>Highest bid</span>}</div><div className={styles.historyAmount}><strong>{formatSen(bid.amount)}</strong><time dateTime={bid.createdAt} title={date(bid.createdAt)}>{relativeTime(bid.createdAt, now)}</time></div></li>)}</ol>;
+  }
+  return <section id="bid-history" className={`${productStyles.section} ${styles.history}`} aria-label="Bid history"><div className={productStyles.sectionHeading}><h2>Bid history</h2><span>{listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</span></div><p className={styles.helper}>Bidder identities are private. Showing the latest {Math.min(25, listing.bidCount ?? 0)} bids.</p>{bids.length ? rows(false) : <p className={styles.empty}>{["ended", "cancelled"].includes(listing.auctionStatus ?? "") ? "No bids were placed." : "No bids yet. The first bid can meet the starting bid."}</p>}{bids.length > 5 && <button type="button" className={styles.historyButton} onClick={() => setOpen(true)}>View {listing.bidCount === bids.length ? `all ${bids.length}` : `latest ${bids.length}`} bids</button>}{open && <ActionSheet title="Bid history" description={`Latest ${bids.length} bids. Bidder identities remain private.`} onClose={() => setOpen(false)}>{rows(true)}</ActionSheet>}</section>;
+}
+
+function relativeTime(value: string, now: number) {
+  if (!now || !Number.isFinite(Date.parse(value))) return date(value);
+  const minutes = Math.max(0, Math.floor((now - Date.parse(value)) / 60000));
+  if (minutes === 0) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} hr ago`;
+  return `${Math.floor(minutes / 1440)} days ago`;
+}

@@ -21,8 +21,13 @@ test("Explore, For You, Saved and related listing surfaces reuse the trusted car
   ]) assert.match(source(path), /<ListingCard/);
 });
 
-test("listing detail uses the expanded seller trust panel and handles unavailable data", () => {
-  assert.match(source("src/components/listings/listing-detail-view.tsx"), /<SellerTrustSignal uid=\{listing\.sellerId\}/);
+test("listing detail uses the shared public seller card and handles unavailable data", () => {
+  assert.match(source("src/components/listings/listing-detail-view.tsx"), /<StandardProductDetail/);
+  const detail = source("src/components/listings/standard-product-detail.tsx");
+  assert.match(detail, /<ProductSeller uid=\{listing\.sellerId\}/);
+  assert.match(detail, /getPublicSellerSummary\(uid\)/);
+  assert.match(detail, /seller\.verificationStatus === "verified"/);
+  assert.match(detail, /Retry seller/);
   const summary = source("src/components/profile/public-seller-summary.tsx");
   assert.match(summary, /Seller trust is unavailable right now/);
   assert.match(summary, /Retry/);

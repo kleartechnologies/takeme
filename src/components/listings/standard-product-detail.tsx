@@ -12,6 +12,10 @@ import { ProfileAvatar, VerifiedLabel } from "@/components/profile/profile-ui";
 import { ReportAction } from "@/components/trust/report-action";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { ListingDealPanel } from "@/components/transactions/listing-deal-panel";
+import { AuctionPanel, AuctionStatusBadge, BidHistory } from "./auction-panel";
+import type { PublicAuctionBid } from "@/lib/services/listings";
+import { effectiveStatus } from "@/lib/auction-presentation";
+import { useCurrentTime } from "@/lib/use-current-time";
 import { ListingCard } from "./listing-card";
 import { SimilarListings } from "./similar-listings";
 import { openListingConversation } from "@/lib/services/conversations";
@@ -26,7 +30,10 @@ const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR
 const conditions = { New: "Brand new, unused.", "Like new": "Used, with minimal signs of wear.", Good: "Used, with normal signs of use.", Fair: "Used, with visible wear. Read the description for details." };
 const statusLabels = { active: "Available", sold: "Sold", ended: "Unavailable", removed: "Removed", draft: "Private draft" };
 
-export function StandardProductDetail({ listing, related, userId, created, share, shareMessage }: { listing: Listing; related: Listing[]; userId?: string; created: boolean; share: () => Promise<void>; shareMessage: string }) {
+export function StandardProductDetail({ listing, related, userId, created, share, shareMessage, bids = [], onAuctionChange = () => {} }: { listing: Listing; related: Listing[]; userId?: string; created: boolean; share: () => Promise<void>; shareMessage: string; bids?: PublicAuctionBid[]; onAuctionChange?: () => void }) {
+  const auction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
+  const now = useCurrentTime();
+  const auctionStatus = effectiveStatus(listing, now);
   const owner = userId === listing.sellerId;
   const [menu, setMenu] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
@@ -36,31 +43,33 @@ export function StandardProductDetail({ listing, related, userId, created, share
     try { await navigator.clipboard.writeText(listingCanonicalUrl(listing.id, process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin)); setCopyMessage("Link copied"); }
     catch { setCopyMessage("Could not copy the link. Use Share instead."); }
   }
-  return <main className={styles.page} data-standard-product data-owner={owner || undefined}>
-    <nav className={styles.toolbar} aria-label="Product navigation"><Link href="/explore" className="icon-button" aria-label="Back to Explore"><ArrowLeft size={21} /></Link><span><Image src="/brand/takeme-wordmark.png" alt="TAKEME" width={104} height={35} className={styles.toolbarBrand} /><span className={styles.toolbarTitle}>Product details</span></span><div><SaveButton listingId={listing.id} compact /><button type="button" className="icon-button" aria-label="Share listing" onClick={() => void share()}><Share2 size={20} /></button><button type="button" className="icon-button" aria-label="Listing options" onClick={() => setMenu(true)}><Ellipsis size={21} /></button></div></nav>
+  return <main className={styles.page} data-standard-product={!auction || undefined} data-auction-product={auction || undefined} data-auction-result={auction && listing.auctionStatus === "ended" && listing.status === "ended" || undefined} data-owner={owner || undefined}>
+    <nav className={styles.toolbar} aria-label="Product navigation"><Link href="/explore" className="icon-button" aria-label="Back to Explore"><ArrowLeft size={21} /></Link><span><Image src="/brand/takeme-wordmark.png" alt="TAKEME" width={104} height={35} className={styles.toolbarBrand} /><span className={styles.toolbarTitle}>{auction ? "Auction details" : "Product details"}</span></span><div><SaveButton listingId={listing.id} compact /><button type="button" className="icon-button" aria-label="Share listing" onClick={() => void share()}><Share2 size={20} /></button><button type="button" className="icon-button" aria-label="Listing options" onClick={() => setMenu(true)}><Ellipsis size={21} /></button></div></nav>
     {shareMessage && <p role="status" className={styles.notice}>{shareMessage}</p>}
-    {created && listing.status === "active" && <p role="status" className={styles.notice}>Your listing is live in the TAKEME marketplace.</p>}
-    {listing.status !== "active" && <p className={styles.statusNotice}>{statusLabels[listing.status]}{["draft", "removed"].includes(listing.status) ? " · Only visible to its owner" : " · New offers are unavailable"}</p>}
+    {created && listing.status === "active" && <p role="status" className={styles.notice}>{auction ? auctionStatus === "scheduled" ? "Your auction is published. Bidding opens at the scheduled start time." : "Your auction is published in the TAKEME marketplace." : "Your listing is live in the TAKEME marketplace."}</p>}
+    {listing.status !== "active" && (!auction || ["draft", "removed"].includes(listing.status)) && <p className={styles.statusNotice}>{statusLabels[listing.status]}{["draft", "removed"].includes(listing.status) ? " · Only visible to its owner" : auction ? " · Bidding is closed" : " · New offers are unavailable"}</p>}
     <div className={styles.top}>
-      <ProductGallery listing={listing} />
+      <ProductGallery listing={listing} badge={auction ? <AuctionStatusBadge listing={listing} /> : undefined} />
       <section className={styles.identity} aria-label="Product information">
         <p className={styles.category}>{getCategoryName(listing.categoryId)}</p>
         <h1>{listing.title}</h1>
-        <p className={styles.price}>{money.format(listing.price)}{listing.status !== "active" && <small>Listed price</small>}</p>
-        <div className={styles.badges}><span>{listing.condition}</span>{listing.status !== "active" && <span className={styles.statusBadge}>{statusLabels[listing.status]}</span>}</div>
+        {!auction && <p className={styles.price}>{money.format(listing.price)}{listing.status !== "active" && <small>Listed price</small>}</p>}
+        <div className={styles.badges}><span>{listing.condition}</span>{!auction && listing.status !== "active" && <span className={styles.statusBadge}>{statusLabels[listing.status]}</span>}</div>
         <p className={styles.area}><MapPin size={14} aria-hidden="true" />{location}</p>
-        <p className={styles.preview}>{listing.description.replace(/\s+/g, " ").trim()}</p><a href="#product-description" className={styles.textLink}>Read description <ArrowRight size={14} /></a>
+        {auction && <AuctionPanel listing={listing} userId={userId} owner={owner} onChange={onAuctionChange} />}
+        {!auction && <p className={styles.preview}>{listing.description.replace(/\s+/g, " ").trim()}</p>}<a href="#product-description" className={styles.textLink}>Read description <ArrowRight size={14} /></a>
         <ProductSeller uid={listing.sellerId} />
-        <ProductActionBar listing={listing} userId={userId} />
+        {!auction && <ProductActionBar listing={listing} userId={userId} />}
       </section>
     </div>
     <div className={styles.content}>
-      <section className={styles.section} aria-labelledby="item-details"><h2 id="item-details">Item details</h2><dl className={styles.facts}><div><dt>Condition</dt><dd>{listing.condition}</dd></div><div><dt>Category</dt><dd>{getCategoryName(listing.categoryId)}</dd></div><div><dt>Status</dt><dd>{statusLabels[listing.status]}</dd></div><div><dt>Posted</dt><dd>{new Date(listing.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</dd></div></dl><p className={styles.conditionGuide}><ShieldCheck size={16} aria-hidden="true" /><span><strong>{listing.condition}</strong> — {conditions[listing.condition]}</span></p></section>
+      <section className={styles.section} aria-labelledby="item-details"><h2 id="item-details">Item details</h2><dl className={styles.facts}><div><dt>Condition</dt><dd>{listing.condition}</dd></div><div><dt>Category</dt><dd>{getCategoryName(listing.categoryId)}</dd></div><div><dt>Status</dt><dd>{auction ? listing.status === "draft" ? "Private draft" : listing.status === "removed" ? "Removed" : auctionStatus === "active" ? "Live auction" : auctionStatus === "scheduled" ? "Scheduled auction" : auctionStatus === "cancelled" ? "Cancelled" : "Bidding closed" : statusLabels[listing.status]}</dd></div><div><dt>Posted</dt><dd>{new Date(listing.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</dd></div></dl><p className={styles.conditionGuide}><ShieldCheck size={16} aria-hidden="true" /><span><strong>{listing.condition}</strong> — {conditions[listing.condition]}</span></p></section>
       <section className={styles.section} id="product-description"><h2>Description</h2><p className={styles.description}>{listing.description}</p></section>
       <section className={styles.section} aria-labelledby="delivery-heading"><h2 id="delivery-heading">Delivery & meet-up</h2><div className={styles.delivery}><MapPin size={20} aria-hidden="true" /><div><strong>{listing.meetupLocation ? "Public meet-up location" : "General listing area"}</strong><p>{listing.meetupLocation ? `${listing.meetupLocation.name} · ${listing.meetupLocation.area}, ${listing.meetupLocation.state}` : location}</p></div></div><p className={styles.muted}>Ask the seller about collection or delivery in Chat. Availability, arrangements and any costs must be agreed together.</p></section>
-      <section className={`${styles.section} ${styles.safety}`} aria-labelledby="safety-heading"><h2 id="safety-heading"><ShieldCheck size={20} aria-hidden="true" />A little care goes a long way</h2><p>Check the item and seller reviews. Agree the exchange clearly, and never share passwords or verification codes.</p><p>TAKEME does not process buyer-to-seller payments. Accepting an offer agrees a price; it does not confirm payment or a completed sale.</p>{!owner && <ReportAction targetType="listing" targetId={listing.id} label="Report listing" />}</section>
+      <section className={`${styles.section} ${styles.safety}`} aria-labelledby="safety-heading"><h2 id="safety-heading"><ShieldCheck size={20} aria-hidden="true" />A little care goes a long way</h2><p>Check the item and seller reviews. Agree the exchange clearly, and never share passwords or verification codes.</p><p>TAKEME does not process buyer-to-seller payments. {auction ? "An auction win agrees a result; it does not confirm payment or a completed sale." : "Accepting an offer agrees a price; it does not confirm payment or a completed sale."}</p>{!owner && <ReportAction targetType="listing" targetId={listing.id} label="Report listing" />}</section>
       <ProductReviews uid={listing.sellerId} />
-      <details className={`${styles.section} ${styles.requests}`}><summary>{owner ? "Buyer requests & deal status" : "Requests & deal status"}</summary><ListingDealPanel key={`${listing.id}:${userId}`} listing={listing} userId={userId} hideMakeOffer /></details>
+      {auction && <BidHistory listing={listing} bids={bids} />}
+      {!auction && <details className={`${styles.section} ${styles.requests}`}><summary>{owner ? "Buyer requests & deal status" : "Requests & deal status"}</summary><ListingDealPanel key={`${listing.id}:${userId}`} listing={listing} userId={userId} hideMakeOffer /></details>}
       {related.length > 0 && <section className={styles.section} aria-label="More from this seller"><div className={styles.sectionHeading}><h2>More from this seller</h2><Link href={`/sellers/${listing.sellerId}`} className={styles.textLink}>View seller <ArrowRight size={14} /></Link></div><div className={styles.related}>{related.slice(0, 4).map(item => <ListingCard key={item.id} listing={item} variant="discovery" />)}</div></section>}
       {["active", "sold", "ended"].includes(listing.status) && <div id="similar-items" className={styles.similar}><SimilarListings listing={listing} discovery /></div>}
     </div>
@@ -68,11 +77,11 @@ export function StandardProductDetail({ listing, related, userId, created, share
   </main>;
 }
 
-function ProductGallery({ listing }: { listing: Listing }) {
+function ProductGallery({ listing, badge }: { listing: Listing; badge?: React.ReactNode }) {
   const [index, setIndex] = useState(0);
   const total = listing.imageUrls.length;
   const selected = Math.min(index, Math.max(0, total - 1));
-  return <section className={styles.gallery} aria-label="Product images"><div className={styles.mainImage}>{total ? <Image src={listing.imageUrls[selected]} alt={`${listing.title} — image ${selected + 1}`} fill priority sizes="(min-width: 1024px) 58vw, 100vw" className="object-contain" /> : <div className={styles.noImage}><ImageIcon size={36} /><p>No product image available</p></div>}{total > 1 && <><button type="button" className={`${styles.galleryArrow} ${styles.previous}`} aria-label="Previous product image" onClick={() => setIndex((selected - 1 + total) % total)}><ChevronLeft size={19} /></button><button type="button" className={`${styles.galleryArrow} ${styles.next}`} aria-label="Next product image" onClick={() => setIndex((selected + 1) % total)}><ChevronRight size={19} /></button><span className={styles.counter} aria-live="polite">{selected + 1} / {total}</span></>}</div>{total > 1 && <div className={styles.thumbnails} aria-label="Choose product image">{listing.imageUrls.map((url, i) => <button key={`${url}:${i}`} type="button" aria-label={`Show product image ${i + 1}`} aria-pressed={selected === i} onClick={() => setIndex(i)}><Image src={url} alt="" fill sizes="64px" className="object-contain" /></button>)}</div>}</section>;
+  return <section className={styles.gallery} aria-label="Product images"><div className={styles.mainImage}>{badge}{total ? <Image src={listing.imageUrls[selected]} alt={`${listing.title} — image ${selected + 1}`} fill priority sizes="(min-width: 1024px) 58vw, 100vw" className="object-contain" /> : <div className={styles.noImage}><ImageIcon size={36} /><p>No product image available</p></div>}{total > 1 && <><button type="button" className={`${styles.galleryArrow} ${styles.previous}`} aria-label="Previous product image" onClick={() => setIndex((selected - 1 + total) % total)}><ChevronLeft size={19} /></button><button type="button" className={`${styles.galleryArrow} ${styles.next}`} aria-label="Next product image" onClick={() => setIndex((selected + 1) % total)}><ChevronRight size={19} /></button><span className={styles.counter} aria-live="polite">{selected + 1} / {total}</span></>}</div>{total > 1 && <div className={styles.thumbnails} aria-label="Choose product image">{listing.imageUrls.map((url, i) => <button key={`${url}:${i}`} type="button" aria-label={`Show product image ${i + 1}`} aria-pressed={selected === i} onClick={() => setIndex(i)}><Image src={url} alt="" fill sizes="64px" className="object-contain" /></button>)}</div>}</section>;
 }
 
 function ProductActionBar({ listing, userId }: { listing: Listing; userId?: string }) {
