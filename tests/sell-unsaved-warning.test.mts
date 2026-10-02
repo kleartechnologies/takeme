@@ -59,16 +59,15 @@ test("effect cleanup prevents duplicates, disarms on successful navigation/rever
   assert.equal(target.unload().defaultPrevented, false);
 });
 
-test("Sell wires the native effect to actual dirty/photo/busy state and all authoritative success paths navigate", () => {
+test("Sell retains native protection, confirms its exit, and disarms only after successful persistence", () => {
   const source = readFileSync("src/components/forms/sell-form.tsx", "utf8");
   assert.match(source, /return registerUnsavedListingWarning\(window, isDirty, photoChanged, busy\)/);
   assert.match(source, /\[isDirty, photoChanged, busy\]/);
-  assert.equal((source.match(/shouldValidate: true, shouldDirty: true/g) ?? []).length, 2);
   assert.match(source, /photos\.some\(\(photo, index\) => photo.file \|\| photo.url !== listing\?\.imageUrls\[index\]\)/);
   assert.match(source, /photos.length !== \(listing\?\.imageUrls.length \?\? 0\)/);
-  const submit = source.slice(source.indexOf("async function submit"), source.indexOf("return (", source.indexOf("async function submit")));
-  assert.equal((submit.match(/router.push\(/g) ?? []).length, 3);
-  assert.equal((submit.match(/setBusy\(false\)/g) ?? []).length, 1);
-  assert.match(submit, /catch \(error\)[\s\S]*setBusy\(false\)/);
-  assert.doesNotMatch(source, /window\.confirm|role="dialog"/);
+  assert.match(source, /reset\(values\); setSheet\(null\); setResult/);
+  assert.match(source, /finally \{ inFlight.current = false; setBusy\(false\)/);
+  assert.match(source, /if \(dirty && !result\) setSheet\("exit"\)/);
+  assert.match(source, /ActionSheet title="Leave this listing\?"/);
+  assert.doesNotMatch(source, /window\.confirm/);
 });

@@ -253,6 +253,37 @@ export async function publishExistingAuctionDraft(id: string, input: ListingInpu
   return id;
 }
 
+/** Uses the existing draft/update callables; no public write occurs here. */
+export async function saveListingDraft(input: ListingInput, files: File[]) {
+  const services = requireServices();
+  const errors = [...validateListingInput(input), ...validateImageFiles(files)];
+  if (errors.length) throw new Error(errors[0]);
+  if (input.listingType === "auction" && Date.parse(input.auctionStartAt) <= Date.now()) throw new Error("Schedule for later to save a resumable auction draft.");
+  const id = input.listingType === "auction" ? await createAuctionDraft(input) : await createFixedDraft(input);
+  const uploaded: { url: string; fullPath: string }[] = [];
+  try {
+    uploaded.push(...await uploadListingImages(services.user.uid, id, files));
+    const imageUrls = uploaded.map(image => image.url);
+    if (input.listingType === "auction") await saveAuction(id, input, imageUrls);
+    else await updateFixed(id, input, imageUrls);
+  } catch (error) {
+    await Promise.allSettled(uploaded.map(image => deleteObject(ref(services.storage, image.fullPath))));
+    if (input.listingType === "auction") await cancelAuctionListing(id).catch(() => undefined);
+    else await removeFixed(id).catch(() => undefined);
+    throw error;
+  }
+  return id;
+}
+
+export async function publishExistingFixedDraft(id: string, input: ListingInput, orderedPhotos: { url: string; existing: boolean; file?: File }[]) {
+  const services = requireServices();
+  const listing = await getListing(id);
+  if (!listing || listing.sellerId !== services.user.uid || listing.listingType !== "buy_now" || listing.status !== "draft" || input.listingType !== "buy_now") throw new Error("You are not allowed to publish this draft.");
+  const imageUrls = await updateListing(id, input, orderedPhotos);
+  await publishFixed(id, imageUrls);
+  return id;
+}
+
 export async function deleteListing(id: string) {
   const services = requireServices();
   const current = await getListing(id);

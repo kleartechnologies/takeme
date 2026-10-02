@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("existing auction draft uses its own listing ID and the authoritative publish callable", () => {
   const service = readFileSync("src/lib/services/listings.ts", "utf8");
-  const resume = service.slice(service.indexOf("export async function publishExistingAuctionDraft"));
+  const resume = service.slice(service.indexOf("export async function publishExistingAuctionDraft"), service.indexOf("export async function saveListingDraft"));
   assert.match(resume, /listing\.sellerId !== services\.user\.uid/);
   assert.match(resume, /listing\.status !== "draft"/);
   assert.match(resume, /updateListing\(id, input, orderedPhotos\)/);

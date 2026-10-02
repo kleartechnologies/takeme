@@ -10,7 +10,7 @@ export function listingGroup(listing: Listing): ListingGroup {
 }
 export function listingActions(listing: Listing, now: number) {
   const auction = auctionListing(listing);
-  const resumableDraft = auction && listing.status === "draft" && listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0;
+  const resumableDraft = listing.status === "draft" && (!auction || listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0);
   const editable = resumableDraft || listing.status === "active" && (!auction || (listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0 && Boolean(listing.auctionStartAt && now < Date.parse(listing.auctionStartAt))));
   const removable = listing.status === "active" && (!auction || ((listing.bidCount ?? 0) === 0 && !["ended", "cancelled"].includes(listing.auctionStatus ?? "")));
   const promotable = listing.status === "active" && (!auction || (["active", "scheduled"].includes(listing.auctionStatus ?? "") && Boolean(listing.auctionEndAt && now < Date.parse(listing.auctionEndAt))));

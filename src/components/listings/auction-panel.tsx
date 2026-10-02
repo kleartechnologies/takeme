@@ -35,7 +35,7 @@ function AuctionCountdown({ listing, now }: { listing: Listing; now: number }) {
   </div>;
 }
 
-export function AuctionPanel({ listing, userId, owner, onChange }: { listing: Listing; userId?: string; owner: boolean; onChange: () => void }) {
+export function AuctionPanel({ listing, userId, owner, onChange, previewMode = false }: { listing: Listing; userId?: string; owner: boolean; onChange: () => void; previewMode?: boolean }) {
   const now = useCurrentTime();
   const router = useRouter();
   const version = `${listing.id}:${listing.bidCount}:${listing.currentBid}:${listing.auctionStatus}:${listing.status}:${listing.auctionEndAt}`;
@@ -75,11 +75,11 @@ export function AuctionPanel({ listing, userId, owner, onChange }: { listing: Li
   // The listing's existing ten-second refresh drives private viewer comparisons too.
   // Scope responses to their public snapshot so a newly outbid viewer cannot show stale winning UI.
   useEffect(() => {
-    if (!userId || !["active", "ended", "sold"].includes(listing.status)) return;
+    if (previewMode || !userId || !["active", "ended", "sold"].includes(listing.status)) return;
     let active = true;
     getAuctionViewerState(listing.id).then(state => { if (active) { setResponse({ uid: userId, version, state }); setViewerError(false); } }).catch(() => { if (active) { setResponse(null); setViewerError(true); } });
     return () => { active = false; };
-  }, [listing, userId, version, retry]);
+  }, [listing, userId, version, retry, previewMode]);
 
   function openBid() {
     if (!canBid || pending.current) return;
@@ -117,6 +117,7 @@ export function AuctionPanel({ listing, userId, owner, onChange }: { listing: Li
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not open Chat."); }
     finally { pending.current = false; setBusy(false); }
   }
+  if (previewMode) return <div className={styles.panel} aria-label="Auction preview"><div className={styles.summary}><div><span>Starting bid</span><strong className={styles.price}>{formatSen(listing.startingBid ?? 0)}</strong><p className={styles.helper}>Minimum increment {formatSen(increment)}</p></div><AuctionCountdown listing={listing} now={now} /></div><p className={styles.timing}>Starts {date(listing.auctionStartAt)}<br />Ends {date(listing.auctionEndAt)}</p><p className={styles.helper}>Bids open only after this auction is published and its start time is reached.</p></div>;
   const primary = highest ? "Raise your bid" : outbid ? `Bid ${formatSen(minimum)}` : userId ? "Place Bid" : "Log in to bid";
   const action = <button type="button" disabled={busy} className="button-primary" onClick={openBid}><Gavel size={17} aria-hidden="true" />{primary}</button>;
   return <div className={styles.panel} data-ending-soon={endingSoon || undefined}>

@@ -44,7 +44,7 @@ export function Header() {
   const { user } = useAuth();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
-  if (pathname.startsWith("/admin")) return null;
+  if (pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
   const discoveryHeader = pathname === "/" || pathname === "/explore";
   const profileHeader = pathname.startsWith("/profile") || pathname.startsWith("/sellers/");

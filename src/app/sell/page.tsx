@@ -1,2 +1,2 @@
 import { SellForm } from "@/components/forms/sell-form";
-export default function SellPage() { return <main className="page-shell py-5 md:py-8"><div className="mb-5"><p className="eyebrow">Sell on TAKEME</p><h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Turn it into someone’s next find.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--takeme-gray)]">Add clear photos and honest details, then publish your listing to the marketplace.</p></div><SellForm /></main>; }
+export default function SellPage() { return <main><SellForm /></main>; }

@@ -87,3 +87,10 @@ test("owner density keeps tier requirements and moves reviews into the compact m
   assert.doesNotMatch(reputation, /My published reviews/);
   assert.match(source("src/app/globals.css"), /\.owner-profile \.profile-menu-link \{ min-height: 56px; \}/);
 });
+
+test("fixed-price drafts can resume without exposing sold or removed items as editable", () => {
+  const now = Date.parse("2026-10-03T00:00:00Z");
+  assert.equal(listingActions(listing({ listingType: "buy_now", status: "draft" }), now).resumableDraft, true);
+  assert.equal(listingActions(listing({ listingType: "buy_now", status: "draft" }), now).editable, true);
+  for (const status of ["sold", "removed"] as const) assert.equal(listingActions(listing({ listingType: "buy_now", status }), now).editable, false);
+});

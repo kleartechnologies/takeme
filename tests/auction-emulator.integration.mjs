@@ -9,6 +9,7 @@ import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref, 
 
 const projectId = "demo-takeme";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 process.env.GCLOUD_PROJECT = projectId;
 const functionsRequire = createRequire(new URL("../functions/package.json", import.meta.url));
 const { getFirestore: getAdminFirestore, Timestamp } = functionsRequire("firebase-admin/firestore");
@@ -134,7 +135,7 @@ await assert.rejects(() => updateDoc(doc(owner.firestore, "listings", resumable.
 await call(owner, "publishAuctionListing", { listingId: resumable.listingId, imageUrls: [resumeImage] });
 assert.equal((await resumableRef.get()).data().status, "active");
 assert.equal((await resumableRef.get()).data().imageUrls.length, 1);
-assert.equal((await adminDb.collection("listings").where("title", "==", "Resumed draft auction").get()).size, 1, "Resume must not create a second listing");
+assert.equal((await adminDb.collection("listings").where("title", "==", "Resumed draft auction").where("sellerId", "==", owner.auth.currentUser.uid).get()).size, 1, "Resume must not create a second listing");
 await assert.rejects(() => call(owner, "publishAuctionListing", { listingId: resumable.listingId, imageUrls: [resumeImage] }), /cannot be published/i);
 await resumableRef.update({ auctionStatus: "active", auctionStartAt: Timestamp.fromMillis(Date.now() - 1_000) });
 await assert.rejects(() => call(owner, "updateAuctionListing", { ...resumeInput, listingId: resumable.listingId, imageUrls: [resumeImage] }), /locked/i);
