@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowRight, Flame } from "lucide-react";
-import Link from "next/link";
+import { Flame } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ListingCard } from "@/components/listings/listing-card";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { getActiveListings, type PublicListing } from "@/lib/services/listings";
+
+import { DiscoverySectionHeader } from "./discovery-section";
 
 export function EndingSoonMarketplace() {
   const [listings, setListings] = useState<PublicListing[]>([]);
@@ -24,8 +25,8 @@ export function EndingSoonMarketplace() {
     return () => { active = false; };
   }, []);
   if (!loaded || listings.length === 0) return null;
-  return <section className="py-5" aria-labelledby="ending-soon-title">
-    <div className="mb-4 flex items-end justify-between gap-3"><div><h2 id="ending-soon-title" className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><Flame className="text-orange-600" size={22} /> Ending Soon</h2><p className="mt-1 text-xs text-[var(--takeme-gray)] sm:text-sm">Active auctions with the nearest end times in this set.</p></div><Link href="/explore?type=auction&auction=active" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-[var(--takeme-dark-green)] sm:text-sm">See all <ArrowRight size={15} /></Link></div>
-    <div className="marketplace-rail">{listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div>
+  return <section className="discovery-section" aria-labelledby="ending-soon-title">
+    <DiscoverySectionHeader id="ending-soon-title" title="Ending Soon" subtitle="Grab deals before they're gone!" icon={Flame} href="/explore?type=auction&auction=active" />
+    <div className="home-product-grid home-discovery-preview">{listings.map((listing) => <ListingCard key={listing.id} listing={listing} variant="discovery" />)}</div>
   </section>;
 }

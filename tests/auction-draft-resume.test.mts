@@ -15,7 +15,7 @@ test("existing auction draft uses its own listing ID and the authoritative publi
 test("seller UI exposes resume only for unpublished zero-bid auctions", () => {
   const edit = readFileSync("src/components/forms/edit-listing-view.tsx", "utf8");
   const form = readFileSync("src/components/forms/sell-form.tsx", "utf8");
-  const profile = readFileSync("src/components/profile/profile-view.tsx", "utf8");
+  const profile = readFileSync("src/components/profile/my-listings-view.tsx", "utf8");
   assert.match(edit, /state\.listing\.status === "draft"/);
   assert.match(edit, /state\.listing\.bidCount \?\? 0\) === 0/);
   assert.match(form, /publishExistingAuctionDraft\(listing\.id, input, photos\)/);

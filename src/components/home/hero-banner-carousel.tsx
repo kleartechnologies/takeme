@@ -26,8 +26,8 @@ export function HeroBannerCarousel({ headingLevel = 2 }: { headingLevel?: 1 | 2 
           return (
           <div key={banner.theme} className={`marketplace-banner marketplace-banner--${banner.theme} relative flex w-full shrink-0 snap-start items-center overflow-hidden rounded-2xl lg:rounded-3xl`} role="group" aria-roledescription="slide" aria-label={`${index + 1} of ${marketplacePromotions.length}: ${banner.action}`}>
             <div className="relative z-10 w-[59%] pl-4 sm:pl-8 lg:pl-10">
-              <Heading className="banner-title">{banner.titleLines[0]}<br />{banner.titleLines[1]}</Heading>
-              <p className="banner-supporting">{banner.supporting}</p>
+              <Heading className="banner-title">{headingLevel === 1 && index === 0 ? <>Discover something<br />worth taking home.</> : <>{banner.titleLines[0]}<br />{banner.titleLines[1]}</>}</Heading>
+              <p className="banner-supporting">{headingLevel === 1 && index === 0 ? "New. Branded. Preloved. Auctions." : banner.supporting}</p>
               <Link href={banner.href} className="banner-action group inline-flex items-center gap-1.5 rounded-full font-semibold focus-visible:outline-offset-2">{banner.action}<ArrowRight className="size-3 transition group-hover:translate-x-0.5 sm:size-4" aria-hidden="true" /></Link>
             </div>
             <div className={`banner-art banner-art--${banner.theme} pointer-events-none absolute inset-y-0 right-0 w-[43%]`} aria-hidden="true">

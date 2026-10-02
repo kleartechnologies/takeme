@@ -55,6 +55,18 @@ await admin.doc(`publicReviews/buyer-private-${suffix}`).set({ reviewedUserId: s
 await admin.doc(`publicReviews/seller-public-${suffix}`).set({ reviewedUserId: sellerIds[0], reviewerRole: "buyer", rating: 4, tags: [], comment: "Seller-side review", createdAt: new Date() });
 const publicReviews = (await httpsCallable(guest.functions, "getPublicReviews")({ userId: sellerIds[0] })).data.reviews;
 assert.deepEqual(publicReviews.map((review) => review.comment), ["Seller-side review"]);
+
+// The public storefront must stay seller-only even when viewed by its owner.
+const ownUid = signed.auth.currentUser.uid;
+await admin.doc(`publicReviews/owner-seller-public-${suffix}`).set({ reviewedUserId: ownUid, reviewerRole: "buyer", rating: 5, tags: [], comment: "Public seller feedback", createdAt: new Date() });
+await admin.doc(`publicReviews/owner-buyer-private-${suffix}`).set({ reviewedUserId: ownUid, reviewerRole: "seller", rating: 4, tags: [], comment: "Owner buyer feedback", createdAt: new Date() });
+const ownerReviews = httpsCallable(signed.functions, "getPublicReviews");
+const ownerPublic = (await ownerReviews({ userId: ownUid, sellerOnly: true })).data.reviews;
+assert.deepEqual(ownerPublic.map((review) => review.comment), ["Public seller feedback"]);
+assert.deepEqual(Object.keys(ownerPublic[0]).sort(), ["id", "reviewerRole", "rating", "tags", "comment", "createdAt"].sort());
+assert.equal((await ownerReviews({ userId: ownUid, sellerOnly: false })).data.reviews.length, 2, "Private account view retains both participant contexts");
+assert.deepEqual((await httpsCallable(guest.functions, "getPublicReviews")({ userId: ownUid })).data.reviews.map((review) => review.comment), ["Public seller feedback"]);
+
 const newcomer = (await call({ sellerIds: [sellerIds[1]] })).data.sellers[0];
 assert.equal(newcomer.sellerRating, null);
 assert.equal(newcomer.sellerReviewCount, 0);

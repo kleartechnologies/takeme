@@ -11,8 +11,9 @@ test("discovery requires a server-confirmed, privacy-filtered public listing pro
 
 test("Explore keeps loading, backend failure, and genuine empty results distinct", () => {
   const view = readFileSync("src/components/listings/explore-browser.tsx", "utf8");
-  assert.match(view, /loading \? <div className="grid/);
+  assert.match(view, /loading \? <div className="explore-product-grid"/);
   assert.match(view, /state\.error && <div role="alert"><ErrorState/);
   assert.match(view, /Retry listings/);
-  assert.match(view, /!state\.error \? <EmptyState title=/);
+  assert.match(view, /!state\.error \? <div className="discovery-empty explore-empty"/);
+  assert.match(view, /No matches found/);
 });

@@ -1,125 +1,61 @@
 "use client";
 
-import { Bell, CalendarDays, Gavel, Heart, ListPlus, LoaderCircle, LogIn, MapPin, Pencil, ShoppingBag, Sparkles, Star, Trash2, UserRound, X } from "lucide-react";
-import Image from "next/image";
+import { Bell, Bookmark, CalendarDays, Gavel, Heart, ListChecks, MapPin, MessageSquare, Settings, ShoppingBag, Star, Store, Users, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { EditProfile } from "@/components/profile/edit-profile";
-import { ReputationView } from "@/components/profile/reputation-view";
+import { OwnerPublishedReviews, ReputationView } from "@/components/profile/reputation-view";
+import { ProfileAvatar, ProfileMenuLink, VerifiedLabel } from "@/components/profile/profile-ui";
 import { TransactionHistory } from "@/components/transactions/transaction-history";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
-import { EmptyState, ErrorState } from "@/components/ui/states";
-import { deleteListing, getListingsBySeller } from "@/lib/services/listings";
+import { ErrorState } from "@/components/ui/states";
+import { getListingsBySeller } from "@/lib/services/listings";
 import { getTrustSummary } from "@/lib/services/trust";
 import { getUserProfile } from "@/lib/services/users";
-import { useCurrentTime } from "@/lib/use-current-time";
+import { getFollowState, getFollowing } from "@/lib/services/engagement";
+import { getSavedPage } from "@/lib/services/saved";
+import { getMyTransactions } from "@/lib/services/transactions";
+import { auctionListing, listingGroup } from "@/lib/profile-presentation";
 import type { Listing, TrustSummary, UserProfile } from "@/types/marketplace";
 
-const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-type View = "current" | "past";
-type AccountMode = "selling" | "buying";
-const isAuction = (listing: Listing) => listing.listingType !== "buy_now";
-const isCurrent = (listing: Listing) => listing.status === "active";
-
-function statusLabel(listing: Listing) {
-  if (isAuction(listing)) {
-    if (listing.auctionStatus === "cancelled") return "Cancelled auction";
-    if (listing.auctionStatus === "ended") return "Auction ended";
-    if (listing.auctionStatus === "scheduled") return "Scheduled auction";
-    return "Live auction";
-  }
-  if (listing.status === "removed") return "Removed";
-  if (listing.status === "sold") return "Sold";
-  if (listing.status === "draft") return "Draft";
-  return "Live listing";
-}
-
 export function ProfileView() {
-  const now = useCurrentTime(30_000);
   const { user, loading: authLoading, configured } = useAuth();
-  const [state, setState] = useState<{ loading: boolean; profile: UserProfile | null; trust: TrustSummary | null; listings: Listing[]; error: string }>({ loading: true, profile: null, trust: null, listings: [], error: "" });
-  const [accountMode, setAccountMode] = useState<AccountMode>("selling");
-  const [view, setView] = useState<View>("current");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [confirm, setConfirm] = useState<Listing | null>(null);
-  const [removingId, setRemovingId] = useState("");
-  const [actionError, setActionError] = useState("");
+  const [state, setState] = useState<{ uid: string; profile: UserProfile | null; trust: TrustSummary | null; listings: Listing[]; error: string }>({ uid: "", profile: null, trust: null, listings: [], error: "" });
+  const [stats, setStats] = useState<{ uid: string; followers?: string; following?: string; saved?: string; buying?: string }>({ uid: "" });
   const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    if (!confirm) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.querySelector<HTMLElement>('[aria-labelledby="remove-title"] button[aria-label="Close"]')?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !removingId) setConfirm(null);
-      if (event.key !== "Tab") return;
-      const dialog = document.querySelector<HTMLElement>('[aria-labelledby="remove-title"]');
-      const focusable = [...(dialog?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])];
-      const first = focusable[0], last = focusable.at(-1);
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus(); };
-  }, [confirm, removingId]);
-
   useEffect(() => {
     if (!user) return;
     let active = true;
-    Promise.all([getUserProfile(user.uid), getListingsBySeller(user.uid, true), getTrustSummary(user.uid).catch(() => null)]).then(([profile, listings, trust]) => { if (active) setState({ loading: false, profile, trust, listings, error: "" }); }).catch(() => { if (active) setState({ loading: false, profile: null, trust: null, listings: [], error: "Your marketplace account could not be loaded. Please try again." }); });
+    Promise.all([getUserProfile(user.uid), getListingsBySeller(user.uid, true), getTrustSummary(user.uid).catch(() => null)])
+      .then(([profile, listings, trust]) => { if (active) setState({ uid: user.uid, profile, trust, listings, error: "" }); })
+      .catch(() => { if (active) setState({ uid: user.uid, profile: null, trust: null, listings: [], error: "Your marketplace account could not be loaded. Please try again." }); });
+    Promise.allSettled([getFollowState(user.uid), getFollowing(), getSavedPage(), getMyTransactions()]).then(([followers, following, saved, transactions]) => {
+      if (active) setStats({ uid: user.uid,
+        ...(followers.status === "fulfilled" ? { followers: String(followers.value.followerCount) } : {}),
+        ...(following.status === "fulfilled" ? { following: String(following.value.items.length) + (following.value.hasMore ? "+" : "") } : {}),
+        ...(saved.status === "fulfilled" ? { saved: String(saved.value.items.length) + (saved.value.hasMore ? "+" : "") } : {}),
+        ...(transactions.status === "fulfilled" ? { buying: String(transactions.value.filter((item) => item.buyerId === user.uid).length) } : {}),
+      });
+    });
     return () => { active = false; };
   }, [user, retry]);
-
   if (!configured) return <FirebaseSetupState />;
-  if (authLoading || (user && state.loading)) return <div className="min-h-80 animate-pulse rounded-2xl bg-stone-100" />;
-  if (!user) return <div className="grid min-h-[55vh] place-items-center rounded-2xl border border-gray-200 bg-white p-8 text-center"><div><div className="mx-auto grid size-16 place-items-center rounded-full bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]"><UserRound size={28} /></div><h1 className="mt-5 text-2xl font-bold">Your marketplace profile</h1><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--takeme-gray)]">Log in to view and manage your listings.</p><Link href="/login?next=/profile" className="button-primary mt-6 h-12 px-6"><LogIn size={17} /> Log in</Link></div></div>;
-  if (state.error) return <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => { setState((current) => ({ ...current, loading: true, error: "" })); setRetry((value) => value + 1); }} className="button-secondary mt-3 min-h-11 px-5">Retry profile</button></div>;
-  const profile = state.profile;
-  const current = state.listings.filter(isCurrent);
-  const past = state.listings.filter((listing) => !isCurrent(listing));
-  const reviewCount = (state.trust?.buyer.reviewCount ?? 0) + (state.trust?.seller.reviewCount ?? 0);
-  const ratingSum = (state.trust?.buyer.ratingSum ?? 0) + (state.trust?.seller.ratingSum ?? 0);
-  const rating = reviewCount ? (ratingSum / reviewCount).toFixed(1) : null;
-  const shown = (view === "current" ? current : past).filter((listing) => statusFilter === "all" || statusFilter === "fixed" && !isAuction(listing) || statusFilter === "live" && listing.auctionStatus === "active" || statusFilter === "scheduled" && listing.auctionStatus === "scheduled" || statusFilter === "draft" && listing.status === "draft" || statusFilter === "ended" && listing.auctionStatus === "ended" || statusFilter === "cancelled" && listing.auctionStatus === "cancelled" || statusFilter === "removed" && listing.status === "removed");
-
-  async function remove() {
-    if (!confirm || !user) return;
-    const id = confirm.id;
-    setRemovingId(id); setActionError("");
-    try {
-      await deleteListing(id);
-      const listings = await getListingsBySeller(user.uid, true);
-      setState((currentState) => ({ ...currentState, listings }));
-      setConfirm(null);
-    } catch (error) { setActionError(error instanceof Error ? error.message : "This listing could not be changed. Please try again."); }
-    finally { setRemovingId(""); }
-  }
-
-  return <div>
-    <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[var(--takeme-shadow-sm)]"><div className="p-4 sm:p-6"><div className="flex items-center gap-3 sm:gap-4"><div className="relative grid size-22 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]">{profile?.photoURL ? <Image src={profile.photoURL} alt="" fill sizes="88px" className="object-cover" /> : <UserRound size={34} />}</div><div className="min-w-0 w-full flex-1 sm:pb-1"><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{profile?.displayName || user.displayName || "TAKEME member"}</h1><p className="truncate text-sm text-[var(--takeme-gray)]">{user.email}</p>{rating ? <p className="mt-1 text-sm font-semibold text-[var(--takeme-dark-green)]">{rating} ★ · {reviewCount} {reviewCount === 1 ? "review" : "reviews"}</p> : <p className="mt-1 text-xs text-[var(--takeme-gray)]">No published ratings yet</p>}</div></div><div className="mt-5 grid gap-3 text-sm text-[var(--takeme-gray)] sm:grid-cols-2">{profile?.location && <ProfileMeta icon={<MapPin size={17} />} text={profile.location} />}<ProfileMeta icon={<CalendarDays size={17} />} text={`Member since ${new Date(profile?.createdAt ?? user.metadata.creationTime ?? new Date(0).toISOString()).toLocaleDateString("en-MY", { month: "long", year: "numeric" })}`} /></div></div></section>
-    {profile && <div className="mt-4"><EditProfile key={profile.updatedAt} profile={profile} onSaved={(updated) => setState((currentState) => ({ ...currentState, profile: updated }))} /><Link href="/profile/locations" className="button-secondary mt-3 min-h-11 px-4">Addresses &amp; Meetup Locations</Link></div>}
-    <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-[var(--takeme-shadow-sm)] sm:p-5" aria-labelledby="marketplace-shortcuts"><h2 id="marketplace-shortcuts" className="text-lg font-bold">My marketplace</h2><div className="mt-4 grid grid-cols-2 rounded-xl bg-stone-100 p-1" role="tablist" aria-label="Marketplace role"><button type="button" role="tab" aria-selected={accountMode === "selling"} onClick={() => setAccountMode("selling")} className={`min-h-11 rounded-lg text-sm font-semibold ${accountMode === "selling" ? "bg-white text-[var(--takeme-dark-green)] shadow-sm" : "text-[var(--takeme-gray)]"}`}>Selling</button><button type="button" role="tab" aria-selected={accountMode === "buying"} onClick={() => setAccountMode("buying")} className={`min-h-11 rounded-lg text-sm font-semibold ${accountMode === "buying" ? "bg-white text-[var(--takeme-dark-green)] shadow-sm" : "text-[var(--takeme-gray)]"}`}>Buying</button></div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{accountMode === "selling" ? <><AccountLink href="/sell" icon={<ListPlus size={19} />} label="Create listing" /><AccountLink href="#my-listings" icon={<ShoppingBag size={19} />} label="My listings" /><AccountLink href="#transactions" icon={<Star size={19} />} label="My sales" /><AccountLink href="/updates" icon={<Bell size={19} />} label="Updates" /></> : <><AccountLink href="/saved" icon={<Heart size={19} />} label="Saved" /><AccountLink href="#transactions" icon={<ShoppingBag size={19} />} label="Purchases" /><AccountLink href="/explore?type=auction" icon={<Gavel size={19} />} label="Auctions" /><AccountLink href="/for-you" icon={<Sparkles size={19} />} label="For You" /></>}</div></section>
-    <ReputationView uid={user.uid} initialSummary={state.trust} />
-    <div className="mt-4 flex flex-wrap gap-2"><Link href="/saved-searches" className="button-secondary min-h-11 px-4">Saved searches</Link><Link href="/following" className="button-secondary min-h-11 px-4">Following</Link><Link href="/notification-preferences" className="button-secondary min-h-11 px-4">Notification preferences</Link></div>
-    <div id="transactions" className="scroll-mt-24"><TransactionHistory uid={user.uid} /></div>
-    <section id="my-listings" className="mt-8 scroll-mt-24"><div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center"><div><h2 className="text-xl font-bold">My Listings</h2><p className="mt-1 text-sm text-[var(--takeme-gray)]">Manage your live listings and review past items.</p></div><Link href="/sell" className="button-primary h-11 px-5">Create listing</Link></div>
-      <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Listing status"><button onClick={() => { setView("current"); setStatusFilter("all"); }} aria-pressed={view === "current"} className={`min-h-11 rounded-full px-4 text-sm font-semibold ${view === "current" ? "bg-[var(--takeme-dark-green)] text-white" : "border border-gray-200 bg-white text-stone-600"}`}>Current ({current.length})</button><button onClick={() => { setView("past"); setStatusFilter("all"); }} aria-pressed={view === "past"} className={`min-h-11 rounded-full px-4 text-sm font-semibold ${view === "past" ? "bg-[var(--takeme-dark-green)] text-white" : "border border-gray-200 bg-white text-stone-600"}`}>Drafts &amp; past ({past.length})</button><label className="select-label ml-auto w-full sm:w-48"><span className="sr-only">Filter my listings</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All {view} listings</option>{view === "current" ? <><option value="fixed">Fixed-price listings</option><option value="live">Live auctions</option><option value="scheduled">Scheduled auctions</option></> : <><option value="draft">Drafts</option><option value="ended">Ended auctions</option><option value="cancelled">Cancelled auctions</option><option value="removed">Removed listings</option></>}</select></label></div>
-      {actionError && <div className="mb-4" role="alert"><ErrorState message={actionError} /></div>}
-      {shown.length ? <div className="grid gap-3">{shown.map((listing) => <MyListingRow key={listing.id} listing={listing} now={now} onRemove={() => setConfirm(listing)} />)}</div> : <EmptyState title={statusFilter === "all" ? view === "current" ? "No current listings" : "No past listings" : "Nothing in this group"} description={statusFilter === "all" ? view === "current" ? "Publish your first item or auction to start selling." : "Ended, cancelled and removed listings will appear here." : "Choose another status to see your listings."} />}
-    </section>
-    {confirm && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingId) setConfirm(null); }}><section role="dialog" aria-modal="true" aria-labelledby="remove-title" aria-describedby="remove-description" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between gap-3"><h2 id="remove-title" className="text-xl font-bold">{isAuction(confirm) ? "Cancel this auction?" : "Remove this listing?"}</h2><button className="icon-button" aria-label="Close" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}><X size={20} /></button></div><p id="remove-description" className="mt-3 text-sm leading-6 text-[var(--takeme-gray)]">{isAuction(confirm) ? "An auction can only be cancelled before any bids. It will move to Past listings." : "The item will leave the public marketplace and move to Past listings."}</p>{actionError && <p className="mt-4 text-sm text-red-700" role="alert">{actionError}</p>}<div className="mt-6 flex gap-3"><button className="button-secondary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => setConfirm(null)}>Keep it</button><button className="button-primary h-11 flex-1" disabled={Boolean(removingId)} onClick={() => void remove()}>{removingId && <LoaderCircle size={17} className="animate-spin" />}{isAuction(confirm) ? "Cancel auction" : "Remove listing"}</button></div></section></div>}
+  if (authLoading || user && state.uid !== user.uid) return <div role="status" aria-label="Loading your profile" className="min-h-60 animate-pulse rounded-2xl bg-gray-100" />;
+  if (!user) return <section className="profile-signed-out"><UserRound size={32} aria-hidden="true" /><h1>Your TAKEME account</h1><p>Sign in to manage your marketplace activity and private status.</p><Link href="/login?next=/profile" className="button-primary min-h-11 px-6">Log in</Link></section>;
+  if (state.error) return <div role="alert"><ErrorState message={state.error} /><button type="button" className="button-secondary mt-3 min-h-11 px-5" onClick={() => setRetry((value) => value + 1)}>Retry profile</button></div>;
+  const { profile, trust, listings } = state;
+  const reviewCount = (trust?.buyer.reviewCount ?? 0) + (trust?.seller.reviewCount ?? 0);
+  const ratingSum = (trust?.buyer.ratingSum ?? 0) + (trust?.seller.ratingSum ?? 0);
+  const accountStats = stats.uid === user.uid ? stats : null;
+  const selling = listings.filter((listing) => listingGroup(listing) === "active");
+  const auctions = selling.filter(auctionListing);
+  const joined = profile?.createdAt || user.metadata.creationTime;
+  return <div className="owner-profile">
+    <section className="profile-identity" aria-label="Your account identity"><ProfileAvatar photo={profile?.photoURL || user.photoURL} /><div className="min-w-0 flex-1"><h1>{profile?.displayName || user.displayName || "TAKEME member"}</h1><VerifiedLabel verified={trust?.verificationStatus === "verified"} /><p className="profile-rating">{reviewCount ? <><Star size={14} aria-hidden="true" />{(ratingSum / reviewCount).toFixed(1)} <span>({reviewCount} reviews)</span></> : <span>No published ratings yet</span>}</p></div><Link href={"/sellers/" + user.uid} className="icon-button" aria-label="View your public seller profile">→</Link></section>
+    <div className="profile-general-meta">{profile?.location && <span><MapPin size={13} aria-hidden="true" />{profile.location}</span>}{joined && <span><CalendarDays size={13} aria-hidden="true" />Joined {new Date(joined).toLocaleDateString("en-MY", { month: "short", year: "numeric" })}</span>}</div>
+    <div className="profile-stats" aria-label="Your marketplace statistics">{accountStats?.followers !== undefined && <span><strong>{accountStats.followers}</strong>Followers</span>}<Link href="/following"><strong>{accountStats?.following ?? "—"}</strong>Following</Link><Link href="/saved"><strong>{accountStats?.saved ?? "—"}</strong>Saved</Link></div>
+    <div className="profile-quick-cards"><Link href="/profile/transactions?role=buying"><ShoppingBag size={23} aria-hidden="true" /><strong>Buying</strong><span>{accountStats?.buying === undefined ? "View purchases" : accountStats.buying + " recent deals"}</span></Link><Link href="/profile/listings"><Store size={23} aria-hidden="true" /><strong>Selling</strong><span>{selling.length} active</span></Link><Link href="/profile/listings?type=auction"><Gavel size={23} aria-hidden="true" /><strong>Auctions</strong><span>{auctions.length} active / scheduled</span></Link></div>
+    <div className="profile-dashboard"><div className="profile-account-menu"><h2 className="sr-only">Marketplace shortcuts</h2><div className="profile-menu"><ProfileMenuLink href="/profile/listings" icon={<Store size={19} />} label="My Listings" /><ProfileMenuLink href="/profile/listings?tab=drafts" icon={<ListChecks size={19} />} label="Drafts" /><ProfileMenuLink href="/profile/listings?tab=sold" icon={<ShoppingBag size={19} />} label="Sold Items" /><ProfileMenuLink href="/profile/transactions?role=buying" icon={<ShoppingBag size={19} />} label="Purchases" /><ProfileMenuLink href="/profile/transactions" icon={<ListChecks size={19} />} label="My Transactions" /><ProfileMenuLink href="/saved" icon={<Heart size={19} />} label="Saved Items" /><ProfileMenuLink href="/saved-searches" icon={<Bookmark size={19} />} label="Saved Searches" /><ProfileMenuLink href="/following" icon={<Users size={19} />} label="Following" /><ProfileMenuLink href="/messages" icon={<MessageSquare size={19} />} label="Messages" /><ProfileMenuLink href="/updates" icon={<Bell size={19} />} label="Notifications" /><OwnerPublishedReviews key={user.uid} uid={user.uid} /></div><div className="profile-menu mt-4"><ProfileMenuLink href="/profile/settings" icon={<Settings size={19} />} label="Settings & account" /></div></div><div className="profile-private-status"><ReputationView uid={user.uid} initialSummary={trust} /></div></div>
+    <details className="profile-recent"><summary>Recent transactions</summary><TransactionHistory key={user.uid} uid={user.uid} /></details>
   </div>;
 }
-
-function MyListingRow({ listing, now, onRemove }: { listing: Listing; now: number; onRemove: () => void }) {
-  const auction = isAuction(listing);
-  const resumableDraft = auction && listing.status === "draft" && listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0;
-  const editable = resumableDraft || listing.status === "active" && (!auction || (listing.auctionStatus === "scheduled" && (listing.bidCount ?? 0) === 0 && Boolean(listing.auctionStartAt && now < new Date(listing.auctionStartAt).getTime())));
-  const removable = listing.status === "active" && (!auction || ((listing.bidCount ?? 0) === 0 && !["ended", "cancelled"].includes(listing.auctionStatus ?? "")));
-  const amount = auction ? ((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100 : listing.price;
-  const promotable = listing.status === "active" && (!auction || (["active", "scheduled"].includes(listing.auctionStatus ?? "") && Boolean(listing.auctionEndAt && now < new Date(listing.auctionEndAt).getTime())));
-  return <article className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-[var(--takeme-shadow-sm)] sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:p-4"><Link href={`/listings/${listing.id}`} aria-label={`View ${listing.title}`} className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-gray-100 sm:size-24">{listing.imageUrls[0] && <Image src={listing.imageUrls[0]} alt={listing.title} fill sizes="96px" className="object-cover" />}</Link><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${listing.status === "active" ? "bg-[var(--takeme-light-green)] text-[var(--takeme-dark-green)]" : "bg-gray-100 text-[var(--takeme-gray)]"}`}>{resumableDraft ? "Unpublished draft" : statusLabel(listing)}</span><span className="text-xs text-gray-500">{auction ? `Auction · ${listing.bidCount ?? 0} ${(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}` : "Fixed price"}</span></div><Link href={`/listings/${listing.id}`} className="mt-1 flex min-h-11 items-center truncate font-semibold text-[var(--takeme-charcoal)]">{listing.title}</Link><p className="mt-1 text-sm font-bold text-[var(--takeme-dark-green)]">{money.format(amount)}</p>{auction && listing.auctionEndAt && <p className="mt-1 text-xs text-stone-500">{listing.auctionStatus === "scheduled" ? "Starts" : listing.auctionStatus === "active" ? "Ends" : "Ended"} {new Date(listing.auctionStatus === "scheduled" && listing.auctionStartAt ? listing.auctionStartAt : listing.auctionEndAt).toLocaleString("en-MY", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</p>}</div><div className="col-start-2 flex flex-wrap items-center gap-1 sm:col-auto">{promotable && <><Link href={`/listings/${listing.id}/promote?type=boost`} className="button-secondary min-h-11 px-3 text-xs" aria-label={`Boost ${listing.title}`}><Sparkles size={15} /> Boost</Link><Link href={`/listings/${listing.id}/promote?type=featured`} className="button-secondary min-h-11 px-3 text-xs" aria-label={`Feature ${listing.title}`}><Star size={15} /> Featured</Link></>}{editable && <Link href={`/listings/${listing.id}/edit`} className={resumableDraft ? "button-secondary min-h-11 px-3 text-xs" : "icon-button border border-gray-200"} aria-label={`${resumableDraft ? "Resume" : "Edit"} ${listing.title}`}>{resumableDraft ? "Resume draft" : <Pencil size={17} />}</Link>}{removable && <button onClick={onRemove} className="icon-button border border-red-100 text-red-600 hover:bg-red-50" aria-label={`${auction ? "Cancel" : "Remove"} ${listing.title}`}><Trash2 size={17} /></button>}</div></article>;
-}
-function ProfileMeta({ icon, text }: { icon: React.ReactNode; text: string }) { return <p className="flex items-center gap-2 py-1 text-xs">{icon}{text}</p>; }
-function AccountLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) { return <Link href={href} className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-gray-200 p-3 text-center text-xs font-semibold text-[var(--takeme-charcoal)] transition hover:border-[var(--takeme-green)] hover:bg-[var(--takeme-light-green)]"><span className="text-[var(--takeme-dark-green)]">{icon}</span>{label}</Link>; }

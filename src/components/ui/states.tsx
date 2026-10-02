@@ -9,6 +9,6 @@ export function ErrorState({ message = "Something went wrong. Please try again."
   return <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertCircle size={19} className="shrink-0" /><p>{message}</p></div>;
 }
 
-export function ListingSkeleton() {
-  return <div aria-hidden="true" className="animate-pulse overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[var(--takeme-shadow-sm)]"><div className="aspect-[4/3] bg-stone-200" /><div className="space-y-2 p-3"><div className="h-4 w-4/5 rounded bg-stone-200" /><div className="h-5 w-2/5 rounded bg-stone-200" /><div className="h-3 w-3/5 rounded bg-stone-100" /></div></div>;
+export function ListingSkeleton({ discovery = false }: { discovery?: boolean }) {
+  return <div aria-hidden="true" className="animate-pulse overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[var(--takeme-shadow-sm)]"><div className={`${discovery ? "discovery-product-image " : ""}aspect-[4/3] bg-stone-200`} /><div className="space-y-2 p-3"><div className="h-4 w-4/5 rounded bg-stone-200" /><div className="h-5 w-2/5 rounded bg-stone-200" /><div className="h-3 w-3/5 rounded bg-stone-100" /></div></div>;
 }

@@ -50,10 +50,10 @@ test("configured text/button color pairs meet normal-text contrast", () => {
 });
 
 test("consumer ID links and action-sheet accessibility contracts are retained", () => {
-  assert.match(source("src/components/profile/profile-view.tsx"), /href=\{`\/listings\/\$\{listing.id\}\/edit`\}/);
-  assert.match(source("src/components/profile/profile-view.tsx"), /Resume draft/);
-  assert.match(source("src/components/profile/profile-view.tsx"), /mt-1 flex min-h-11 items-center truncate font-semibold/);
-  assert.match(source("src/components/profile/profile-view.tsx"), /aria-label=\{`View \$\{listing.title\}`\}/);
+  assert.match(source("src/components/profile/my-listings-view.tsx"), /href=\{`\/listings\/\$\{menu.id\}\/edit`\}/);
+  assert.match(source("src/components/profile/my-listings-view.tsx"), /Resume draft/);
+  assert.match(source("src/app/globals.css"), /\.my-listing-name \{ display: flex; min-height: 44px;/);
+  assert.match(source("src/components/profile/my-listings-view.tsx"), /aria-label=\{`View \$\{listing.title\}`\}/);
   const sheet = source("src/components/ui/action-sheet.tsx");
   for (const marker of ["aria-modal=\"true\"", "aria-busy={busy}", "event.key === \"Escape\"", "event.key !== \"Tab\"", "previous?.focus()", "document.removeEventListener"]) assert.ok(sheet.includes(marker));
   const bid = source("src/components/listings/auction-panel.tsx");

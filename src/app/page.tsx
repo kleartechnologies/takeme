@@ -9,7 +9,7 @@ export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function HomePage() {
   return (
-    <main className="page-shell pb-14 pt-4 lg:pb-20 lg:pt-7">
+    <main className="page-shell home-marketplace pb-8 pt-3 lg:pb-12 lg:pt-6">
       <HeroBannerCarousel headingLevel={1} />
       <CategoryGrid />
       <HomeMarketplace />
