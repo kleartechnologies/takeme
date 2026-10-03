@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { isLocalLegalPreview } from "@/lib/public-information";
 
-// Incomplete legal/contact drafts are served only in the authorised demo dev session.
-// No query parameter or browser-supplied value can enable them in a production build.
+// Drafts require demo development or a staging build behind the guarded Worker.
+// Production publication stays closed; URL parameters cannot select a preview.
 export function requireLocalLegalPreview() {
   if (!isLocalLegalPreview()) notFound();
 }

@@ -1,5 +1,7 @@
 # Cloudflare Workers website migration plan
 
+4 October staging update: use the [current staging safeguards and preview plan](staging-preview-qualification.md) before any remote qualification. Staging is a dedicated Worker/Firebase environment; its branch, policy acceptance and artifact are separate from production. This migration remains a future procedure and does not authorize DNS or Netlify changes.
+
 Prepared 3 October 2026. **Local preparation only; no permission to upload, deploy, publish, connect GitHub, change DNS or activate Firebase production behavior.** Cloudflare replaces the website host only. Firebase Auth, Firestore, Storage, Functions, rules, indexes, scheduled jobs, policy mirror and account-deletion execution remain separately controlled. Preserve the existing Netlify website as a rollback option.
 
 This plan does not certify the current Cloudflare/Netlify account, DNS, certificates, billing, OAuth providers or live Firebase configuration. No production API or customer-data access was used. The technical build/adapter results belong in [Cloudflare hosting qualification](cloudflare-hosting-qualification.md); this document is the owner checklist and future migration procedure.

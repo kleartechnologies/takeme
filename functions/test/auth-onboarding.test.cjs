@@ -1,12 +1,19 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { AUTH_POLICY_VERSION, hasCurrentAcceptance, validateAcceptance, requireOnboardingDemo } = require('../lib/auth-onboarding');
-const { demoReleasePolicy } = require('../lib/release-policy');
+const { demoReleasePolicy, stagingReleasePolicy } = require('../lib/release-policy');
 test('acceptance requires three explicit confirmations and exact stable versions', () => {
   const accepted = { acceptTerms: true, acceptPrivacy: true, confirmAge18: true, termsVersion: AUTH_POLICY_VERSION, privacyVersion: AUTH_POLICY_VERSION };
   validateAcceptance(accepted);
   for (const field of ['acceptTerms', 'acceptPrivacy', 'confirmAge18']) for (const value of [false, undefined, 'true', 1]) assert.throws(() => validateAcceptance({ ...accepted, [field]: value }));
   for (const field of ['termsVersion', 'privacyVersion']) assert.throws(() => validateAcceptance({ ...accepted, [field]: 'wrong' }));
+});
+test('staging onboarding accepts only its server-owned policy versions and all confirmations', () => {
+  const accepted = { acceptTerms: true, acceptPrivacy: true, confirmAge18: true, termsVersion: '1.0-staging', privacyVersion: '1.0-staging' };
+  validateAcceptance(accepted, stagingReleasePolicy);
+  assert.throws(() => validateAcceptance(accepted, demoReleasePolicy));
+  for (const field of ['termsVersion', 'privacyVersion']) for (const value of ['1.0-draft', '1.0', undefined]) assert.throws(() => validateAcceptance({ ...accepted, [field]: value }, stagingReleasePolicy));
+  for (const field of ['acceptTerms', 'acceptPrivacy', 'confirmAge18']) assert.throws(() => validateAcceptance({ ...accepted, [field]: false }, stagingReleasePolicy));
 });
 test('a boolean or client-looking date cannot establish server acceptance', () => {
   const timestamp = { toMillis: () => 1 };

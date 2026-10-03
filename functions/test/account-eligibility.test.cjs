@@ -2,8 +2,11 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { readFileSync } = require("node:fs");
 const { resolvePolicyContext, policyMirrorMatches, hasCurrentAcceptance } = require("../lib/account-eligibility");
-const { demoReleasePolicy, productionReleasePolicy, validateProductionPolicy, assertStoragePolicyRules, assertFirestorePolicyRules } = require("../lib/release-policy");
+const { demoReleasePolicy, stagingReleasePolicy, productionReleasePolicy, getReleasePolicy, validateProductionPolicy, assertStoragePolicyRules, assertFirestorePolicyRules } = require("../lib/release-policy");
+const { stagingEnvironment } = require("../lib/staging-environment");
 const demo = { GCLOUD_PROJECT: "demo-takeme", FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099", FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" };
+const staging = () => ({ GCLOUD_PROJECT: stagingEnvironment.projectId, TAKEME_RELEASE_TARGET: "staging", TAKEME_FIREBASE_PROJECT_ID: stagingEnvironment.projectId });
+const stagingContext = env => resolvePolicyContext(env, stagingEnvironment.projectId, stagingEnvironment.storageBucket);
 
 test("demo policy is pinned to explicit matching runtime and emulator configuration", () => {
   assert.equal(resolvePolicyContext(demo, "demo-takeme").target, "demo");
@@ -22,8 +25,43 @@ test("production stays fail-closed without approval and final versions; stale em
   for (const name of ["FIREBASE_AUTH_EMULATOR_HOST", "FIRESTORE_EMULATOR_HOST", "FIREBASE_STORAGE_EMULATOR_HOST", "PUBSUB_EMULATOR_HOST", "FIREBASE_EMULATOR_HUB", "FUNCTIONS_EMULATOR"]) {
     assert.equal(resolvePolicyContext({ ...production, [name]: "" }, "approved-test-project"), null);
   }
-  for (const version of ["1.0-draft", "demo-1", "TEST-final"]) assert.ok(validateProductionPolicy({ publicationApproved: true, termsVersion: version, privacyVersion: "1.0", minimumAge: 18 }).length);
+  for (const version of ["1.0-draft", "demo-1", "TEST-final", "1.0-staging", "STAGING-final"]) assert.ok(validateProductionPolicy({ publicationApproved: true, termsVersion: version, privacyVersion: "1.0", minimumAge: 18 }).length);
   assert.deepEqual(validateProductionPolicy({ publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18 }), []);
+});
+test("staging policies are distinct from demo acceptance and can never qualify production", () => {
+  assert.equal(getReleasePolicy("staging"), stagingReleasePolicy);
+  assert.equal(stagingReleasePolicy.termsVersion, "1.0-staging");
+  assert.ok(validateProductionPolicy(stagingReleasePolicy).length);
+  const timestamp = { toMillis: () => 1 };
+  const acceptance = { termsVersion: stagingReleasePolicy.termsVersion, privacyVersion: stagingReleasePolicy.privacyVersion, termsAcceptedAt: timestamp, privacyAcceptedAt: timestamp, age18ConfirmedAt: timestamp, acceptanceSource: "web" };
+  assert.equal(hasCurrentAcceptance(acceptance, stagingReleasePolicy), true);
+  assert.equal(hasCurrentAcceptance(acceptance, demoReleasePolicy), false);
+  assert.equal(hasCurrentAcceptance({ ...acceptance, termsVersion: demoReleasePolicy.termsVersion }, stagingReleasePolicy), false);
+});
+test("staging policy context requires matching managed runtime, exact Admin project and bucket", () => {
+  assert.equal(stagingContext(staging()).target, "staging");
+  assert.equal(stagingContext({ ...staging(), NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false", FIREBASE_CONFIG: JSON.stringify({ projectId: stagingEnvironment.projectId, storageBucket: stagingEnvironment.storageBucket }) }).target, "staging");
+  for (const key of ["GCLOUD_PROJECT", "TAKEME_RELEASE_TARGET", "TAKEME_FIREBASE_PROJECT_ID"]) {
+    const env = staging(); delete env[key]; assert.equal(stagingContext(env), null);
+  }
+  for (const patch of [{ GCLOUD_PROJECT: "takeme-52b80" }, { GOOGLE_CLOUD_PROJECT: "takeme-52b80" }, { GCP_PROJECT: "other-project" }, { TAKEME_RELEASE_TARGET: "production" }, { TAKEME_FIREBASE_PROJECT_ID: "takeme-52b80" }, { TAKEME_STORAGE_BUCKETS: "takeme-52b80.firebasestorage.app" }, { TAKEME_STORAGE_BUCKETS: stagingEnvironment.projectId + ".appspot.com" }, { TAKEME_ENABLE_PRODUCTION_DELETION: "true" }, { TAKEME_DELETION_ENVIRONMENT: "production" }, { TAKEME_ENABLE_STAGING_DELETION: "TRUE" }, { FIREBASE_CONFIG: "not-json" }, { FIREBASE_CONFIG: "null" }, { FIREBASE_CONFIG: "[]" }, { FIREBASE_CONFIG: JSON.stringify({ projectId: null }) }, { FIREBASE_CONFIG: JSON.stringify({ projectId: "takeme-52b80" }) }, { FIREBASE_CONFIG: JSON.stringify({ storageBucket: "takeme-52b80.firebasestorage.app" }) }]) {
+    assert.equal(stagingContext({ ...staging(), ...patch }), null);
+  }
+  for (const project of [undefined, "demo-takeme", "takeme-52b80"]) assert.equal(resolvePolicyContext(staging(), project, stagingEnvironment.storageBucket), null);
+  for (const bucket of [undefined, "demo-takeme.firebasestorage.app", "takeme-52b80.firebasestorage.app"]) assert.equal(resolvePolicyContext(staging(), stagingEnvironment.projectId, bucket), null);
+});
+test("staging rejects every emulator override even empty or false overrides", () => {
+  for (const name of ["FIREBASE_AUTH_EMULATOR_HOST", "FIRESTORE_EMULATOR_HOST", "FIREBASE_STORAGE_EMULATOR_HOST", "PUBSUB_EMULATOR_HOST", "FIREBASE_EMULATOR_HUB", "FUNCTIONS_EMULATOR", "FIREBASE_EMULATORS", "CUSTOM_EMULATOR_URL"]) {
+    for (const value of ["", "false", "127.0.0.1:8080"]) assert.equal(stagingContext({ ...staging(), [name]: value }), null);
+  }
+  for (const value of ["true", "", "FALSE"]) assert.equal(stagingContext({ ...staging(), NEXT_PUBLIC_USE_FIREBASE_EMULATORS: value }), null);
+});
+test("staging mirrors reject copied demo or production approval, revoked and mismatched versions", () => {
+  const context = stagingContext(staging());
+  const mirror = { ...stagingReleasePolicy, projectId: stagingEnvironment.projectId, releaseTarget: "staging" };
+  assert.equal(policyMirrorMatches(mirror, context), true);
+  for (const patch of [{ publicationApproved: false }, { projectId: "takeme-52b80" }, { projectId: "demo-takeme" }, { releaseTarget: "production" }, { releaseTarget: "demo" }, { termsVersion: "1.0-draft" }, { privacyVersion: "1.0" }, { minimumAge: 17 }]) assert.equal(policyMirrorMatches({ ...mirror, ...patch }, context), false);
+  assert.equal(policyMirrorMatches(mirror, resolvePolicyContext(demo, "demo-takeme")), false);
 });
 test("a copied, revoked, incomplete or wrong-version mirror cannot enable marketplace actions", () => {
   const context = resolvePolicyContext(demo, "demo-takeme");

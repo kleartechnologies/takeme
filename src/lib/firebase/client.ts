@@ -1,9 +1,10 @@
-import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore, type Firestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions, type Functions } from "firebase/functions";
 import { clientReleaseProofMatches } from "@/lib/release-proof";
+import { assertFirebaseAppIdentity, firebaseAppIdentityMatches } from "./staging-isolation";
 
 export const useFirebaseEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true";
 
@@ -17,7 +18,9 @@ const firebaseConfig = {
 };
 
 const releaseSafe = clientReleaseProofMatches(firebaseConfig, useFirebaseEmulators, process.env.TAKEME_BUILD_RELEASE_PROOF, process.env.NODE_ENV === "production");
-export const isFirebaseConfigured = releaseSafe && Object.values(firebaseConfig).every(Boolean);
+const existingApp = typeof window !== "undefined" ? getApps().find(candidate => candidate.name === "[DEFAULT]") : undefined;
+export const isFirebaseConfigured = releaseSafe && Object.values(firebaseConfig).every(Boolean)
+  && (!existingApp || firebaseAppIdentityMatches(existingApp.options, firebaseConfig));
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -26,7 +29,8 @@ let storage: FirebaseStorage | null = null;
 let functions: Functions | null = null;
 
 if (isFirebaseConfigured && typeof window !== "undefined") {
-  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  app = existingApp ?? initializeApp(firebaseConfig);
+  assertFirebaseAppIdentity(app.options, firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);

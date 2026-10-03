@@ -22,9 +22,9 @@ async function inspectFirstPartyBuild(directory, config) {
   const expectedProof = encodeReleaseProof(config);
   const required = JSON.parse(await readFile(path.join(directory, "required-server-files.json"), "utf8"));
   if (required.config?.env?.TAKEME_BUILD_RELEASE_PROOF !== expectedProof) throw new Error("Artifact does not contain the expected first-party release configuration proof.");
-  if (config.target === "production") {
-    if (required.config?.images?.dangerouslyAllowLocalIP !== false) throw new Error("Production artifact permits local image IPs.");
-    if (required.config?.images?.remotePatterns?.some(pattern => /localhost|127\\?\.0\\?\.0\\?\.1|::1/.test(pattern.hostname || ""))) throw new Error("Production artifact contains a loopback image host.");
+  if (config.target === "production" || config.target === "staging") {
+    if (required.config?.images?.dangerouslyAllowLocalIP !== false) throw new Error("Remote artifact permits local image IPs.");
+    if (required.config?.images?.remotePatterns?.some(pattern => /localhost|127\\?\.0\\?\.0\\?\.1|::1/.test(pattern.hostname || ""))) throw new Error("Remote artifact contains a loopback image host.");
   }
   let embedded = 0;
   const proofPattern = new RegExp(`${releaseProofPrefix}[A-Za-z0-9+/=]+`, "g");
@@ -54,8 +54,13 @@ export async function recordReleaseArtifact(directory, config) {
 }
 
 export async function validateReleaseArtifact(directory, config, requiredTarget = "production") {
-  if (config.purpose !== "release") throw new Error("Offline qualification output is nondeployable and cannot qualify as a release artifact.");
+  if (config.purpose !== "release") throw new Error("Offline/staging output is nondeployable as production and cannot qualify as a release artifact.");
   return validateArtifact(directory, config, requiredTarget, "release");
+}
+
+export async function validateStagingArtifact(directory, config) {
+  if (config.purpose !== "staging-preview" || config.target !== "staging" || config.productionDeletionEnabled !== false) throw new Error("Staging artifact qualification requires its isolated purpose and disabled production deletion.");
+  return validateArtifact(directory, config, "staging", "staging-preview");
 }
 
 export async function validateOfflineQualificationArtifact(directory, config) {

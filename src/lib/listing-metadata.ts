@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { formatPublicLocation, type PublicLocation } from "./general-location.ts";
+import { isStagingMediaUrl, isStagingSiteUrl } from "./firebase/staging-isolation.ts";
 
 export type PublicListingMetadata = {
   status: string;
@@ -23,6 +24,7 @@ export function listingCanonicalUrl(id: string, siteUrl: string) {
 
 function previewImage(listing: PublicListingMetadata, siteUrl: string) {
   const image = listing.imageUrls?.find((value) => {
+    if (isStagingSiteUrl(siteUrl)) return isStagingMediaUrl(value);
     try { return new URL(value).protocol === "https:"; }
     catch { return false; }
   });
@@ -55,6 +57,7 @@ export function buildListingMetadata(id: string, listing: PublicListingMetadata 
   return {
     title: { absolute: title },
     description,
+    ...(isStagingSiteUrl(siteUrl) ? { robots: { index: false, follow: false } } : {}),
     alternates: { canonical },
     openGraph: { title, description, url: canonical, type: "website", images: [{ url: image, alt: listing.title.trim() }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },

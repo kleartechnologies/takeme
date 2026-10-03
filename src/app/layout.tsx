@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { UnreadCountProvider } from "@/lib/use-unread-count";
+import { isStagingReleaseProof } from "@/lib/release-proof";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -18,6 +19,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
   ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
 
 export const metadata: Metadata = {
+  ...(isStagingReleaseProof(process.env.TAKEME_BUILD_RELEASE_PROOF) ? { robots: { index: false, follow: false } } : {}),
   metadataBase: new URL(siteUrl),
   title: { default: "TAKEME — Same Stuff. A Brighter Tomorrow.", template: "%s | TAKEME" },
   description: "Buy. Sell. Give. Reuse. A modern peer-to-peer marketplace for Malaysia.",
@@ -34,5 +36,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full"><AuthProvider><UnreadCountProvider><Header />{children}<Footer /><Suspense fallback={null}><MobileNav /></Suspense></UnreadCountProvider></AuthProvider></body></html>;
+  return <html lang="en" data-scroll-behavior="smooth" className={`${poppins.variable} h-full antialiased`}><body className="min-h-full">{isStagingReleaseProof(process.env.TAKEME_BUILD_RELEASE_PROOF) && <div className="bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-950" role="note">STAGING · Test accounts and synthetic data only. Policies are test drafts.</div>}<AuthProvider><UnreadCountProvider><Header />{children}<Footer /><Suspense fallback={null}><MobileNav /></Suspense></UnreadCountProvider></AuthProvider></body></html>;
 }

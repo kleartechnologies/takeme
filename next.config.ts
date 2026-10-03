@@ -21,7 +21,7 @@ export default function nextConfig(phase: string): NextConfig {
     images: {
       dangerouslyAllowLocalIP: configuration.useEmulators,
       remotePatterns: [
-        { protocol: "https", hostname: "firebasestorage.googleapis.com", pathname: "/**" },
+        { protocol: "https", hostname: "firebasestorage.googleapis.com", pathname: configuration.target === "staging" ? `/v0/b/${configuration.publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}/o/**` : "/**" },
         { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/**" },
         ...(configuration.useEmulators ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "9199", pathname: "/**" }] : []),
       ],

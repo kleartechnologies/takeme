@@ -1,9 +1,10 @@
 import { getReleasePolicy, validateProductionPolicy } from "../../functions/src/release-policy.ts";
 import { validateLegalPublication, type LegalPublicationReadiness } from "./legal-publication.ts";
+import { stagingEnvironment } from "../../functions/src/staging-environment.ts";
 
 export type ReleaseEnvironment = Record<string, string | undefined>;
 export type ReleasePolicy = ReturnType<typeof getReleasePolicy>;
-export type ReleaseTarget = "demo" | "production";
+export type ReleaseTarget = "demo" | "staging" | "production";
 
 export const publicFirebaseKeys = [
   "NEXT_PUBLIC_FIREBASE_API_KEY", "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
@@ -21,7 +22,7 @@ const demoValues = {
 const unsafeValue = /localhost|127\.0\.0\.1|\[?::1\]?|(?:^|[/.:-])(?:demo|test|synthetic)[-_]|demo-api-key|\.test(?:[/:]|$)|example\.invalid|synthetic/i;
 
 export interface ReleaseConfiguration {
-  purpose: "release" | "offline-qualification";
+  purpose: "release" | "staging-preview" | "offline-qualification";
   target: ReleaseTarget;
   projectId: string;
   siteUrl: string;
@@ -30,6 +31,7 @@ export interface ReleaseConfiguration {
   storageBuckets: string[];
   policy: ReleasePolicy;
   productionDeletionEnabled: boolean;
+  stagingDeletionEnabled: boolean;
 }
 
 export class ReleaseConfigurationError extends Error {
@@ -51,7 +53,7 @@ function validateConfiguration(env: ReleaseEnvironment, purpose: ReleaseConfigur
   const issues: string[] = [];
   if (purpose === "release" && env.TAKEME_OFFLINE_QUALIFICATION) issues.push("Offline qualification mode cannot be used by the ordinary release validator.");
   const target = env.TAKEME_RELEASE_TARGET;
-  if (target !== "demo" && target !== "production") throw new ReleaseConfigurationError(["TAKEME_RELEASE_TARGET must explicitly select demo or production."]);
+  if (target !== "demo" && target !== "staging" && target !== "production") throw new ReleaseConfigurationError(["TAKEME_RELEASE_TARGET must explicitly select demo, staging or production."]);
   const policy = policyOverride ?? getReleasePolicy(target);
   const publicFirebase = Object.fromEntries(publicFirebaseKeys.map(key => [key, env[key] || (target === "demo" ? demoValues[key] : "")])) as ReleaseConfiguration["publicFirebase"];
   const projectId = publicFirebase.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -68,7 +70,31 @@ function validateConfiguration(env: ReleaseEnvironment, purpose: ReleaseConfigur
     if (env.TAKEME_STORAGE_BUCKETS && env.TAKEME_STORAGE_BUCKETS.split(",").some(bucket => !["demo-takeme.firebasestorage.app", "demo-takeme.appspot.com"].includes(bucket.trim()))) issues.push("Demo cleanup buckets must belong to the demo project.");
     if (env.TAKEME_DELETION_ENVIRONMENT === "production" || env.TAKEME_ENABLE_PRODUCTION_DELETION === "true") issues.push("A demo build cannot enable production deletion.");
     storageBuckets = [publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET];
+  } else if (target === "staging") {
+    if (purpose !== "release") issues.push("Staging cannot use offline qualification or a caller-selected artifact purpose.");
+    purpose = "staging-preview";
+    if (env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "false") issues.push("Staging requires NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false explicitly.");
+    for (const key of Object.keys(env)) {
+      if (/EMULATOR/i.test(key) && key !== "NEXT_PUBLIC_USE_FIREBASE_EMULATORS") issues.push(`${key} must be absent in staging.`);
+      if (env[key] && /(?:TAKEME|FIREBASE|FUNCTION|SITE)/.test(key) && /takeme-52b80|(?:^|\/\/|\.)takeme\.my(?:[/:]|$)|demo-takeme|localhost|127\.0\.0\.1|\[?::1\]?/i.test(env[key]!)) issues.push(`${key} contains a forbidden production or local resource in staging.`);
+    }
+    for (const key of publicFirebaseKeys) if (!publicFirebase[key] || publicFirebase[key].trim() !== publicFirebase[key] || /\s/.test(publicFirebase[key])) issues.push(`${key} must contain an explicit registered staging Web App value.`);
+    if (projectId !== stagingEnvironment.projectId || env.TAKEME_FIREBASE_PROJECT_ID !== stagingEnvironment.projectId) issues.push("Both staging project inputs must match the owner-confirmed staging Firebase project.");
+    if (publicFirebase.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN !== stagingEnvironment.authDomain) issues.push("Staging must use its registered Firebase Auth domain.");
+    if (publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET !== stagingEnvironment.storageBucket || env.TAKEME_STORAGE_BUCKETS !== stagingEnvironment.storageBucket) issues.push("Staging must use only its exact owner-confirmed Storage bucket.");
+    if (publicFirebase.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID !== stagingEnvironment.projectNumber) issues.push("Staging sender ID must match its owner-confirmed project number.");
+    if (!/^AIza[A-Za-z0-9_-]{35}$/.test(publicFirebase.NEXT_PUBLIC_FIREBASE_API_KEY)) issues.push("Staging Web API key must match the registered Firebase Web API-key format.");
+    if (!new RegExp(`^1:${stagingEnvironment.projectNumber}:web:[a-f0-9]{16,40}$`).test(publicFirebase.NEXT_PUBLIC_FIREBASE_APP_ID)) issues.push("Staging Web App ID must match its confirmed project number.");
+    if (siteUrl !== stagingEnvironment.siteUrl) issues.push("Staging site URL must equal the exact reviewed HTTPS workers.dev origin.");
+    if (env.TAKEME_DELETION_ENVIRONMENT !== "staging") issues.push("Staging deletion resources must explicitly select staging.");
+    if (!["false", "true"].includes(env.TAKEME_ENABLE_STAGING_DELETION || "")) issues.push("Staging deletion intent must be explicitly false or separately approved true.");
+    if (env.TAKEME_ENABLE_PRODUCTION_DELETION !== undefined && env.TAKEME_ENABLE_PRODUCTION_DELETION !== "false") issues.push("Staging cannot enable production deletion.");
+    if (policy.publicationApproved !== true || policy.termsVersion !== stagingEnvironment.policyVersion || policy.privacyVersion !== stagingEnvironment.policyVersion || policy.minimumAge !== 18) issues.push("Staging must use only its separate staging test policies and 18+ eligibility.");
+    for (const key of ["GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT", "GCP_PROJECT"]) if (env[key] !== undefined && env[key] !== stagingEnvironment.projectId) issues.push(`${key} conflicts with the staging Firebase project.`);
+    if (env.PROTECTED_PAYMENTS_ENABLED && env.PROTECTED_PAYMENTS_ENABLED !== "false") issues.push("Protected payments must remain disabled in staging.");
+    storageBuckets = [stagingEnvironment.storageBucket];
   } else {
+    if (projectId === stagingEnvironment.projectId || publicFirebase.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID === stagingEnvironment.projectNumber) issues.push("The confirmed staging Web App cannot qualify as a production release.");
     issues.push(...validateProductionPolicy(policy));
     issues.push(...validateLegalPublication(legalOverride));
     if (env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "false") issues.push("Production requires NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false explicitly.");
@@ -100,7 +126,7 @@ function validateConfiguration(env: ReleaseEnvironment, purpose: ReleaseConfigur
     if (env.PROTECTED_PAYMENTS_ENABLED && env.PROTECTED_PAYMENTS_ENABLED !== "false") issues.push("Protected payments must remain disabled for this release.");
   }
   if (issues.length) throw new ReleaseConfigurationError([...new Set(issues)]);
-  return { purpose, target, projectId, siteUrl, publicFirebase, storageBuckets, policy, useEmulators: target === "demo", productionDeletionEnabled: target === "production" && purpose === "release" };
+  return { purpose, target, projectId, siteUrl, publicFirebase, storageBuckets, policy, useEmulators: target === "demo", productionDeletionEnabled: target === "production" && purpose === "release", stagingDeletionEnabled: target === "staging" && env.TAKEME_ENABLE_STAGING_DELETION === "true" };
 }
 
 // Fixed fabricated public values only. No caller can substitute real resources or

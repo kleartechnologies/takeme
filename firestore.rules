@@ -11,20 +11,29 @@ service cloud.firestore {
         && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)
         && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == "1.0-draft"
           && acceptance.privacyVersion == "1.0-draft")
+          || (request.auth.token.aud == "takeme-staging-822a5" && acceptance.termsVersion == "1.0-staging"
+            && acceptance.privacyVersion == "1.0-staging")
           || false);
+    }
+    function configuredReleasePolicy(policy) {
+      return policy.publicationApproved == true && policy.minimumAge == 18
+        && policy.projectId == request.auth.token.aud
+        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme'
+            && policy.termsVersion == "1.0-draft" && policy.privacyVersion == "1.0-draft")
+          || (policy.releaseTarget == 'staging' && policy.projectId == "takeme-staging-822a5"
+            && policy.termsVersion == "1.0-staging" && policy.privacyVersion == "1.0-staging")
+          || false);
+    }
+    function configuredStorageBucket(name) {
+      return (request.auth.token.aud == "takeme-staging-822a5" && name == "takeme-staging-822a5.firebasestorage.app")
+        || (request.auth.token.aud != "takeme-staging-822a5"
+          && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);
     }
     // END GENERATED RELEASE POLICY
     function marketplaceEligible() {
       let policy = get(/databases/$(database)/documents/releasePolicies/current).data;
       let acceptance = get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data;
-      return signedIn() && policy.publicationApproved == true && policy.minimumAge == 18
-        && policy.projectId == request.auth.token.aud
-        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme')
-          || (policy.releaseTarget == 'production' && !policy.projectId.matches('demo-.*')
-            && !policy.termsVersion.matches('.*[Dd][Rr][Aa][Ff][Tt].*|.*[Dd][Ee][Mm][Oo].*|.*[Tt][Ee][Ss][Tt].*')
-            && !policy.privacyVersion.matches('.*[Dd][Rr][Aa][Ff][Tt].*|.*[Dd][Ee][Mm][Oo].*|.*[Tt][Ee][Ss][Tt].*')))
-        && policy.termsVersion is string && policy.termsVersion.size() > 0
-        && policy.privacyVersion is string && policy.privacyVersion.size() > 0
+      return signedIn() && configuredReleasePolicy(policy)
         && acceptance.termsVersion == policy.termsVersion && acceptance.privacyVersion == policy.privacyVersion
         && configuredAcceptance(acceptance);
     }

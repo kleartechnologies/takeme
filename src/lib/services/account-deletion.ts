@@ -18,7 +18,7 @@ async function call(name: string, input: Record<string, unknown> = {}) {
   return (await httpsCallable<Record<string, unknown>, DeletionStatus>(functions, name)(input)).data;
 }
 export const getAccountDeletionStatus = () => call("getAccountDeletionStatus");
-export interface DeletionAvailability { available: boolean; environment: "demo" | "production" | "unavailable" }
+export interface DeletionAvailability { available: boolean; environment: "demo" | "staging" | "production" | "unavailable" }
 export async function getAccountDeletionAvailability(): Promise<DeletionAvailability> {
   if (!functions) return { available: false, environment: "unavailable" };
   return (await httpsCallable<Record<string, never>, DeletionAvailability>(functions, "getAccountDeletionAvailability")({})).data;

@@ -2,9 +2,10 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { getReleasePolicy, policyIsConfigured } from "../../../functions/src/release-policy";
 import type { SetupStep } from "@/lib/auth-routing";
+import { isStagingReleaseProof } from "@/lib/release-proof";
 
 export const isLocalAccountSetup = () => process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true" && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === "demo-takeme";
-export const accountReleasePolicy = () => getReleasePolicy(isLocalAccountSetup() ? "demo" : "production");
+export const accountReleasePolicy = () => getReleasePolicy(isLocalAccountSetup() ? "demo" : isStagingReleaseProof(process.env.TAKEME_BUILD_RELEASE_PROOF) ? "staging" : "production");
 export const accountPolicyAvailable = () => policyIsConfigured(accountReleasePolicy());
 export interface AccountSetupStatus { step: SetupStep; policyAvailable?: boolean; termsVersion?: string | null; privacyVersion?: string | null; minimumAge?: 18 }
 async function call<T>(name: string, data = {}) {

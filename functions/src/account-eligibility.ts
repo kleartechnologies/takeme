@@ -1,19 +1,25 @@
 import { getApp } from "firebase-admin/app";
 import { getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import { getReleasePolicy, policyIsConfigured, validateProductionPolicy, type ReleasePolicy, type ReleaseTarget } from "./release-policy";
+import { getReleasePolicy, policyIsConfigured, validateProductionPolicy, type ReleasePolicy, type ReleaseTarget } from "./release-policy.ts";
+import { stagingFirebaseProjectId, stagingStorageBucket } from "./staging-environment.ts";
 
 export const releasePolicyRef = () => getFirestore().doc("releasePolicies/current");
 export const acceptanceRef = (uid: string) => getFirestore().doc(`users/${uid}/private/onboarding`);
 type PolicyContext = { target: ReleaseTarget; projectId: string; policy: ReleasePolicy };
 
 /** Environment variables select a trusted release; clients cannot select policy versions. */
-export function resolvePolicyContext(env: NodeJS.ProcessEnv, appProjectId?: string): PolicyContext | null {
+export function resolvePolicyContext(env: NodeJS.ProcessEnv, appProjectId?: string, appStorageBucket?: string): PolicyContext | null {
   const projects = [env.GCLOUD_PROJECT, env.GOOGLE_CLOUD_PROJECT, env.GCP_PROJECT, appProjectId].filter((value): value is string => value !== undefined);
   if (env.FIREBASE_CONFIG !== undefined) {
     try {
       const config = JSON.parse(env.FIREBASE_CONFIG);
-      if (typeof config.projectId === "string") projects.push(config.projectId);
+      if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+      if (config.projectId !== undefined) {
+        if (typeof config.projectId !== "string") return null;
+        projects.push(config.projectId);
+      }
+      if (env.TAKEME_RELEASE_TARGET === "staging" && config.storageBucket !== undefined && config.storageBucket !== stagingStorageBucket) return null;
     } catch { return null; }
   }
   const projectId = projects[0];
@@ -24,15 +30,28 @@ export function resolvePolicyContext(env: NodeJS.ProcessEnv, appProjectId?: stri
     if (env.FIREBASE_STORAGE_EMULATOR_HOST !== undefined && env.FIREBASE_STORAGE_EMULATOR_HOST !== "127.0.0.1:9199") return null;
     return { target: "demo", projectId, policy: getReleasePolicy("demo") };
   }
-  if (env.TAKEME_RELEASE_TARGET !== "production" || !projectId || projectId.startsWith("demo-")
+  if (env.TAKEME_RELEASE_TARGET === "staging") {
+    if (projectId !== stagingFirebaseProjectId || appProjectId !== stagingFirebaseProjectId || appStorageBucket !== stagingStorageBucket
+      || ![env.GCLOUD_PROJECT, env.GOOGLE_CLOUD_PROJECT, env.GCP_PROJECT].some(value => value !== undefined)
+      || env.TAKEME_FIREBASE_PROJECT_ID !== stagingFirebaseProjectId
+      || env.TAKEME_STORAGE_BUCKETS !== undefined && env.TAKEME_STORAGE_BUCKETS !== stagingStorageBucket
+      || env.TAKEME_DELETION_ENVIRONMENT !== undefined && env.TAKEME_DELETION_ENVIRONMENT !== "staging"
+      || env.TAKEME_ENABLE_STAGING_DELETION !== undefined && !["true", "false"].includes(env.TAKEME_ENABLE_STAGING_DELETION)
+      || env.TAKEME_ENABLE_PRODUCTION_DELETION !== undefined && env.TAKEME_ENABLE_PRODUCTION_DELETION !== "false"
+      || Object.keys(env).some(name => /EMULATOR|EMULATORS/.test(name)
+        && !(name === "NEXT_PUBLIC_USE_FIREBASE_EMULATORS" && env[name] === "false"))) return null;
+    return { target: "staging", projectId, policy: getReleasePolicy("staging") };
+  }
+  if (env.TAKEME_RELEASE_TARGET !== "production" || !projectId || projectId.startsWith("demo-") || projectId === stagingFirebaseProjectId
     || env.TAKEME_FIREBASE_PROJECT_ID !== projectId
+    || env.TAKEME_ENABLE_STAGING_DELETION !== undefined && env.TAKEME_ENABLE_STAGING_DELETION !== "false"
     || Object.keys(env).some(name => /EMULATOR|EMULATORS/.test(name)
       && !(name === "NEXT_PUBLIC_USE_FIREBASE_EMULATORS" && env[name] === "false"))
     || validateProductionPolicy().length) return null;
   return { target: "production", projectId, policy: getReleasePolicy("production") };
 }
 export function runtimePolicyContext(): PolicyContext | null {
-  return resolvePolicyContext(process.env, getApp().options.projectId);
+  return resolvePolicyContext(process.env, getApp().options.projectId, getApp().options.storageBucket);
 }
 
 export function policyMirrorMatches(data: DocumentData | undefined, context: PolicyContext | null) {
@@ -48,6 +67,20 @@ export async function initializeDemoPolicyMirror() {
   if (context?.target !== "demo") return;
   try { await releasePolicyRef().create({ releaseTarget: context.target, projectId: context.projectId, ...context.policy }); }
   catch (error) { if (![6, "already-exists"].includes((error as { code?: string | number }).code ?? "")) throw error; }
+}
+
+/** Explicit deployment bootstrap only. Never called by onboarding or a public callable. */
+export async function initializeStagingPolicyMirror() {
+  const context = runtimePolicyContext();
+  if (context?.target !== "staging") throw new HttpsError("failed-precondition", "Staging policy resources are not configured.");
+  const ref = releasePolicyRef();
+  try { await ref.create({ releaseTarget: context.target, projectId: context.projectId, ...context.policy }); }
+  catch (error) {
+    if (![6, "already-exists"].includes((error as { code?: string | number }).code ?? "")) throw error;
+    if (!policyMirrorMatches((await ref.get()).data(), context)) {
+      throw new HttpsError("failed-precondition", "The existing staging policy needs review; bootstrap never changes it.");
+    }
+  }
 }
 
 function timestampPresent(value: unknown): boolean {

@@ -4,6 +4,8 @@
 
 This report records the pre-adoption qualification. The subsequent supported dependency adoption after checkpoint `0fdfcc18fef073dd2c523ebf232192bcdb77422a` is recorded in [Cloudflare dependency adoption](cloudflare-dependency-adoption.md); the version table below is historical.
 
+4 October update: current staging identity, disabled routing, Access safeguards and branch/deployment procedure are described in [staging preview preparation](staging-preview-qualification.md), which supersedes the provisional preview configuration below. No cloud deployment or production migration has occurred.
+
 ## Recommendation and exact versions
 
 **Use OpenNext for this migration. Do not release the current dependency tuple.** It adapts native Next output and retains the existing App Router implementation, self-hosted fonts and fail-closed release tooling. Cloudflare currently recommends vinext, but its beta implementation replaces Next APIs/build behavior through Vite; that creates more regression work for this approved application. Vinext also documents a different Google-font pipeline. This is a TAKEME risk assessment, not a claim that Cloudflare recommends OpenNext for new apps. [Cloudflare Next guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/), [vinext implementation/status](https://github.com/cloudflare/vinext).

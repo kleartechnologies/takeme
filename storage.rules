@@ -8,7 +8,23 @@ service firebase.storage {
         && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)
         && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == "1.0-draft"
           && acceptance.privacyVersion == "1.0-draft")
+          || (request.auth.token.aud == "takeme-staging-822a5" && acceptance.termsVersion == "1.0-staging"
+            && acceptance.privacyVersion == "1.0-staging")
           || false);
+    }
+    function configuredReleasePolicy(policy) {
+      return policy.publicationApproved == true && policy.minimumAge == 18
+        && policy.projectId == request.auth.token.aud
+        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme'
+            && policy.termsVersion == "1.0-draft" && policy.privacyVersion == "1.0-draft")
+          || (policy.releaseTarget == 'staging' && policy.projectId == "takeme-staging-822a5"
+            && policy.termsVersion == "1.0-staging" && policy.privacyVersion == "1.0-staging")
+          || false);
+    }
+    function configuredStorageBucket(name) {
+      return (request.auth.token.aud == "takeme-staging-822a5" && name == "takeme-staging-822a5.firebasestorage.app")
+        || (request.auth.token.aud != "takeme-staging-822a5"
+          && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);
     }
     // END GENERATED RELEASE POLICY
     function signedIn() { return request.auth != null && !firestore.exists(/databases/(default)/documents/accountLifecycles/$(request.auth.uid)); }
@@ -17,7 +33,7 @@ service firebase.storage {
     function eligibleOwner(uid) {
       let acceptance = firestore.get(/databases/(default)/documents/users/$(uid)/private/onboarding).data;
       return request.auth != null && request.auth.uid == uid && configuredAcceptance(acceptance)
-        && bucket in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app'];
+        && configuredStorageBucket(bucket);
     }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function validImage() {

@@ -1,9 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validateDeletionConfig, qualifyDeletionExecution, ownedDeletionMedia, DeletionConfigurationError } = require('../lib/deletion-config.js');
+const { stagingEnvironment } = require('../lib/staging-environment.js');
 
 const demo = () => ({ env: { GCLOUD_PROJECT: 'demo-takeme', FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080', FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199' }, appProjectId: 'demo-takeme', appStorageBucket: 'demo-takeme.firebasestorage.app' });
 const production = () => ({ env: { GCLOUD_PROJECT: 'takeme-qualified-123', TAKEME_FIREBASE_PROJECT_ID: 'takeme-qualified-123', TAKEME_RELEASE_TARGET: 'production', TAKEME_DELETION_ENVIRONMENT: 'production', TAKEME_ENABLE_PRODUCTION_DELETION: 'true', TAKEME_STORAGE_BUCKETS: 'takeme-qualified-123.firebasestorage.app,takeme-qualified-123.appspot.com' }, appProjectId: 'takeme-qualified-123', appStorageBucket: 'takeme-qualified-123.firebasestorage.app' });
+const staging = () => ({ env: { GCLOUD_PROJECT: stagingEnvironment.projectId, TAKEME_FIREBASE_PROJECT_ID: stagingEnvironment.projectId, TAKEME_RELEASE_TARGET: 'staging', TAKEME_DELETION_ENVIRONMENT: 'staging', TAKEME_ENABLE_STAGING_DELETION: 'true', TAKEME_ENABLE_PRODUCTION_DELETION: 'false', TAKEME_STORAGE_BUCKETS: stagingEnvironment.storageBucket }, appProjectId: stagingEnvironment.projectId, appStorageBucket: stagingEnvironment.storageBucket });
 const rejected = config => assert.throws(() => validateDeletionConfig(config), DeletionConfigurationError);
 
 test('explicit demo resources require all exact loopback services and reject mixed release intent', () => {
@@ -16,6 +18,59 @@ test('explicit demo resources require all exact loopback services and reject mix
   }
   for (const key of ['TAKEME_RELEASE_TARGET', 'TAKEME_DELETION_ENVIRONMENT']) { const config = demo(); config.env[key] = 'production'; rejected(config); }
   const enabled = demo(); enabled.env.TAKEME_ENABLE_PRODUCTION_DELETION = 'true'; rejected(enabled);
+});
+
+test('staging deletion is independently disabled by default and needs exact explicit resource qualification', () => {
+  const resources = qualifyDeletionExecution(staging());
+  assert.equal(resources.environment, 'staging');
+  assert.equal(resources.projectId, stagingEnvironment.projectId);
+  assert.deepEqual(resources.storageBuckets, [stagingEnvironment.storageBucket]);
+  assert.ok(Object.isFrozen(resources)); assert.ok(Object.isFrozen(resources.storageBuckets));
+  for (const key of ['GCLOUD_PROJECT', 'TAKEME_FIREBASE_PROJECT_ID', 'TAKEME_RELEASE_TARGET', 'TAKEME_DELETION_ENVIRONMENT', 'TAKEME_ENABLE_STAGING_DELETION', 'TAKEME_STORAGE_BUCKETS']) {
+    const config = staging(); delete config.env[key]; rejected(config);
+  }
+  for (const value of ['false', '', '1', 'TRUE']) { const config = staging(); config.env.TAKEME_ENABLE_STAGING_DELETION = value; rejected(config); }
+  for (const key of ['appProjectId', 'appStorageBucket']) { const config = staging(); delete config[key]; rejected(config); }
+  const productionOff = staging(); delete productionOff.env.TAKEME_ENABLE_PRODUCTION_DELETION;
+  assert.equal(qualifyDeletionExecution(productionOff).environment, 'staging');
+});
+
+test('staging cleanup cannot select production, unknown projects, an alternate bucket or mixed activation', () => {
+  for (const project of ['takeme-52b80', 'another-staging-project', 'demo-takeme']) {
+    const config = staging(); config.env.GCLOUD_PROJECT = config.env.TAKEME_FIREBASE_PROJECT_ID = config.appProjectId = project;
+    config.env.TAKEME_STORAGE_BUCKETS = config.appStorageBucket = project + '.firebasestorage.app'; rejected(config);
+  }
+  for (const key of ['GOOGLE_CLOUD_PROJECT', 'GCP_PROJECT', 'TAKEME_FIREBASE_PROJECT_ID']) { const config = staging(); config.env[key] = 'takeme-52b80'; rejected(config); }
+  for (const key of ['TAKEME_RELEASE_TARGET', 'TAKEME_DELETION_ENVIRONMENT']) for (const value of ['production', 'demo', 'unknown']) { const config = staging(); config.env[key] = value; rejected(config); }
+  for (const value of ['true', '', 'TRUE']) { const config = staging(); config.env.TAKEME_ENABLE_PRODUCTION_DELETION = value; rejected(config); }
+  for (const bucket of ['takeme-52b80.firebasestorage.app', stagingEnvironment.projectId + '.appspot.com', 'gs://' + stagingEnvironment.storageBucket, stagingEnvironment.storageBucket + ',' + stagingEnvironment.storageBucket, '']) {
+    const config = staging(); config.env.TAKEME_STORAGE_BUCKETS = config.appStorageBucket = bucket; rejected(config);
+  }
+  const copied = staging(); copied.env.TAKEME_RELEASE_TARGET = copied.env.TAKEME_DELETION_ENVIRONMENT = 'production'; copied.env.TAKEME_ENABLE_PRODUCTION_DELETION = 'true'; delete copied.env.TAKEME_ENABLE_STAGING_DELETION; rejected(copied);
+  for (const factory of [demo, production]) { const config = factory(); config.env.TAKEME_ENABLE_STAGING_DELETION = 'true'; rejected(config); }
+});
+
+test('staging refuses all emulator overrides and mismatched Firebase managed metadata', () => {
+  for (const key of ['FIREBASE_AUTH_EMULATOR_HOST', 'FIRESTORE_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST', 'PUBSUB_EMULATOR_HOST', 'FIREBASE_EMULATOR_HUB', 'FUNCTIONS_EMULATOR', 'FIREBASE_EMULATORS', 'CUSTOM_EMULATOR_URL']) {
+    for (const value of ['127.0.0.1:8080', 'false', '']) { const config = staging(); config.env[key] = value; rejected(config); }
+  }
+  for (const value of ['true', 'FALSE', '']) { const config = staging(); config.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS = value; rejected(config); }
+  const configured = staging(); configured.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS = 'false'; configured.env.FIREBASE_CONFIG = JSON.stringify({ projectId: stagingEnvironment.projectId, storageBucket: stagingEnvironment.storageBucket });
+  assert.equal(validateDeletionConfig(configured).environment, 'staging');
+  for (const value of ['not-json', 'null', '[]', JSON.stringify({ projectId: 'takeme-52b80' }), JSON.stringify({ storageBucket: 'takeme-52b80.firebasestorage.app' })]) {
+    const config = staging(); config.env.FIREBASE_CONFIG = value; rejected(config);
+  }
+});
+
+test('staging evidence URLs use HTTPS and the exact staging bucket and owned prefix', () => {
+  const resources = validateDeletionConfig(staging());
+  const object = 'users/account-123/listings/item-123/image.png';
+  const encoded = encodeURIComponent(object);
+  const url = bucket => `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=synthetic`;
+  assert.deepEqual(ownedDeletionMedia(url(stagingEnvironment.storageBucket), 'account-123', resources), { bucket: stagingEnvironment.storageBucket, object });
+  for (const bucket of ['takeme-52b80.firebasestorage.app', 'demo-takeme.firebasestorage.app', stagingEnvironment.projectId + '.appspot.com']) assert.equal(ownedDeletionMedia(url(bucket), 'account-123', resources), null);
+  assert.equal(ownedDeletionMedia(url(stagingEnvironment.storageBucket).replace('https://firebasestorage.googleapis.com', 'http://127.0.0.1:9199'), 'account-123', resources), null);
+  assert.equal(ownedDeletionMedia(url(stagingEnvironment.storageBucket), 'other-account', resources), null);
 });
 
 test('unknown or incomplete production context stays disabled; no inference from missing emulator flags', () => {
