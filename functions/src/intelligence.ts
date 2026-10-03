@@ -1,6 +1,7 @@
+import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { createHash } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { createDiscoverySession, verifyDiscoverySession } from "./discovery-session";
 import { displayPublicLocation, isPublicListingSafe, publishableLocation } from "./general-location";
@@ -52,7 +53,8 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
   const attributionRef = signal.type === "RECOMMENDATION_CLICK" && signal.listingId && envelope.sectionId
     ? db.collection("discoveryAttributions").doc(hash(`${uid}|${signal.listingId}`)) : null;
   const promotionListingRef = promotionRef && signal.listingId ? db.collection("listings").doc(signal.listingId) : null;
-  return db.runTransaction(async (transaction) => {
+  return runGuardedTransaction(db, async (transaction) => {
+    if (!(await accountIsActive(uid, transaction))) return { accepted: false, reason: "account_unavailable" as const };
     const [existing, interest, trend, quota, promotion, promotionListing] = await Promise.all([
       transaction.get(eventRef), transaction.get(interestRef), trendRef ? transaction.get(trendRef) : null, quotaRef ? transaction.get(quotaRef) : null,
       promotionRef ? transaction.get(promotionRef) : null, promotionListingRef ? transaction.get(promotionListingRef) : null,
@@ -229,7 +231,8 @@ export const onCompletedTransactionInterest = onDocumentCreated("marketplaceEven
   const transactionRef = db.collection("transactions").doc(data.transactionId);
   const ledgerRef = db.collection("intelligenceCompletions").doc(data.transactionId);
   const interestRef = db.collection("userInterests").doc(data.userId);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
+    if (!(await accountIsActive(data.userId, tx))) return;
     const [transaction, ledger, interest] = await Promise.all([tx.get(transactionRef), tx.get(ledgerRef), tx.get(interestRef)]);
     const deal = transaction.data();
     if (ledger.exists || !deal || deal.status !== "completed" || deal.buyerId !== data.userId

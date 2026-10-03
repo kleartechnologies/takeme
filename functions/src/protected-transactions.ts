@@ -1,5 +1,6 @@
+import { marketplaceCall as onCall, resolutionCall, runGuardedTransaction } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { protectedAuditEventId } from "./protected-transaction-domain";
 import { protectedPaymentProvider, protectedPaymentsConfig } from "./payments/stripe-connect-provider";
 
@@ -70,38 +71,41 @@ export function openProtectedDispute(tx: Transaction, transactionId: string, dea
   writeProtectedAuditEvent(tx, { transactionId, eventType: "dispute_opened", idempotencyKey: "buyer-open", actorType: "buyer", actorId: buyerId }, now);
 }
 
-export const respondToProtectedDispute = onCall(async (request) => {
+export const respondToProtectedDispute = resolutionCall(async (request) => {
   const sellerId = requireUid(request.auth?.uid);
   const transactionId = requiredId(request.data?.transactionId, "Transaction");
   const response = typeof request.data?.response === "string" ? request.data.response.trim().slice(0, 2000) : "";
   if (!response) throw new HttpsError("invalid-argument", "Provide a seller response.");
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const [deal, dispute] = await Promise.all([tx.get(transactionRef(transactionId)), tx.get(disputeRef(transactionId))]);
     if (!deal.exists || deal.data()?.sellerId !== sellerId) throw new HttpsError("permission-denied", "Only the transaction seller can respond.");
     if (!dispute.exists) throw new HttpsError("not-found", "Protected dispute not found.");
     const data = dispute.data()!;
-    if (data.sellerResponse === response && data.status === "under_review") return { status: "under_review", alreadyRecorded: true };
+    const restrictedCase = data.deletionEvidenceId ? db.doc(`accountDeletionEvidence/${data.deletionEvidenceId}/records/case`) : null;
+    const held = restrictedCase ? await tx.get(restrictedCase) : null;
+    if ((data.sellerResponse ?? held?.data()?.sellerResponse) === response && data.status === "under_review") return { status: "under_review", alreadyRecorded: true };
     if (data.status !== "awaiting_seller" || data.sellerResponse) throw new HttpsError("failed-precondition", "This dispute is not awaiting a seller response.");
     const now = Timestamp.now();
-    tx.update(dispute.ref, { sellerResponse: response, status: "under_review", updatedAt: now });
+    if (restrictedCase) tx.set(restrictedCase, { sellerResponse: response }, { merge: true });
+    tx.update(dispute.ref, { ...(restrictedCase ? {} : { sellerResponse: response }), status: "under_review", updatedAt: now });
     writeProtectedAuditEvent(tx, { transactionId, eventType: "seller_response_added", idempotencyKey: "seller-response", actorType: "seller", actorId: sellerId }, now);
     return { status: "under_review", alreadyRecorded: false };
   });
 });
 
-export const addProtectedDisputeEvidence = onCall(async (request) => {
+export const addProtectedDisputeEvidence = resolutionCall(async (request) => {
   const userId = requireUid(request.auth?.uid);
   const transactionId = requiredId(request.data?.transactionId, "Transaction");
   const idempotencyKey = requiredId(request.data?.idempotencyKey, "Idempotency key");
   const note = typeof request.data?.note === "string" ? request.data.note.trim().slice(0, 1000) : "";
   if (!note) throw new HttpsError("invalid-argument", "Provide evidence notes.");
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const [deal, dispute] = await Promise.all([tx.get(transactionRef(transactionId)), tx.get(disputeRef(transactionId))]);
     const data = deal.data();
     if (!deal.exists || !data || ![data.buyerId, data.sellerId].includes(userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     if (!dispute.exists || !["open", "awaiting_buyer", "awaiting_seller", "under_review"].includes(String(dispute.data()?.status))) throw new HttpsError("failed-precondition", "This dispute is not accepting evidence.");
     const evidenceId = protectedAuditEventId(transactionId, "evidence", `${userId}|${idempotencyKey}`);
-    const evidenceRef = dispute.ref.collection("evidence").doc(evidenceId);
+    const evidenceRef = dispute.data()?.deletionEvidenceId ? db.doc(`accountDeletionEvidence/${dispute.data()!.deletionEvidenceId}/records/evidence-${evidenceId}`) : dispute.ref.collection("evidence").doc(evidenceId);
     const existing = await tx.get(evidenceRef);
     if (existing.exists) return { evidenceId, alreadyRecorded: true };
     const now = Timestamp.now();

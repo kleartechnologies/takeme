@@ -1,6 +1,7 @@
+import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
 import { getAuth } from "firebase-admin/auth";
 import { AggregateField, getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
-import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { ADMIN_SECTIONS, adminRange, averageSen, ctr, tierDistribution, type AdminRange, type AdminSection } from "./admin-domain";
 
 const db = getFirestore();
@@ -336,10 +337,11 @@ export const getAdminRecord = onCall(async (request) => {
       financialActionsEnabled: false } };
   }
   if (selected === "reports") {
+    const retainedEvidence = data.deletionEvidenceId ? await db.collection(`accountDeletionEvidence/${data.deletionEvidenceId}/records`).limit(25).get() : null;
     const conversation = data.conversationId ? await db.collection("conversations").doc(data.conversationId).get() : null;
     const message = data.targetType === "message" && conversation?.exists ? await conversation.ref.collection("messages").doc(data.targetId).get() : null;
     const contextMessages = conversation?.exists ? await conversation.ref.collection("messages").orderBy("createdAt", "desc").limit(20).get() : null;
-    return { row, detail: { details: data.details ?? "", updatedAt: iso(data.updatedAt), listingId: data.listingId ?? null, userId: data.userId ?? null, conversationId: data.conversationId ?? null,
+    return { row, detail: { retainedEvidence: retainedEvidence?.docs.map((item) => ({ ...item.data(), createdAt: iso(item.data().createdAt) })) ?? [], details: data.details ?? "", updatedAt: iso(data.updatedAt), listingId: data.listingId ?? null, userId: data.userId ?? null, conversationId: data.conversationId ?? null,
       conversation: conversation?.exists ? { listingId: conversation.data()?.listingId, buyerId: conversation.data()?.buyerId, sellerId: conversation.data()?.sellerId } : null,
       reportedMessage: message?.exists ? { senderId: message.data()?.senderId, body: message.data()?.body, createdAt: iso(message.data()?.createdAt) } : null,
       recentConversationMessages: contextMessages?.docs.map((item) => ({ id: item.id, senderId: item.data().senderId, body: item.data().body, createdAt: iso(item.data().createdAt) })) ?? [],
@@ -359,6 +361,6 @@ export const updateAdminReport = onCall(async (request) => {
   if (resolution.length > 2000 || internalNotes.length > 4000) throw new HttpsError("invalid-argument", "Moderation notes are too long.");
   if (status === "resolved" && !resolution) throw new HttpsError("invalid-argument", "A resolution is required.");
   const ref = db.collection("reports").doc(reportId);
-  await db.runTransaction(async (tx) => { const report = await tx.get(ref); if (!report.exists) throw new HttpsError("not-found", "Report not found."); tx.update(ref, { status, resolution, internalNotes, moderatedBy: adminId, updatedAt: Timestamp.now() }); });
+  await runGuardedTransaction(db, async (tx) => { const report = await tx.get(ref); if (!report.exists) throw new HttpsError("not-found", "Report not found."); tx.update(ref, { status, resolution, internalNotes, moderatedBy: adminId, ...(["resolved", "dismissed"].includes(status) && !["resolved", "dismissed"].includes(report.data()?.status) ? { resolvedAt: Timestamp.now() } : {}), updatedAt: Timestamp.now() }); });
   return { updated: true };
 });

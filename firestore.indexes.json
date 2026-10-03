@@ -1,5 +1,6 @@
 {
   "indexes": [
+    {"collectionGroup": "accountDeletionOperations", "queryScope": "COLLECTION", "fields": [{"fieldPath": "state", "order": "ASCENDING"}, {"fieldPath": "expiresAt", "order": "ASCENDING"}]},
     { "collectionGroup": "notifications", "queryScope": "COLLECTION_GROUP", "fields": [
       { "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }
     ]},
@@ -192,6 +193,16 @@
     ]}
   ],
   "fieldOverrides": [
+    {"collectionGroup": "users", "fieldPath": "userId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "members", "fieldPath": "userId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "bids", "fieldPath": "bidderId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "bids", "fieldPath": "outbidUserId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "bids", "fieldPath": "retentionExpiresAt", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "changes", "fieldPath": "actorId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "changes", "fieldPath": "retentionExpiresAt", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "notifications", "fieldPath": "sellerId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "notifications", "fieldPath": "transactionId", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
+    {"collectionGroup": "notifications", "fieldPath": "href", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"order": "ASCENDING", "queryScope": "COLLECTION_GROUP"}]},
     { "collectionGroup": "notifications", "fieldPath": "createdAt", "indexes": [
       { "order": "ASCENDING", "queryScope": "COLLECTION" },
       { "order": "DESCENDING", "queryScope": "COLLECTION" },

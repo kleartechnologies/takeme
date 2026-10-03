@@ -1,5 +1,6 @@
+import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 
 const db = getFirestore();
 const reasons: Record<string, string[]> = {
@@ -42,7 +43,7 @@ export const submitMarketplaceReport = onCall(async (request) => {
     listingId = data.listingId; userId = data.buyerId === reporterId ? data.sellerId : data.buyerId;
   }
   const ref = db.collection("reports").doc(`${targetType}-${targetId}-${reporterId}`);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     if ((await tx.get(ref)).exists) return;
     const now = Timestamp.now();
     tx.create(ref, { id: ref.id, reporterId, targetType, targetId, conversationId, listingId, userId, reason, details, status: "submitted", resolution: "", internalNotes: "", createdAt: now, updatedAt: now });

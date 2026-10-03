@@ -1,7 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    function authenticated() { return request.auth != null; }
+    function signedIn() { return authenticated() && !exists(/databases/$(database)/documents/accountLifecycles/$(request.auth.uid)); }
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
     function parentListing(listingId) { return get(/databases/$(database)/documents/listings/$(listingId)).data; }
@@ -55,10 +56,15 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    match /accountLifecycles/{uid} { allow get: if authenticated() && request.auth.uid == uid; allow list, write: if false; }
+    match /accountDeletionOperations/{uid} { allow read, write: if false; }
+    match /accountDeletionEvidence/{path=**} { allow read, write: if false; }
+    match /accountDeletionSecurityHolds/{path=**} { allow read, write: if false; }
+
     match /users/{uid} {
       // Firestore returns complete documents: a legacy/admin-added private field
       // must not leak through the public profile path.
-      allow get: if owns(uid) || publicProfileSafe(resource.data, uid);
+      allow get: if owns(uid) || (!exists(/databases/$(database)/documents/accountLifecycles/$(uid)) && publicProfileSafe(resource.data, uid));
       allow list: if false;
       allow create: if owns(uid) && validPublicProfile(request.resource.data, uid);
       allow update: if (owns(uid)

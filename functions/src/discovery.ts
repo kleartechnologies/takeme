@@ -1,5 +1,6 @@
+import { marketplaceCall as onCall } from "./account-lifecycle";
 import { getFirestore } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { createDiscoverySession, type ServedListing } from "./discovery-session";
 import { publicListing } from "./intelligence";
 import { displayPublicLocation, isPublicListingSafe, validatePublicLocation } from "./general-location";

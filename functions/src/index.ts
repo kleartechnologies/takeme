@@ -1,8 +1,9 @@
+import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
 import { getApp, initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   effectiveAuctionStatus,
@@ -184,7 +185,7 @@ export const createFixedListingDraft = onCall(async (request) => {
   const meetup = await selectedMeetup(uid, content.meetupLocationId);
   const ref = db.collection(LISTINGS).doc();
   const now = Timestamp.now();
-  await ref.create({ id: ref.id, sellerId: uid, ...content, ...meetup, imageUrls: [], status: "draft", createdAt: now, updatedAt: now });
+  await runGuardedTransaction(db, async (tx) => { tx.create(ref, { id: ref.id, sellerId: uid, ...content, ...meetup, imageUrls: [], status: "draft", createdAt: now, updatedAt: now }); });
   return { listingId: ref.id };
 });
 
@@ -200,7 +201,7 @@ export const publishFixedListing = onCall(async (request) => {
   await requireFixedOwner(uid, listingId);
   const imageUrls = await verifyListingImages(uid, listingId, request.data?.imageUrls);
   const ref = db.collection(LISTINGS).doc(listingId);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const snapshot = await tx.get(ref);
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
@@ -219,7 +220,7 @@ export const updateFixedListing = onCall(async (request) => {
   await requireFixedOwner(uid, listingId);
   const imageUrls = await verifyListingImages(uid, listingId, request.data?.imageUrls);
   const ref = db.collection(LISTINGS).doc(listingId);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const snapshot = await tx.get(ref);
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
@@ -235,7 +236,7 @@ export const removeFixedListing = onCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   const ref = db.collection(LISTINGS).doc(listingId);
-  const imageUrls = await db.runTransaction(async (tx) => {
+  const imageUrls = await runGuardedTransaction(db, async (tx) => {
     const snapshot = await tx.get(ref);
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
@@ -308,7 +309,7 @@ export const createAuctionListing = onCall(async (request) => {
   const listingRef = db.collection(LISTINGS).doc();
   const timestamp = Timestamp.fromDate(now);
   const auctionStatus = input.auctionStartAt.getTime() <= now.getTime() ? "active" : "scheduled";
-  await listingRef.create({
+  await runGuardedTransaction(db, async (tx) => { tx.create(listingRef, {
     id: listingRef.id,
     sellerId: uid,
     ...listingContent(input),
@@ -325,6 +326,7 @@ export const createAuctionListing = onCall(async (request) => {
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  });
   return { listingId: listingRef.id };
 });
 
@@ -334,7 +336,7 @@ export const publishAuctionListing = onCall(async (request) => {
   const listingId = requireId(input?.listingId, "Listing ID");
   const imageUrls = await verifyListingImages(uid, listingId, input?.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
-  const result = await db.runTransaction(async (transaction) => {
+  const result = await runGuardedTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(listingRef);
     const data = snapshot.data();
     requireAuctionOwner(data, uid);
@@ -359,7 +361,7 @@ export const updateAuctionListing = onCall(async (request) => {
   const meetup = await selectedMeetup(uid, input.meetupLocationId);
   const imageUrls = await verifyListingImages(uid, listingId, payload.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
-  await db.runTransaction(async (transaction) => {
+  await runGuardedTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(listingRef);
     const data = snapshot.data();
     requireAuctionOwner(data, uid);
@@ -382,7 +384,7 @@ export const placeBid = onCall(async (request) => {
   const listingRef = db.collection(LISTINGS).doc(listingId);
   const bidRef = listingRef.collection("bids").doc();
 
-  const result = await db.runTransaction(async (transaction) => {
+  const result = await runGuardedTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(listingRef);
     const data = snapshot.data();
     if (!data) throw new HttpsError("not-found", "Auction listing not found.");
@@ -424,7 +426,7 @@ export const cancelAuction = onCall(async (request) => {
   const input = request.data as { listingId?: unknown };
   const listingId = requireId(input?.listingId, "Listing ID");
   const listingRef = db.collection(LISTINGS).doc(listingId);
-  const result = await db.runTransaction(async (transaction) => {
+  const result = await runGuardedTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(listingRef);
     const data = snapshot.data();
     requireAuctionOwner(data, uid);
@@ -466,7 +468,7 @@ async function advanceDueAuctions(now: Timestamp) {
   ]);
   const references = new Map<string, FirebaseFirestore.DocumentReference>();
   for (const snapshot of [...starting.docs, ...ending.docs]) references.set(snapshot.ref.path, snapshot.ref);
-  await Promise.all(Array.from(references.values()).map((listingRef) => db.runTransaction(async (transaction) => {
+  await Promise.all(Array.from(references.values()).map((listingRef) => runGuardedTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(listingRef);
     if (snapshot.exists) await advanceListing(transaction, listingRef, snapshot.data()!, now);
   })));
@@ -548,3 +550,5 @@ export {
   respondToProtectedDispute,
   addProtectedDisputeEvidence,
 } from "./protected-transactions";
+
+export { getAccountDeletionStatus, requestAccountDeletion, retryAccountDeletion, processAccountDeletions } from "./account-deletion";

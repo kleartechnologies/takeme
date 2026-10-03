@@ -1,5 +1,6 @@
+import { marketplaceCall as onCall } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { isPublicListingSafe, publishableLocation, validatePublicLocation } from "./general-location";
 import { publicListing } from "./intelligence";
 

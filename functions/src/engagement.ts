@@ -1,6 +1,7 @@
+import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { randomUUID } from "node:crypto";
 import { getFirestore, FieldPath, Timestamp } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { matchesSearch, parseSearch, priceSen, stableId, type SearchCriteria } from "./engagement-domain";
@@ -36,7 +37,8 @@ async function emit(uid: string, key: string, notice: Notice) {
   }
   const ref = notifRef(uid, key);
   const summary = summaryRef(uid);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
+    if (!(await accountIsActive(uid, tx))) return;
     const [existing, current] = await Promise.all([tx.get(ref), tx.get(summary)]);
     if (existing.exists) return;
     const now = Timestamp.now();
@@ -80,7 +82,7 @@ export const markNotificationRead = onCall(async (request) => {
   const notificationId = validId(request.data?.notificationId, "Notification");
   const ref = db.collection("users").doc(uid).collection("notifications").doc(notificationId);
   const summary = summaryRef(uid);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const [item, count] = await Promise.all([tx.get(ref), tx.get(summary)]);
     if (!item.exists || item.data()?.readAt instanceof Timestamp) return;
     const now = Timestamp.now();
@@ -95,7 +97,7 @@ export const openNotification = onCall(async (request) => {
   const notificationId = validId(request.data?.notificationId, "Notification");
   const ref = db.collection("users").doc(uid).collection("notifications").doc(notificationId);
   const summary = summaryRef(uid);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const [item, count] = await Promise.all([tx.get(ref), tx.get(summary)]);
     if (!item.exists) throw new HttpsError("not-found", "Notification not found.");
     const data = item.data()!;
@@ -117,7 +119,7 @@ export const markAllNotificationsRead = onCall(async (request) => {
   const page = await ref.where("readAt", "==", null).limit(PAGE).get();
   if (page.empty) return { marked: 0, hasMore: false };
   const summary = summaryRef(uid);
-  const marked = await db.runTransaction(async (tx) => {
+  const marked = await runGuardedTransaction(db, async (tx) => {
     const [items, count] = await Promise.all([tx.getAll(...page.docs.map((item) => item.ref)), tx.get(summary)]);
     const unread = items.filter((item) => item.exists && item.data()?.readAt === null);
     const now = Timestamp.now();
@@ -138,7 +140,7 @@ export const setNotificationPreference = onCall(async (request) => {
   const type = request.data?.type as OptionalType;
   const frequency = request.data?.frequency as Frequency;
   if (!optionalTypes.includes(type) || !["instant", "off"].includes(frequency)) throw new HttpsError("invalid-argument", "Preference is invalid.");
-  await db.collection("notificationPreferences").doc(uid).set({ [type]: frequency, updatedAt: Timestamp.now() }, { merge: true });
+  await runGuardedTransaction(db, async (tx) => { tx.set(db.collection("notificationPreferences").doc(uid), { [type]: frequency, updatedAt: Timestamp.now() }, { merge: true }); });
   return { type, frequency };
 });
 
@@ -159,7 +161,8 @@ export const setSellerFollow = onCall(async (request) => {
   const ref = follows(sellerId).doc(uid);
   const mirror = db.collection("users").doc(uid).collection("following").doc(sellerId);
   const summary = db.collection("sellerFollowSummaries").doc(sellerId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
+    if (!(await accountIsActive(sellerId, tx))) throw new HttpsError("failed-precondition", "This seller is unavailable.");
     const [existing, count] = await Promise.all([tx.get(ref), tx.get(summary)]);
     const current = Math.max(0, Number(count.data()?.followerCount ?? 0));
     if (following && !existing.exists) {
@@ -206,7 +209,7 @@ export const saveSearch = onCall(async (request) => {
   const ref = searches.doc(existingId ?? stableId("saved-search", uid, requestId!));
   const fingerprint = searchFingerprint(uid, criteria);
   const quota = db.collection("savedSearchQuotas").doc(uid);
-  const searchId = await db.runTransaction(async (tx) => {
+  const searchId = await runGuardedTransaction(db, async (tx) => {
     const [previous, matched, currentQuota] = await Promise.all([tx.get(ref), tx.get(fingerprint), tx.get(quota)]);
     if (previous.exists && previous.data()?.userId !== uid || existingId && !previous.exists) throw new HttpsError("permission-denied", "Search is not yours.");
     if (matched.exists && matched.data()?.userId !== uid) throw new HttpsError("permission-denied", "Search is not yours.");
@@ -233,7 +236,7 @@ export const deleteSavedSearch = onCall(async (request) => {
   const searchId = validId(request.data?.searchId, "Search");
   const ref = searches.doc(searchId);
   const quota = db.collection("savedSearchQuotas").doc(uid);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const [snapshot, currentQuota] = await Promise.all([tx.get(ref), tx.get(quota)]);
     if (!snapshot.exists) return;
     if (snapshot.data()?.userId !== uid) throw new HttpsError("permission-denied", "Search is not yours.");
@@ -253,20 +256,27 @@ export const getSavedSearches = onCall(async (request) => {
 
 type Job = { kind: "watchers" | "followers" | "searches" | "losers"; listingId: string; eventKey: string; eventType: string; categoryKey?: string; cursor?: string | null; createdAt: Timestamp; eventAt: Timestamp; listingSnapshot?: Record<string, unknown> };
 function queueJob(eventKey: string, job: Omit<Job, "eventKey" | "createdAt" | "cursor">) {
-  return db.collection("engagementJobs").doc(stableId(eventKey, job.kind, job.categoryKey ?? "")).create({ ...job, eventKey, createdAt: Timestamp.now(), cursor: null }).catch((error: { code?: number }) => { if (error.code !== 6) throw error; });
+  const ref = db.collection("engagementJobs").doc(stableId(eventKey, job.kind, job.categoryKey ?? ""));
+  return runGuardedTransaction(db, async (tx) => {
+    const listing = await tx.get(db.doc(`listings/${job.listingId}`));
+    const existing = await tx.get(ref);
+    if (!listing.exists || !(await accountIsActive(listing.data()!.sellerId, tx)) || existing.exists) return;
+    tx.create(ref, { ...job, eventKey, createdAt: Timestamp.now(), cursor: null });
+  });
 }
 
 export const onSavedWatchChanged = onDocumentWritten("users/{uid}/saved/{listingId}", async (event) => {
   const { uid, listingId } = event.params;
   const ref = db.collection("listingWatchers").doc(listingId).collection("users").doc(uid);
   const current = await db.collection("users").doc(uid).collection("saved").doc(listingId).get();
-  if (current.exists) await ref.set({ userId: uid, listingId, savedAt: current.data()?.savedAt ?? Timestamp.now() });
+  if (current.exists) await runGuardedTransaction(db, async (tx) => { if (await accountIsActive(uid, tx)) { const saved = await tx.get(db.doc(`users/${uid}/saved/${listingId}`)); if (saved.exists) tx.set(ref, { userId: uid, listingId, savedAt: saved.data()?.savedAt ?? Timestamp.now() }); } });
   else await ref.delete();
 });
 
 export const onListingEngagementChanged = onDocumentWritten("listings/{listingId}", async (event) => {
   const before = event.data?.before.data();
   const after = event.data?.after.data();
+  if (after && !(await accountIsActive(after.sellerId))) return;
   if (!after) return;
   const listingId = event.params.listingId;
   const eventKey = event.id;
@@ -283,7 +293,7 @@ export const onListingEngagementChanged = onDocumentWritten("listings/{listingId
   const newSen = priceSen(after.price);
   if (before?.status === "active" && after.status === "active" && after.listingType === "buy_now" && oldSen !== null && newSen !== null && newSen < oldSen) {
     const ref = db.collection("listingPriceHistory").doc(listingId).collection("changes").doc(stableId(eventKey));
-    await ref.create({ listingId, oldPriceSen: oldSen, newPriceSen: newSen, currency: "MYR", actorId: after.sellerId, changedAt: eventAt, eventKey }).catch((error: { code?: number }) => { if (error.code !== 6) throw error; });
+    await runGuardedTransaction(db, async (tx) => { const existing = await tx.get(ref); if (!(await accountIsActive(after.sellerId, tx)) || existing.exists) return; tx.create(ref, { listingId, oldPriceSen: oldSen, newPriceSen: newSen, currency: "MYR", actorId: after.sellerId, changedAt: eventAt, eventKey }); });
     await queueJob(eventKey, { kind: "watchers", listingId, eventType: "saved_price_drop", eventAt });
   }
   if (before?.status === "active" && (["removed", "sold"].includes(after.status) || after.status === "ended" && (after.listingType === "buy_now" || after.auctionStatus === "cancelled"))) await queueJob(eventKey, { kind: "watchers", listingId, eventType: "saved_unavailable", eventAt });
@@ -333,8 +343,8 @@ export const onTransactionEngagementUpdated = onDocumentUpdated("transactions/{t
 async function processJob(ref: FirebaseFirestore.DocumentReference, job: Job, leaseToken: string) {
   const listing = await db.collection("listings").doc(job.listingId).get();
   const data = listing.data();
-  if (!data) { await db.runTransaction(async (tx) => { const current = await tx.get(ref); if (current.data()?.leaseToken === leaseToken) tx.delete(ref); }); return; }
-  if (["followers", "searches"].includes(job.kind) && data.status !== "active") { await db.runTransaction(async (tx) => { const current = await tx.get(ref); if (current.data()?.leaseToken === leaseToken) tx.delete(ref); }); return; }
+  if (!data || !(await accountIsActive(data.sellerId))) { await runGuardedTransaction(db, async (tx) => { const current = await tx.get(ref); if (current.data()?.leaseToken === leaseToken) tx.delete(ref); }); return; }
+  if (["followers", "searches"].includes(job.kind) && data.status !== "active") { await runGuardedTransaction(db, async (tx) => { const current = await tx.get(ref); if (current.data()?.leaseToken === leaseToken) tx.delete(ref); }); return; }
   let base: FirebaseFirestore.Query;
   if (job.kind === "followers") base = follows(String(data.sellerId)).orderBy(FieldPath.documentId());
   else if (job.kind === "watchers") base = db.collection("listingWatchers").doc(job.listingId).collection("users").orderBy(FieldPath.documentId());
@@ -344,7 +354,7 @@ async function processJob(ref: FirebaseFirestore.DocumentReference, job: Job, le
   for (const item of page.docs) {
     const record = item.data();
     const recipient = job.kind === "followers" || job.kind === "watchers" ? item.id : job.kind === "losers" ? record.bidderId : record.userId;
-    if (!recipient || recipient === data.sellerId) continue;
+    if (!recipient || recipient === data.sellerId || !(await accountIsActive(recipient))) continue;
     if ((job.kind === "followers" || job.kind === "watchers" || job.kind === "searches") && record.createdAt instanceof Timestamp && record.createdAt.toMillis() > job.eventAt.toMillis()) continue;
     if (job.kind === "watchers" && record.savedAt instanceof Timestamp && record.savedAt.toMillis() > job.eventAt.toMillis()) continue;
     if (job.kind === "losers" && (recipient === data.winnerId || record.bidderId === data.winnerId)) continue;
@@ -361,7 +371,7 @@ async function processJob(ref: FirebaseFirestore.DocumentReference, job: Job, le
     const body = job.eventType === "auction_lost" ? "Another bidder won this auction." : String(data.title ?? "Marketplace listing");
     await emit(recipient, `${job.eventType}:${job.listingId}:${job.eventKey}`, { type: job.eventType as NotificationType, title, body, href, listingId: job.listingId, sellerId: data.sellerId });
   }
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const current = await tx.get(ref);
     if (!current.exists || current.data()?.leaseToken !== leaseToken) return;
     if (page.size < PAGE) tx.delete(ref);
@@ -373,7 +383,7 @@ export const processEngagementJobs = onSchedule({ schedule: "every 1 minutes", t
   const jobs = await db.collection("engagementJobs").orderBy("createdAt").limit(5).get();
   for (const item of jobs.docs) {
     const leaseToken = randomUUID();
-    const job = await db.runTransaction(async (tx) => {
+    const job = await runGuardedTransaction(db, async (tx) => {
       const current = await tx.get(item.ref);
       if (!current.exists || current.data()?.leaseUntil instanceof Timestamp && current.data()!.leaseUntil.toMillis() > Date.now()) return null;
       tx.update(item.ref, { leaseToken, leaseUntil: Timestamp.fromMillis(Date.now() + 150_000) });

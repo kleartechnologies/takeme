@@ -1,5 +1,7 @@
+import { marketplaceCall as onCall } from "./account-lifecycle";
+import { lifecycleRef } from "./account-lifecycle";
 import { getFirestore } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { publicSellerIds, publicSellerSummary } from "./public-seller-domain";
 
 const db = getFirestore();
@@ -14,6 +16,7 @@ export const getPublicSellerSummaries = onCall(async (request) => {
   const profileRefs = ids.map((userId) => db.collection("users").doc(userId));
   const trustRefs = ids.map((userId) => db.collection("trustSummaries").doc(userId));
   const [profiles, summaries] = await Promise.all([db.getAll(...profileRefs), db.getAll(...trustRefs)]);
-  const sellers = ids.map((userId, index) => publicSellerSummary(userId, profiles[index]?.data(), summaries[index]?.data())).filter((value) => value !== null);
+  const lifecycle = await Promise.all(ids.map((uid) => lifecycleRef(uid).get()));
+  const sellers = ids.map((userId, index) => lifecycle[index]?.exists ? null : publicSellerSummary(userId, profiles[index]?.data(), summaries[index]?.data())).filter((value) => value !== null);
   return { sellers };
 });

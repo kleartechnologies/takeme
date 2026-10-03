@@ -1,5 +1,6 @@
+import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { recordMarketplaceSignal, publicListing } from "./intelligence";
@@ -65,7 +66,7 @@ export const createPromotionRequest = onCall(async (request) => {
   const lockRef = db.collection("promotionLocks").doc(listingId);
   const promotionRef = db.collection("promotions").doc();
   const now = Timestamp.now();
-  await db.runTransaction(async (transaction) => {
+  await runGuardedTransaction(db, async (transaction) => {
     const [listingSnapshot, lockSnapshot] = await Promise.all([transaction.get(listingRef), transaction.get(lockRef)]);
     if (!listingSnapshot.exists) throw new HttpsError("not-found", "Listing not found.");
     const listing = listingFromDoc(listingId, listingSnapshot.data()!);
@@ -93,7 +94,7 @@ export const cancelPromotionRequest = onCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const promotionId = requiredId(request.data?.promotionId, "Promotion");
   const ref = db.collection("promotions").doc(promotionId);
-  await db.runTransaction(async (transaction) => {
+  await runGuardedTransaction(db, async (transaction) => {
     const promotion = await transaction.get(ref);
     if (!promotion.exists) throw new HttpsError("not-found", "Promotion request not found.");
     const data = promotion.data()!;
@@ -170,12 +171,13 @@ export const expirePromotions = onSchedule({ schedule: "every 60 minutes", timeZ
   const now = Timestamp.now();
   const page = await db.collection("promotions").where("status", "==", "active").where("endAt", "<=", now).orderBy("endAt", "asc").limit(100).get();
   for (const item of page.docs) {
-    await db.runTransaction(async (transaction) => {
+    await runGuardedTransaction(db, async (transaction) => {
       const latest = await transaction.get(item.ref);
       if (!latest.exists || latest.data()?.status !== "active" || !(latest.data()?.endAt instanceof Timestamp) || latest.data()!.endAt.toMillis() > now.toMillis()) return;
       const data = latest.data()!;
       const lockRef = db.collection("promotionLocks").doc(String(data.listingId));
       const lock = await transaction.get(lockRef);
+      if (!(await accountIsActive(data.sellerId, transaction))) return;
       transaction.update(item.ref, { status: "expired", updatedAt: now });
       if (lock.data()?.promotionId === item.id) transaction.set(lockRef, { promotionId: item.id, sellerId: data.sellerId, status: "expired", updatedAt: now });
       transaction.create(db.collection("marketplaceEvents").doc(`promotion-expired-${item.id}`), { userId: data.sellerId, eventType: data.type === "boost" ? "BOOST_EXPIRED" : "FEATURED_EXPIRED", source: "promotion", promotionId: item.id, listingId: data.listingId, sellerId: data.sellerId, createdAt: now, expiresAt: Timestamp.fromMillis(now.toMillis() + 90 * 86_400_000) });
@@ -191,7 +193,7 @@ export const onPromotedListingUpdated = onDocumentUpdated("listings/{listingId}"
   const listingId = event.params.listingId;
   if (before.status !== "active" || (after.status === "active" && !["ended", "cancelled"].includes(String(after.auctionStatus)))) return;
   const lockRef = db.collection("promotionLocks").doc(listingId);
-  await db.runTransaction(async (transaction) => {
+  await runGuardedTransaction(db, async (transaction) => {
     const lock = await transaction.get(lockRef);
     const promotionId = lock.data()?.promotionId;
     if (typeof promotionId !== "string") return;
@@ -199,6 +201,7 @@ export const onPromotedListingUpdated = onDocumentUpdated("listings/{listingId}"
     const promotion = await transaction.get(promotionRef);
     if (!promotion.exists || !["pending_payment", "scheduled", "active"].includes(String(promotion.data()?.status))) return;
     const data = promotion.data()!;
+    if (!(await accountIsActive(data.sellerId, transaction))) return;
     const timestamp = Timestamp.now();
     transaction.update(promotionRef, { status: "cancelled", refundReviewRequired: data.paymentStatus === "paid", updatedAt: timestamp });
     transaction.set(lockRef, { promotionId, sellerId: data.sellerId, status: "cancelled", updatedAt: timestamp });

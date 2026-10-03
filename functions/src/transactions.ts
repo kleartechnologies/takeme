@@ -1,6 +1,8 @@
+import { marketplaceCall as onCall, resolutionCall, runGuardedTransaction, accountIsActive, visibleParticipantId } from "./account-lifecycle";
+import { monthsAfter } from "./account-deletion-retention";
 import { createHash } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { BUYER_TO_SELLER_TAGS, OFFER_WINDOW_DAYS, REVIEW_WINDOW_DAYS, SELLER_TO_BUYER_TAGS, TIER_THRESHOLDS, nextRatingSummary, ringgitToSen, tierFor, validSen, validTags, type PaymentMethod } from "./transaction-domain";
@@ -29,16 +31,16 @@ const offerLockRef = (listingId: string, buyerId: string) => db.collection("offe
 const summaryRef = (userId: string) => db.collection("trustSummaries").doc(userId);
 const publicReviewId = (transactionId: string, reviewerId: string) => createHash("sha256").update(`${transactionId}|${reviewerId}`).digest("hex");
 
-export const getReputationPolicy = onCall(async () => ({ thresholds: TIER_THRESHOLDS, reviewWindowDays: REVIEW_WINDOW_DAYS,
+export const getReputationPolicy = resolutionCall(async () => ({ thresholds: TIER_THRESHOLDS, reviewWindowDays: REVIEW_WINDOW_DAYS,
   buyerToSellerTags: BUYER_TO_SELLER_TAGS, sellerToBuyerTags: SELLER_TO_BUYER_TAGS }));
 
 function publicDeal(documentId: string, data: DocumentData) {
-  return { id: documentId, listingId: data.listingId, listingTitle: data.listingTitle, buyerId: data.buyerId, sellerId: data.sellerId,
+  return { id: documentId, listingId: data.listingId, listingTitle: data.listingTitle, buyerId: visibleParticipantId(data.buyerId), sellerId: visibleParticipantId(data.sellerId),
     type: data.type, sourceId: data.sourceId, status: data.status, amountSen: data.amountSen, currency: data.currency, paymentMethod: data.paymentMethod,
     settlementMode: data.settlementMode === "protected" ? "protected" : "standard", paymentProvider: data.paymentProvider ?? "none",
     buyerConfirmedAt: iso(data.buyerConfirmedAt), sellerConfirmedAt: iso(data.sellerConfirmedAt), createdAt: iso(data.createdAt), updatedAt: iso(data.updatedAt),
     completedAt: iso(data.completedAt), cancelledAt: iso(data.cancelledAt), reviewWindowEndAt: iso(data.reviewWindowEndAt), reviewsVisibleAt: iso(data.reviewsVisibleAt),
-    cancellationRequestedBy: data.cancellationRequestedBy ?? null, cancellationReason: data.cancellationReason ?? null, disputeReason: data.disputeReason ?? null };
+    cancellationRequestedBy: data.cancellationRequestedBy ? visibleParticipantId(data.cancellationRequestedBy) : null, cancellationReason: data.cancellationReason ?? null, disputeReason: data.disputeReason ?? null };
 }
 function publicOffer(documentId: string, data: DocumentData) {
   return { id: documentId, listingId: data.listingId, buyerId: data.buyerId, sellerId: data.sellerId, type: data.type,
@@ -60,10 +62,11 @@ export const submitOffer = onCall(async (request) => {
   const previousRef = offerLockRef(listingId, buyerId);
   const newRef = db.collection("offers").doc();
   const timestamp = Timestamp.now();
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const [listing, previousLock, dealLock] = await Promise.all([tx.get(listingRef), tx.get(previousRef), tx.get(lockRef(listingId))]);
     const data = listing.data();
     requireLiveBuyNow(data);
+    if (!(await accountIsActive(data!.sellerId, tx))) throw new HttpsError("failed-precondition", "This seller is unavailable.");
     if (data!.sellerId === buyerId) throw new HttpsError("permission-denied", "You cannot make an offer on your own listing.");
     if (dealLock.exists && dealLock.data()?.status === "in_progress") throw new HttpsError("failed-precondition", "This listing already has an agreed transaction.");
     if (previousLock.exists && ["submitted", "countered"].includes(String(previousLock.data()?.status)) && previousLock.data()?.expiresAt instanceof Timestamp && previousLock.data()!.expiresAt.toMillis() > timestamp.toMillis()) throw new HttpsError("already-exists", "You already have an open request for this listing.");
@@ -86,7 +89,7 @@ export const respondToOffer = onCall(async (request) => {
   const action = request.data?.action;
   if (!["accept", "reject", "counter", "withdraw"].includes(action)) throw new HttpsError("invalid-argument", "Invalid offer action.");
   const ref = offerRef(offerId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const offer = await tx.get(ref);
     if (!offer.exists) throw new HttpsError("not-found", "Offer not found.");
     const data = offer.data()!;
@@ -96,6 +99,7 @@ export const respondToOffer = onCall(async (request) => {
     const sellerAction = (action === "accept" && data.status === "submitted") || action === "reject" || action === "counter";
     if (sellerAction ? data.sellerId !== userId : data.buyerId !== userId) throw new HttpsError("permission-denied", "Only the correct party can respond to this offer.");
     if (action === "counter" && (data.type !== "offer" || data.status !== "submitted" || !validSen(request.data?.amountSen))) throw new HttpsError("invalid-argument", "Counter with a valid amount for an open offer.");
+    if (!(await accountIsActive(data.buyerId, tx)) || !(await accountIsActive(data.sellerId, tx))) throw new HttpsError("failed-precondition", "A participant is unavailable.");
     const listingRef = db.collection("listings").doc(data.listingId);
     const dealLockRef = lockRef(data.listingId);
     const txRef = dealRef(`offer-${offerId}`);
@@ -137,7 +141,7 @@ export const expireOffers = onSchedule({ schedule: "every 60 minutes", timeZone:
   const page = await db.collection("offers").where("status", "in", ["submitted", "countered"])
     .where("expiresAt", "<=", now).orderBy("expiresAt", "asc").limit(100).get();
   for (const item of page.docs) {
-    await db.runTransaction(async (tx) => {
+    await runGuardedTransaction(db, async (tx) => {
       const offer = await tx.get(item.ref);
       const data = offer.data();
       if (!data || !["submitted", "countered"].includes(data.status) || !(data.expiresAt instanceof Timestamp) || data.expiresAt.toMillis() > now.toMillis()) return;
@@ -158,7 +162,7 @@ export const onAuctionWonCreateTransaction = onDocumentUpdated("listings/{listin
   const listingId = event.params.listingId;
   const ref = dealRef(`auction-${listingId}`);
   const lock = lockRef(listingId);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const [existing, currentLock, listing] = await Promise.all([tx.get(ref), tx.get(lock), tx.get(db.collection("listings").doc(listingId))]);
     if (existing.exists) return;
     const data = listing.data();
@@ -175,11 +179,11 @@ export const onAuctionWonCreateTransaction = onDocumentUpdated("listings/{listin
 });
 
 /** Two independent confirmations atomically grant completion credit exactly once. */
-export const confirmTransactionCompletion = onCall(async (request) => {
+export const confirmTransactionCompletion = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const ref = dealRef(transactionId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const deal = await tx.get(ref);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
@@ -202,26 +206,28 @@ export const confirmTransactionCompletion = onCall(async (request) => {
     const eventRef = db.collection("marketplaceEvents").doc(`transaction-completed-${transactionId}`);
     const [buyerSummary, sellerSummary, listing, event] = await Promise.all([tx.get(buyerRef), tx.get(sellerRef), tx.get(listingRef), tx.get(eventRef)]);
     if (!validSen(data.amountSen) || data.buyerId === data.sellerId || event.exists) throw new HttpsError("failed-precondition", "Transaction completion data is invalid.");
+    const buyerActive = await accountIsActive(data.buyerId, tx);
+    const sellerActive = await accountIsActive(data.sellerId, tx);
     const buyerPrevious = Number(buyerSummary.data()?.buyer?.completedCount ?? 0);
     const sellerPrevious = Number(sellerSummary.data()?.seller?.completedCount ?? 0);
     tx.update(ref, { [ownField]: now, status: "completed", completedAt: now, reviewWindowEndAt: Timestamp.fromMillis(now.toMillis() + REVIEW_WINDOW_DAYS * 86_400_000), updatedAt: now });
-    tx.set(buyerRef, { userId: data.buyerId, buyer: { ...(buyerSummary.data()?.buyer ?? {}), completedCount: buyerPrevious + 1, tier: tierFor(buyerPrevious + 1) }, updatedAt: now }, { merge: true });
-    tx.set(sellerRef, { userId: data.sellerId, seller: { ...(sellerSummary.data()?.seller ?? {}), completedCount: sellerPrevious + 1, tier: tierFor(sellerPrevious + 1) }, updatedAt: now }, { merge: true });
+    if (buyerActive) tx.set(buyerRef, { userId: data.buyerId, buyer: { ...(buyerSummary.data()?.buyer ?? {}), completedCount: buyerPrevious + 1, tier: tierFor(buyerPrevious + 1) }, updatedAt: now }, { merge: true });
+    if (sellerActive) tx.set(sellerRef, { userId: data.sellerId, seller: { ...(sellerSummary.data()?.seller ?? {}), completedCount: sellerPrevious + 1, tier: tierFor(sellerPrevious + 1) }, updatedAt: now }, { merge: true });
     if (data.type !== "auction" && listing.exists && listing.data()?.status === "ended") tx.update(listingRef, { status: "sold", updatedAt: now });
-    tx.create(eventRef, { userId: data.buyerId, eventType: "TRANSACTION_COMPLETED", source: "transaction", transactionId,
+    if (buyerActive) tx.create(eventRef, { userId: data.buyerId, eventType: "TRANSACTION_COMPLETED", source: "transaction", transactionId,
       listingId: data.listingId, categoryId: data.categoryId, sellerId: data.sellerId, amountSen: data.amountSen, currency: "MYR", transactionType: data.type,
       createdAt: now, expiresAt: Timestamp.fromMillis(now.toMillis() + 90 * 86_400_000) });
     return { status: "completed", alreadyConfirmed: false };
   });
 });
 
-export const requestTransactionCancellation = onCall(async (request) => {
+export const requestTransactionCancellation = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const reason = typeof request.data?.reason === "string" ? request.data.reason.trim().slice(0, 500) : "";
   if (!reason) throw new HttpsError("invalid-argument", "Give a brief cancellation reason.");
   const ref = dealRef(transactionId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const deal = await tx.get(ref);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
@@ -242,11 +248,11 @@ export const requestTransactionCancellation = onCall(async (request) => {
   });
 });
 
-export const declineTransactionCancellation = onCall(async (request) => {
+export const declineTransactionCancellation = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const ref = dealRef(transactionId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const deal = await tx.get(ref);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
@@ -256,13 +262,13 @@ export const declineTransactionCancellation = onCall(async (request) => {
   });
 });
 
-export const disputeTransaction = onCall(async (request) => {
+export const disputeTransaction = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const reason = typeof request.data?.reason === "string" ? request.data.reason.trim().slice(0, 1000) : "";
   if (!reason) throw new HttpsError("invalid-argument", "Give a brief dispute reason.");
   const ref = dealRef(transactionId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const deal = await tx.get(ref);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
@@ -301,7 +307,7 @@ export const getListingDealState = onCall(async (request) => {
   };
 });
 
-export const getMyTransactions = onCall(async (request) => {
+export const getMyTransactions = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const [buying, selling] = await Promise.all([
     db.collection("transactions").where("buyerId", "==", userId).orderBy("createdAt", "desc").limit(20).get(),
@@ -311,7 +317,7 @@ export const getMyTransactions = onCall(async (request) => {
   return { transactions: [...unique.values()].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 20) };
 });
 
-export const getTransactionDetail = onCall(async (request) => {
+export const getTransactionDetail = resolutionCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const deal = await dealRef(transactionId).get();
@@ -326,7 +332,7 @@ function applyVisibleReview(tx: Transaction, reviewId: string, data: DocumentDat
   const ref = summaryRef(data.reviewedUserId);
   tx.set(ref, { userId: data.reviewedUserId, [role]: { ...(summary?.[role] ?? {}), ...nextRatingSummary(summary?.[role], data.rating) }, updatedAt: now }, { merge: true });
   tx.create(db.collection("publicReviews").doc(reviewId), { reviewedUserId: data.reviewedUserId, reviewerRole: data.reviewerRole,
-    rating: data.rating, tags: data.tags, comment: data.comment, createdAt: data.createdAt, publishedAt: now });
+    rating: data.rating, tags: data.tags, comment: data.deletedReviewer ? "" : data.comment, createdAt: data.createdAt, publishedAt: now, ...(data.deletedReviewer ? { deletedReviewer: true, retentionExpiresAt: data.retentionExpiresAt ?? monthsAfter(now, 12), retentionPurpose: "Authentic review of surviving member" } : {}) });
 }
 
 /** Immutable private submissions; only the double-blind release writes public reviews/ratings. */
@@ -338,7 +344,7 @@ export const submitTransactionReview = onCall(async (request) => {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5 || comment === null || comment.length > 1000) throw new HttpsError("invalid-argument", "Choose 1–5 stars and at most 1,000 comment characters.");
   const ref = dealRef(transactionId);
   const reviewRef = ref.collection("reviews").doc(userId);
-  return db.runTransaction(async (tx) => {
+  return runGuardedTransaction(db, async (tx) => {
     const [deal, existing] = await Promise.all([tx.get(ref), tx.get(reviewRef)]);
     if (!deal.exists || !participant(deal.data()!, userId)) throw new HttpsError("permission-denied", "This transaction is not yours.");
     const data = deal.data()!;
@@ -356,6 +362,8 @@ export const submitTransactionReview = onCall(async (request) => {
       reviewerRole, rating, tags: request.data?.tags ?? [], comment, createdAt: now };
     const ownSummary = release ? await tx.get(summaryRef(oppositeUid)) : null;
     const otherSummary = release ? await tx.get(summaryRef(userId)) : null;
+    const ownSubjectActive = release && await accountIsActive(oppositeUid, tx);
+    const otherSubjectActive = release && await accountIsActive(userId, tx);
     tx.create(reviewRef, ownData);
     tx.create(db.collection("marketplaceEvents").doc(`review-submitted-${transactionId}-${userId}`), {
       userId, eventType: "REVIEW_SUBMITTED", source: "transaction", transactionId, listingId: data.listingId,
@@ -363,8 +371,8 @@ export const submitTransactionReview = onCall(async (request) => {
     });
     tx.update(ref, { reviewCount: first ? 1 : 2, ...(release ? { reviewsVisibleAt: now } : {}), updatedAt: now });
     if (release) {
-      applyVisibleReview(tx, publicReviewId(transactionId, userId), ownData, ownSummary?.data(), now);
-      applyVisibleReview(tx, publicReviewId(transactionId, oppositeUid), otherReview.data()!, otherSummary?.data(), now);
+      if (ownSubjectActive) applyVisibleReview(tx, publicReviewId(transactionId, userId), ownData, ownSummary?.data(), now);
+      if (otherSubjectActive) applyVisibleReview(tx, otherReview.data()!.publishedReviewId ?? publicReviewId(transactionId, oppositeUid), otherReview.data()!, otherSummary?.data(), now);
     }
     return { submitted: true, visible: release };
   });
@@ -375,7 +383,7 @@ export const releaseExpiredReviews = onSchedule({ schedule: "every 60 minutes", 
   const page = await db.collection("transactions").where("status", "==", "completed").where("reviewsVisibleAt", "==", null)
     .where("reviewWindowEndAt", "<=", now).orderBy("reviewWindowEndAt", "asc").limit(100).get();
   for (const item of page.docs) {
-    await db.runTransaction(async (tx) => {
+    await runGuardedTransaction(db, async (tx) => {
       const deal = await tx.get(item.ref);
       const data = deal.data();
       if (!data || data.status !== "completed" || data.reviewsVisibleAt || !(data.reviewWindowEndAt instanceof Timestamp) || data.reviewWindowEndAt.toMillis() > now.toMillis()) return;
@@ -383,9 +391,11 @@ export const releaseExpiredReviews = onSchedule({ schedule: "every 60 minutes", 
       const sellerReview = await tx.get(item.ref.collection("reviews").doc(data.sellerId));
       const buyerSummary = buyerReview.exists ? await tx.get(summaryRef(data.sellerId)) : null;
       const sellerSummary = sellerReview.exists ? await tx.get(summaryRef(data.buyerId)) : null;
+      const buyerSubjectActive = await accountIsActive(data.sellerId, tx);
+      const sellerSubjectActive = await accountIsActive(data.buyerId, tx);
       tx.update(item.ref, { reviewsVisibleAt: now, updatedAt: now });
-      if (buyerReview.exists) applyVisibleReview(tx, publicReviewId(item.id, data.buyerId), buyerReview.data()!, buyerSummary?.data(), now);
-      if (sellerReview.exists) applyVisibleReview(tx, publicReviewId(item.id, data.sellerId), sellerReview.data()!, sellerSummary?.data(), now);
+      if (buyerReview.exists && buyerSubjectActive) applyVisibleReview(tx, buyerReview.data()!.publishedReviewId ?? publicReviewId(item.id, data.buyerId), buyerReview.data()!, buyerSummary?.data(), now);
+      if (sellerReview.exists && sellerSubjectActive) applyVisibleReview(tx, sellerReview.data()!.publishedReviewId ?? publicReviewId(item.id, data.sellerId), sellerReview.data()!, sellerSummary?.data(), now);
     });
   }
 });
@@ -410,7 +420,7 @@ export const reportPublicReview = onCall(async (request) => {
   if (!review.exists) throw new HttpsError("not-found", "Review not found.");
   if (review.data()?.reviewerRole !== "buyer" && review.data()?.reviewedUserId !== reporterId) throw new HttpsError("permission-denied", "This review is private.");
   const ref = db.collection("reports").doc(`review-${reviewId}-${reporterId}`);
-  await db.runTransaction(async (tx) => {
+  await runGuardedTransaction(db, async (tx) => {
     const existing = await tx.get(ref);
     if (existing.exists) return;
     const now = Timestamp.now();

@@ -7,6 +7,8 @@ export async function createProfileIfMissing(database: Firestore, user: ProfileI
   const fields = newPublicProfileFields(user, chosenName);
   const profileRef = doc(database, "users", user.uid);
   return runTransaction(database, async (transaction) => {
+    const lifecycle = await transaction.get(doc(database, "accountLifecycles", user.uid));
+    if (lifecycle.exists()) return false;
     if ((await transaction.get(profileRef)).exists()) return false;
     transaction.set(profileRef, { ...fields, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return true;

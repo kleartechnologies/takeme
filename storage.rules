@@ -1,7 +1,7 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function signedIn() { return request.auth != null; }
+    function signedIn() { return request.auth != null && !firestore.exists(/databases/(default)/documents/accountLifecycles/$(request.auth.uid)); }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function validImage() {
       return request.resource.size <= 8 * 1024 * 1024
