@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { SavedView } from "@/components/saved/saved-view";
+import { Suspense } from "react";
+import { SavedView, SavedSkeleton } from "@/components/saved/saved-view";
+import styles from "@/components/saved/saved.module.css";
 
-export const metadata: Metadata = { title: "Saved listings", description: "Your saved marketplace discoveries.", robots: { index: false, follow: false } };
-export default function SavedPage() { return <main className="page-shell min-h-[70vh] py-6 pb-28 lg:py-10"><SavedView /></main>; }
+export const metadata: Metadata = { title: "Saved", description: "Your saved items, auctions, followed sellers and searches.", robots: { index: false, follow: false } };
+export default function SavedPage() { return <main className={styles.page}><Suspense fallback={<SavedSkeleton />}><SavedView /></Suspense></main>; }

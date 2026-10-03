@@ -22,6 +22,7 @@ import { saveSearch } from "@/lib/services/engagement";
 type Filters = { q: string; category: string; condition: string; type: string; auction: string; price: string; location: string; sort: ListingSort };
 const defaults: Filters = { q: "", category: "", condition: "", type: "", auction: "", price: "", location: "", sort: "newest" };
 const emptyPage: ListingPage = { listings: [], cursor: null, hasMore: false };
+const priceOptions = [{ value: "", label: "Any price" }, { value: "300", label: "Up to RM300" }, { value: "700", label: "Up to RM700" }, { value: "1500", label: "Up to RM1,500" }, { value: "3000", label: "Up to RM3,000" }];
 
 function fromParams(params: URLSearchParams): Filters {
   const sort = params.get("sort");
@@ -115,7 +116,7 @@ export function ExploreBrowser() {
     <FilterSelect label="Condition" value={filters.condition} onChange={(condition) => update({ condition })} options={["", "New", "Like new", "Good", "Fair"].map((item) => ({ value: item, label: item || "Any condition" }))} />
     <FilterSelect label="Listing type" value={filters.type} onChange={(type) => update({ type, auction: type === "auction" ? filters.auction : "" })} options={[{ value: "", label: "All listing types" }, { value: "buy_now", label: "Fixed price" }, { value: "auction", label: "Auction" }]} />
     {(filters.type === "auction" || filters.auction) && <FilterSelect label="Auction status" value={filters.auction} onChange={(auction) => update({ auction, type: auction ? "auction" : filters.type })} options={[{ value: "", label: "Live and scheduled" }, { value: "active", label: "Live now" }, { value: "scheduled", label: "Scheduled" }]} />}
-    <FilterSelect label="Maximum price" value={filters.price} onChange={(price) => update({ price })} options={[{ value: "", label: "Any price" }, { value: "300", label: "Up to RM300" }, { value: "700", label: "Up to RM700" }, { value: "1500", label: "Up to RM1,500" }, { value: "3000", label: "Up to RM3,000" }]} />
+    <FilterSelect label="Maximum price" value={filters.price} onChange={(price) => update({ price })} options={filters.price && Number.isFinite(Number(filters.price)) && Number(filters.price) >= 0 && !priceOptions.some(option => option.value === filters.price) ? [...priceOptions, { value: filters.price, label: `Up to RM${Number(filters.price).toLocaleString("en-MY")}` }] : priceOptions} />
     <label className="form-field"><span>Location contains</span><input key={filters.location} defaultValue={filters.location} onBlur={(event) => { if (event.target.value !== filters.location) update({ location: event.target.value.trim() }); }} placeholder="e.g. Kuala Lumpur" /></label>
   </>;
 

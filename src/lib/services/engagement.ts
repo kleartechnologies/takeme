@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
+import { announceFollowChange } from "@/lib/marketplace-state-events";
 
 export type NotificationType = "saved_price_drop" | "saved_unavailable" | "new_matching_listing" | "followed_seller_listing" | "auction_ending" | "outbid" | "auction_lost" | "message_received" | "auction_won" | "offer_received" | "offer_accepted" | "counteroffer" | "transaction_update" | "transaction_completed" | "review_available";
 export type Frequency = "instant" | "daily" | "off";
@@ -21,7 +22,12 @@ export const markAllNotificationsRead = () => call<{ marked: number; hasMore: bo
 export const getNotificationPreferences = () => call<{ preferences: Record<string, Frequency> }>("getNotificationPreferences");
 export const setNotificationPreference = (type: string, frequency: Frequency) => call("setNotificationPreference", { type, frequency });
 export const getFollowState = (sellerId: string) => call<{ following: boolean; followerCount: number }>("getFollowState", { sellerId }, true);
-export const setSellerFollow = (sellerId: string, following: boolean) => call<{ following: boolean; followerCount: number }>("setSellerFollow", { sellerId, following });
+export async function setSellerFollow(sellerId: string, following: boolean) {
+  const uid = auth?.currentUser?.uid;
+  const result = await call<{ following: boolean; followerCount: number }>("setSellerFollow", { sellerId, following });
+  if (uid) announceFollowChange({ uid, sellerId, ...result });
+  return result;
+}
 export const getFollowing = (cursor?: string | null) => call<{ items: FollowingSeller[]; cursor: string | null; hasMore: boolean }>("getFollowing", cursor ? { cursor } : {});
 export const saveSearch = (criteria: SearchCriteria, frequency?: Frequency, searchId?: string, active?: boolean) => call<{ searchId: string }>("saveSearch", { criteria, ...(frequency ? { frequency } : {}), ...(searchId ? { searchId } : { requestId: crypto.randomUUID() }), ...(active === undefined ? {} : { active }) });
 export const deleteSavedSearch = (searchId: string) => call("deleteSavedSearch", { searchId });

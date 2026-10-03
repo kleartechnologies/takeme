@@ -60,7 +60,9 @@ test("private account routes retain owner access and existing management flows",
   const view = source("src/components/profile/profile-view.tsx");
   assert.match(view, /getListingsBySeller\(user.uid, true\)/);
   assert.match(view, /getTrustSummary\(user.uid\)/);
-  for (const route of ["/profile/listings", "/profile/settings", "/profile/transactions", "/saved", "/saved-searches", "/following", "/messages", "/updates"]) assert.ok(view.includes(route), route);
+  for (const route of ["/profile/listings", "/profile/settings", "/profile/transactions", "/saved", "/saved?tab=searches", "/saved?tab=sellers", "/messages", "/updates"]) assert.ok(view.includes(route), route);
+  assert.match(source("src/app/following/page.tsx"), /redirect\("\/saved\?tab=sellers"\)/);
+  assert.match(source("src/app/saved-searches/page.tsx"), /redirect\("\/saved\?tab=searches"\)/);
   const settings = source("src/components/profile/account-settings.tsx");
   assert.match(settings, /profile.uid === user.uid/);
   assert.match(settings, /<EditProfile/);

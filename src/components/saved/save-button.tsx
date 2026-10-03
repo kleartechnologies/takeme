@@ -3,9 +3,10 @@
 import { Heart, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { isListingSaved, removeSavedListing, saveListing } from "@/lib/services/saved";
+import type { SavedChange } from "@/lib/marketplace-state-events";
 
 export function SaveButton({ listingId, initialSaved, onChange, compact = false }: { listingId: string; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
   const { user, loading } = useAuth();
@@ -14,12 +15,18 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   const [savedUid, setSavedUid] = useState(user?.uid);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const reads = useRef(0);
 
   useEffect(() => {
-    if (!user || initialSaved !== undefined) return;
+    if (!user) return;
     let active = true;
-    isListingSaved(listingId).then((value) => { if (active) { setSaved(value); setSavedUid(user.uid); } }).catch(() => { if (active) setError("Could not check saved status."); });
-    return () => { active = false; };
+    const refresh = () => { const request = ++reads.current; return isListingSaved(listingId).then((value) => { if (active && request === reads.current) { setSaved(value); setSavedUid(user.uid); setError(""); } }).catch(() => { if (active && request === reads.current) setError("Could not check saved status."); }); };
+    if (initialSaved === undefined) void refresh();
+    const changed = (event: Event) => { const change = (event as CustomEvent<SavedChange>).detail; if (change.uid === user.uid && change.listingId === listingId) { reads.current++; setSaved(change.saved); setSavedUid(user.uid); setError(""); } };
+    const visible = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener("takeme:saved-changed", changed);
+    document.addEventListener("visibilitychange", visible);
+    return () => { active = false; window.removeEventListener("takeme:saved-changed", changed); document.removeEventListener("visibilitychange", visible); };
   }, [user, listingId, initialSaved]);
 
   const className = compact
@@ -31,6 +38,7 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   async function toggle() {
     if (!user || pending) return;
     const next = !displaySaved;
+    reads.current++;
     setSaved(next); setSavedUid(user.uid); setPending(true); setError("");
     try {
       if (next) await saveListing(listingId);

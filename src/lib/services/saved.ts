@@ -17,6 +17,7 @@ import {
 import { auth, db } from "@/lib/firebase/client";
 import { getPublicListingDetail } from "@/lib/services/listings";
 import type { SavedListing } from "@/types/marketplace";
+import { announceSavedChange } from "@/lib/marketplace-state-events";
 
 export interface SavedPage {
   items: SavedListing[];
@@ -43,11 +44,12 @@ export async function saveListing(listingId: string) {
   const reference = savedRef(uid, listingId);
   try {
     await setDoc(reference, { listingId, savedAt: serverTimestamp() });
+    announceSavedChange({ uid, listingId, saved: true });
     return true;
   } catch (error) {
     // Existing documents are immutable. A repeated tap is therefore a no-op,
     // while a missing/removed listing or genuine rules error still surfaces.
-    if ((await getDoc(reference)).exists()) return false;
+    if ((await getDoc(reference)).exists()) { announceSavedChange({ uid, listingId, saved: true }); return false; }
     throw error;
   }
 }
@@ -55,6 +57,7 @@ export async function saveListing(listingId: string) {
 export async function removeSavedListing(listingId: string) {
   const { uid } = requireSavedServices();
   await deleteDoc(savedRef(uid, listingId));
+  announceSavedChange({ uid, listingId, saved: false });
 }
 
 export async function getSavedPage(cursor?: QueryDocumentSnapshot<DocumentData> | null, requestedPageSize = 10): Promise<SavedPage> {
@@ -67,7 +70,7 @@ export async function getSavedPage(cursor?: QueryDocumentSnapshot<DocumentData> 
     let listing: SavedListing["listing"] = null;
     try {
       const result = await getPublicListingDetail(saved.id);
-      if (["active", "ended"].includes(result.listing.status)) listing = result.listing;
+      if (["active", "ended", "sold"].includes(result.listing.status)) listing = result.listing;
     } catch (error) {
       if (!(typeof error === "object" && error && "code" in error && (String(error.code).includes("permission-denied") || String(error.code).includes("not-found")))) throw error;
       // The owner may have removed a listing after it was saved. Keep its saved

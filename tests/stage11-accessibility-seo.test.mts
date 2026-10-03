@@ -5,15 +5,15 @@ import test from "node:test";
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("saved-search deletion uses the shared named dialog and explicit guarded confirmation", () => {
-  const saved = source("src/components/engagement/saved-searches-view.tsx");
+  const saved = source("src/components/saved/saved-view.tsx");
   assert.doesNotMatch(saved, /window\.confirm|\bconfirm\(/);
   assert.match(saved, /onClick=\{\(\) => setPendingDelete\(item\)\}/);
   assert.match(saved, /ActionSheet title="Delete saved search\?" description=/);
   assert.match(saved, /onClick=\{\(\) => setPendingDelete\(null\)\}[^>]*>Cancel/);
   assert.match(saved, /onClick=\{\(\) => void remove\(pendingDelete\)\}/);
-  assert.match(saved, /if \(deleting\.current\) return/);
-  assert.match(saved, /current\.filter\(\(entry\) => entry\.id !== item\.id\)/);
-  assert.match(saved, /busy=\{busy === pendingDelete.id\}/);
+  assert.match(saved, /if \(!feed\.begin\(\)\) return/);
+  assert.match(saved, /current\.items\.filter\(entry => entry\.id !== item\.id\)/);
+  assert.match(saved, /busy=\{Boolean\(busy\)\}/);
 });
 
 test("private route trees explicitly discourage indexing, including nested account/admin pages", () => {

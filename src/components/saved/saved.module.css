@@ -1,0 +1,46 @@
+.page { max-width:1280px; margin:0 auto; padding:24px 20px 104px; min-height:calc(100dvh - 56px); color:var(--takeme-charcoal); }
+.heading h1 { font-size:28px; font-weight:750; line-height:1.25; letter-spacing:-.8px; }
+.heading p { margin-top:6px; font-size:13px; line-height:1.6; color:var(--takeme-gray); }
+.tabs { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; border-bottom:1px solid var(--takeme-border); margin-top:20px; }
+.tabs::-webkit-scrollbar { display:none; }
+.tabs a { display:flex; align-items:center; justify-content:center; flex-shrink:0; min-height:48px; padding:0 22px; font-size:13px; font-weight:600; color:var(--takeme-gray); border-bottom:3px solid transparent; }
+.tabs a[aria-current=page] { color:var(--takeme-dark-green); border-color:var(--takeme-green); }
+.tabs a:focus-visible { outline:2px solid var(--takeme-dark-green); outline-offset:-4px; }
+.intro { font-size:12px; line-height:1.6; color:var(--takeme-gray); margin:18px 0 14px; }
+.productGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 12px; }
+.savedCard { min-width:0; display:flex; flex-direction:column; align-self:start; }
+.cardFrame { position:relative; container-type:inline-size; }
+.cardFrame > article { height:auto; }
+.cardFrame :global(.discovery-product-title) { font-size:13px; }
+.availability { position:absolute; top:calc(75cqw - 28px); left:8px; border-radius:99px; padding:3px 8px; max-width:calc(100% - 16px); font-size:10px; font-weight:700; line-height:1.5; background:var(--takeme-dark-green); color:white; box-shadow:0 1px 5px #0002; pointer-events:none; }
+.availability[data-status=Sold],.availability[data-status='Auction ended'],.availability[data-status=Unavailable],.availability[data-status='Auction cancelled'] { background:var(--takeme-charcoal); }
+.savedDate { font-size:10px; line-height:1.6; color:var(--takeme-gray); margin-top:6px; padding-inline:3px; }
+.outcome { font-size:12px; font-weight:650; color:var(--takeme-dark-green); margin-top:8px; padding-inline:3px; }
+.similar { display:inline-flex; align-items:center; align-self:flex-start; gap:5px; min-height:44px; padding-inline:3px; font-size:11px; font-weight:600; color:var(--takeme-dark-green); }
+.unavailable { display:flex; flex-direction:column; border:1px solid var(--takeme-border); border-radius:16px; background:white; overflow:hidden; min-width:0; }
+.unavailableArt { aspect-ratio:4/3; display:grid; place-items:center; background:#f0f2ef; color:#a5ada7; }
+.unavailable > div { padding:12px 12px 0; }.unavailable h2 { font-size:13px; font-weight:650; }.unavailable p { margin-top:5px; font-size:11px; line-height:1.7; color:var(--takeme-gray); }
+.unavailable button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; margin:8px; font-size:12px; font-weight:600; color:var(--takeme-dark-green); }
+.sellerGrid,.searchGrid { display:grid; gap:14px; }
+.sellerCard,.searchCard { min-width:0; border:1px solid var(--takeme-border); border-radius:18px; background:white; padding:17px; }
+.sellerIdentity { display:flex; align-items:center; gap:12px; min-height:48px; }.sellerIdentity > span:last-child { min-width:0; flex:1; }
+.sellerIdentity h2 { font-size:14px; font-weight:700; line-height:1.5; overflow-wrap:anywhere; }
+.avatar { display:grid; place-items:center; flex-shrink:0; width:48px; height:48px; border-radius:50%; background:var(--takeme-light-green); color:var(--takeme-dark-green); overflow:hidden; }.avatar img { width:48px; height:48px; object-fit:cover; }
+.rating,.location { display:flex; align-items:center; gap:4px; font-size:11px; line-height:1.6; color:var(--takeme-gray); margin-top:3px; }.rating svg { color:var(--takeme-dark-green); flex-shrink:0; }.location svg { flex-shrink:0; }
+.sellerActions,.searchActions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:13px; padding-top:10px; border-top:1px solid #edf0ed; }
+.sellerActions a,.searchActions a { display:inline-flex; align-items:center; gap:5px; min-height:44px; color:var(--takeme-dark-green); font-size:12px; font-weight:600; }
+.sellerActions button { display:inline-flex; align-items:center; justify-content:center; gap:5px; border:1px solid #cde8d6; border-radius:99px; background:var(--takeme-light-green); padding:0 15px; min-height:44px; font-size:11px; font-weight:600; color:var(--takeme-dark-green); }
+.searchHeading { display:flex; align-items:center; gap:11px; }.searchHeading > div { flex:1; min-width:0; }.searchHeading h2 { font-size:15px; font-weight:700; line-height:1.5; overflow-wrap:anywhere; }
+.searchIcon { display:grid; place-items:center; width:40px; height:40px; border-radius:12px; background:var(--takeme-light-green); color:var(--takeme-dark-green); flex-shrink:0; }
+.searchStatus { font-size:10px; font-weight:600; color:var(--takeme-gray); }.criteria { display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 10px; }.criteria span { background:#f5f7f5; padding:4px 9px; border-radius:7px; font-size:11px; color:var(--takeme-gray); overflow-wrap:anywhere; max-width:100%; }
+.searchActions button { display:inline-flex; align-items:center; gap:5px; min-height:44px; padding:0 4px; font-size:12px; font-weight:600; color:var(--takeme-gray); }
+.searchSettings { border-top:1px solid #edf0ed; margin-top:5px; font-size:11px; color:var(--takeme-gray); }.searchSettings summary { min-height:44px; align-content:center; cursor:pointer; font-weight:550; }.searchSettings > div { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:0 0 9px; }.searchSettings label { display:flex; align-items:center; gap:8px; }.searchSettings select { min-height:44px; border:1px solid var(--takeme-border); border-radius:10px; max-width:190px; background:white; padding:0 9px; }.searchSettings button,.searchSettings a { display:inline-flex; align-items:center; min-height:44px; padding:0 10px; border:1px solid var(--takeme-border); border-radius:10px; color:var(--takeme-dark-green); font-weight:600; }.searchSettings > p { padding-bottom:12px; line-height:1.6; }
+.empty { margin-top:22px; padding:35px 22px; border:1px solid var(--takeme-border); border-radius:20px; background:white; text-align:center; }.empty img { width:98px; height:98px; object-fit:contain; margin:0 auto 16px; }.empty h2 { font-size:20px; font-weight:700; letter-spacing:-.4px; }.empty p { max-width:320px; margin:8px auto 0; font-size:13px; color:var(--takeme-gray); line-height:1.8; }
+.exploreLink { display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; margin:19px auto 0; font-size:12px; font-weight:600; color:var(--takeme-dark-green); width:fit-content; padding:0 16px; }
+.empty + .exploreLink { border:1px solid var(--takeme-border); border-radius:99px; background:white; margin-top:16px; }
+.error { display:flex; align-items:center; flex-wrap:wrap; gap:10px; border:1px solid #f3d6d1; background:#fff5f3; border-radius:14px; padding:12px 15px; margin-bottom:15px; font-size:12px; color:#991b1b; }.error p { min-width:160px; flex:1; }.error button { min-height:44px; padding:0 8px; font-weight:600; }
+.loadMore { display:flex; justify-content:center; margin-top:20px; }.loadMore button { font-size:12px; }
+.panelSkeleton { display:flex; gap:12px; min-height:150px; border-radius:18px; border:1px solid var(--takeme-border); padding:18px; background:white; }.panelSkeleton > span { width:48px; height:48px; border-radius:50%; background:#e7ece7; }.panelSkeleton > div { flex:1; }.panelSkeleton i { display:block; height:12px; width:85%; background:#e7ece7; border-radius:5px; margin:7px 0 12px; }.panelSkeleton i:last-child { width:65%; }
+@media(max-width:600px) { .page { padding:20px 16px 100px; }.heading h1 { font-size:26px; }.heading p { font-size:12px; }.tabs { margin-top:16px; gap:0; }.tabs a { padding-inline:19px; }.sellerCard,.searchCard { padding:15px; } }
+@media(min-width:768px) { .productGrid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px 16px; }.sellerGrid,.searchGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }.cardFrame :global(.discovery-product-title) { font-size:15px; }.availability { font-size:11px; top:calc(75cqw - 32px); }.savedDate { font-size:11px; } }
+@media(min-width:1024px) { .page { padding-top:34px; }.productGrid { grid-template-columns:repeat(4,minmax(0,1fr)); }.intro { margin-top:22px; }.heading h1 { font-size:32px; } }
