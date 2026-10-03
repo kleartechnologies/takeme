@@ -23,7 +23,7 @@ try {
   const lock = JSON.parse(readFileSync(path.join(repository, "package-lock.json"), "utf8"));
   const installed = {
     next: require("next/package.json").version,
-    "eslint-config-next": require("eslint-config-next/package.json").version,
+    "eslint-config-next": JSON.parse(readFileSync(path.join(repository, "node_modules/eslint-config-next/package.json"), "utf8")).version,
     "@opennextjs/cloudflare": JSON.parse(readFileSync(path.resolve(path.dirname(cli), "../../package.json"), "utf8")).version,
     wrangler: require("wrangler/package.json").version,
   };
