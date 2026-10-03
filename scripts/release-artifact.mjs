@@ -47,15 +47,26 @@ export async function recordReleaseArtifact(directory, config) {
     const bytes = await readFile(file);
     files.push({ path: path.relative(directory, file).split(path.sep).join("/"), bytes: bytes.length, sha256: sha256(bytes) });
   }
-  const manifest = { format: 1, target: config.target, configurationFingerprint: configurationFingerprint(config),
+  const manifest = { format: 2, purpose: config.purpose, target: config.target, configurationFingerprint: configurationFingerprint(config),
     buildId: (await readFile(path.join(directory, "BUILD_ID"), "utf8")).trim(), embeddedProofs: embedded, files };
   await writeFile(path.join(directory, manifestName), JSON.stringify(manifest, null, 2) + "\n");
   return { target: config.target, files: files.length, embeddedProofs: embedded };
 }
 
 export async function validateReleaseArtifact(directory, config, requiredTarget = "production") {
+  if (config.purpose !== "release") throw new Error("Offline qualification output is nondeployable and cannot qualify as a release artifact.");
+  return validateArtifact(directory, config, requiredTarget, "release");
+}
+
+export async function validateOfflineQualificationArtifact(directory, config) {
+  if (config.purpose !== "offline-qualification" || config.productionDeletionEnabled !== false) throw new Error("Offline artifact qualification requires its isolated purpose and disabled deletion execution.");
+  return validateArtifact(directory, config, "production", "offline-qualification");
+}
+
+async function validateArtifact(directory, config, requiredTarget, purpose) {
   const manifest = JSON.parse(await readFile(path.join(directory, manifestName), "utf8"));
-  if (config.target !== requiredTarget || manifest.format !== 1 || manifest.target !== requiredTarget) throw new Error("Artifact target does not match the requested release qualification; demo output cannot qualify for production.");
+  if (manifest.purpose !== purpose || config.purpose !== purpose) throw new Error("Artifact purpose does not match release qualification; offline qualification output is nondeployable.");
+  if (config.target !== requiredTarget || manifest.format !== 2 || manifest.target !== requiredTarget) throw new Error("Artifact target does not match the requested release qualification; demo output cannot qualify for production.");
   if (manifest.configurationFingerprint !== configurationFingerprint(config)) throw new Error("Artifact was built with different configuration; rebuild with the reviewed release environment.");
   if (manifest.buildId !== (await readFile(path.join(directory, "BUILD_ID"), "utf8")).trim()) throw new Error("Artifact build identity does not match its provenance.");
   const actualPaths = (await artifactFiles(directory)).map(file => path.relative(directory, file).split(path.sep).join("/"));

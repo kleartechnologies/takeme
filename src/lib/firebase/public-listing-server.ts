@@ -2,6 +2,9 @@ import type { PublicListingMetadata } from "../listing-metadata";
 import { parsePublicLocation } from "../general-location.ts";
 
 export async function getPublicListingForMetadata(id: string): Promise<PublicListingMetadata | null> {
+  // Dedicated offline qualification never reads a Firebase project, including
+  // when its force-dynamic metadata route is invoked during local inspection.
+  if (process.env.TAKEME_OFFLINE_QUALIFICATION === "true") return null;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   if (!projectId) return null;

@@ -4,6 +4,7 @@ export const releaseProofPrefix = "TAKEME_RELEASE_PROOF_V1:";
 type PublicFirebase = ReleaseConfiguration["publicFirebase"];
 export interface ReleaseProof {
   format: 1;
+  purpose: ReleaseConfiguration["purpose"];
   target: "demo" | "production";
   projectId: string;
   siteUrl: string;
@@ -15,7 +16,7 @@ export interface ReleaseProof {
 // Contains public Web SDK configuration only. Server gates, hosts and credentials
 // must never be added to this browser-visible build proof.
 export function encodeReleaseProof(configuration: ReleaseConfiguration) {
-  const proof: ReleaseProof = { format: 1, target: configuration.target, projectId: configuration.projectId,
+  const proof: ReleaseProof = { format: 1, purpose: configuration.purpose, target: configuration.target, projectId: configuration.projectId,
     siteUrl: configuration.siteUrl, useEmulators: configuration.useEmulators,
     firebase: configuration.publicFirebase, policy: configuration.policy };
   const bytes = new TextEncoder().encode(JSON.stringify(proof));
@@ -35,7 +36,7 @@ export function clientReleaseProofMatches(config: { apiKey?: string; authDomain?
   if (!optimized && !proofValue) return useEmulators && config.projectId === "demo-takeme";
   if (!proofValue) return false;
   const proof = decodeReleaseProof(proofValue);
-  if (!proof || proof.projectId !== config.projectId || proof.useEmulators !== useEmulators) return false;
+  if (!proof || proof.purpose !== "release" || proof.projectId !== config.projectId || proof.useEmulators !== useEmulators) return false;
   const expected = { NEXT_PUBLIC_FIREBASE_API_KEY: config.apiKey, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: config.authDomain,
     NEXT_PUBLIC_FIREBASE_PROJECT_ID: config.projectId, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: config.storageBucket,
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: config.messagingSenderId, NEXT_PUBLIC_FIREBASE_APP_ID: config.appId };

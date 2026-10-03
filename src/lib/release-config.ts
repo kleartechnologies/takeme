@@ -1,4 +1,5 @@
 import { getReleasePolicy, validateProductionPolicy } from "../../functions/src/release-policy.ts";
+import { validateLegalPublication, type LegalPublicationReadiness } from "./legal-publication.ts";
 
 export type ReleaseEnvironment = Record<string, string | undefined>;
 export type ReleasePolicy = ReturnType<typeof getReleasePolicy>;
@@ -20,6 +21,7 @@ const demoValues = {
 const unsafeValue = /localhost|127\.0\.0\.1|\[?::1\]?|(?:^|[/.:-])(?:demo|test|synthetic)[-_]|demo-api-key|\.test(?:[/:]|$)|example\.invalid|synthetic/i;
 
 export interface ReleaseConfiguration {
+  purpose: "release" | "offline-qualification";
   target: ReleaseTarget;
   projectId: string;
   siteUrl: string;
@@ -40,8 +42,14 @@ export class ReleaseConfigurationError extends Error {
   }
 }
 
-export function validateReleaseEnvironment(env: ReleaseEnvironment, policyOverride?: ReleasePolicy): ReleaseConfiguration {
+// Overrides are pure-test inputs only; normal build/validation CLIs never accept them.
+export function validateReleaseEnvironment(env: ReleaseEnvironment, policyOverride?: ReleasePolicy, legalOverride?: LegalPublicationReadiness): ReleaseConfiguration {
+  return validateConfiguration(env, "release", policyOverride, legalOverride);
+}
+
+function validateConfiguration(env: ReleaseEnvironment, purpose: ReleaseConfiguration["purpose"], policyOverride?: ReleasePolicy, legalOverride?: LegalPublicationReadiness): ReleaseConfiguration {
   const issues: string[] = [];
+  if (purpose === "release" && env.TAKEME_OFFLINE_QUALIFICATION) issues.push("Offline qualification mode cannot be used by the ordinary release validator.");
   const target = env.TAKEME_RELEASE_TARGET;
   if (target !== "demo" && target !== "production") throw new ReleaseConfigurationError(["TAKEME_RELEASE_TARGET must explicitly select demo or production."]);
   const policy = policyOverride ?? getReleasePolicy(target);
@@ -62,9 +70,10 @@ export function validateReleaseEnvironment(env: ReleaseEnvironment, policyOverri
     storageBuckets = [publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET];
   } else {
     issues.push(...validateProductionPolicy(policy));
+    issues.push(...validateLegalPublication(legalOverride));
     if (env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== "false") issues.push("Production requires NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false explicitly.");
     for (const [key, value] of Object.entries(env)) {
-      if (value && (/(?:EMULATOR_HOST|EMULATOR_HUB)$/.test(key) || key === "FUNCTIONS_EMULATOR")) issues.push(`${key} must be absent in production.`);
+      if (/(?:EMULATOR_HOST|EMULATOR_HUB)$/.test(key) || key === "FUNCTIONS_EMULATOR") issues.push(`${key} must be absent in production.`);
       if (value && /(?:TAKEME|FIREBASE|FUNCTION|SITE).*(?:URL|DOMAIN|PROJECT|BUCKET|USER)/.test(key) && unsafeValue.test(value)) issues.push(`${key} contains a forbidden local/demo/test value.`);
     }
     for (const key of publicFirebaseKeys) {
@@ -85,9 +94,41 @@ export function validateReleaseEnvironment(env: ReleaseEnvironment, policyOverri
     if (!storageBuckets.length || new Set(storageBuckets).size !== storageBuckets.length || storageBuckets.some(bucket => !approvedBuckets.includes(bucket))) issues.push("TAKEME_STORAGE_BUCKETS must explicitly allow only the confirmed project's Storage buckets.");
     if (!storageBuckets.includes(publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)) issues.push("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET must match a confirmed cleanup bucket.");
     if (siteUrl !== "https://takeme.my") issues.push("NEXT_PUBLIC_SITE_URL must be the approved canonical origin https://takeme.my with no path, query or credentials.");
-    if (env.TAKEME_DELETION_ENVIRONMENT !== "production" || env.TAKEME_ENABLE_PRODUCTION_DELETION !== "true") issues.push("Production release qualification requires separately approved, explicitly enabled production deletion configuration.");
+    if (env.TAKEME_DELETION_ENVIRONMENT !== "production") issues.push("Production deletion resources must be explicitly configured.");
+    if (purpose === "release" && env.TAKEME_ENABLE_PRODUCTION_DELETION !== "true") issues.push("Production release qualification requires separately approved, explicitly enabled production deletion configuration.");
+    if (purpose === "offline-qualification" && env.TAKEME_ENABLE_PRODUCTION_DELETION !== "false") issues.push("Offline qualification requires production deletion execution disabled explicitly.");
     if (env.PROTECTED_PAYMENTS_ENABLED && env.PROTECTED_PAYMENTS_ENABLED !== "false") issues.push("Protected payments must remain disabled for this release.");
   }
   if (issues.length) throw new ReleaseConfigurationError([...new Set(issues)]);
-  return { target, projectId, siteUrl, publicFirebase, storageBuckets, policy, useEmulators: target === "demo", productionDeletionEnabled: target === "production" };
+  return { purpose, target, projectId, siteUrl, publicFirebase, storageBuckets, policy, useEmulators: target === "demo", productionDeletionEnabled: target === "production" && purpose === "release" };
+}
+
+// Fixed fabricated public values only. No caller can substitute real resources or
+// approve production through this path. Its output cannot initialize Firebase or
+// pass the ordinary release/artifact gate, even if copied into a hosting project.
+export function offlineQualificationConfiguration(): ReleaseConfiguration {
+  const project = "takeme-offline-qualification";
+  return validateConfiguration({
+    TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: project,
+    TAKEME_STORAGE_BUCKETS: `${project}.firebasestorage.app`, TAKEME_DELETION_ENVIRONMENT: "production", TAKEME_ENABLE_PRODUCTION_DELETION: "false",
+    NEXT_PUBLIC_FIREBASE_API_KEY: "AIza" + "a".repeat(35), NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`,
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID: project, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${project}.firebasestorage.app`,
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789012", NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789012:web:" + "a".repeat(22),
+    NEXT_PUBLIC_SITE_URL: "https://takeme.my", NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false", PROTECTED_PAYMENTS_ENABLED: "false",
+  }, "offline-qualification",
+  { publicationApproved: true, termsVersion: "qualification-final-v1", privacyVersion: "qualification-final-v1", minimumAge: 18 },
+  { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true });
+}
+
+// Explicit owner-confirmed public SDK inputs may be inspected offline only.
+// The synthetic policy/legal fixture never changes either real approval source.
+export function ownerOfflineQualificationConfiguration(env: ReleaseEnvironment, identity: { projectId: string; projectNumber: string }): ReleaseConfiguration {
+  const issues: string[] = [];
+  if (env.TAKEME_RELEASE_TARGET !== "production") issues.push("Owner-config offline qualification requires an explicit production target.");
+  if (!identity.projectId || env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== identity.projectId) issues.push("The public Web App project must match the separately confirmed owner project.");
+  if (!/^\d{6,20}$/.test(identity.projectNumber) || env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID !== identity.projectNumber) issues.push("The public Web App sender must match the separately confirmed owner project number.");
+  if (issues.length) throw new ReleaseConfigurationError(issues);
+  return validateConfiguration(env, "offline-qualification",
+    { publicationApproved: true, termsVersion: "qualification-final-v1", privacyVersion: "qualification-final-v1", minimumAge: 18 },
+    { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true });
 }
