@@ -5,12 +5,12 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
-  updateProfile,
+  validatePassword,
+  type PasswordValidationStatus,
   type User,
 } from "firebase/auth";
 import { auth, db } from "./client";
 import { createProfileIfMissing } from "./profile-bootstrap";
-import { validateSignupDisplayName } from "./profile-name";
 
 function requireFirebase() {
   if (!auth || !db) {
@@ -24,12 +24,10 @@ async function createProfile(user: User, displayName?: string) {
   await createProfileIfMissing(services.db, user, displayName);
 }
 
-export async function registerWithEmail(email: string, password: string, displayName: string) {
-  const name = validateSignupDisplayName(displayName);
+export async function registerWithEmail(email: string, password: string) {
   const services = requireFirebase();
   const credential = await createUserWithEmailAndPassword(services.auth, email, password);
-  await updateProfile(credential.user, { displayName: name });
-  await createProfile(credential.user, name);
+  await createProfile(credential.user);
   return credential.user;
 }
 
@@ -46,7 +44,22 @@ export async function loginWithGoogle() {
 }
 
 export async function resetPassword(email: string) {
-  await sendPasswordResetEmail(requireFirebase().auth, email);
+  try { await sendPasswordResetEmail(requireFirebase().auth, email); }
+  catch (error) { if ((error as { code?: string }).code !== "auth/user-not-found") throw error; }
+}
+
+export async function checkSignupPassword(password: string): Promise<PasswordValidationStatus> {
+  const service = requireFirebase().auth;
+  try { return await validatePassword(service, password); }
+  catch (error) {
+    // The Auth emulator explicitly does not implement getPasswordPolicy. Its
+    // signup endpoint enforces Firebase's six-character default (integration-tested).
+    // Never use this fallback for a live project or an ordinary network failure.
+    const code = (error as { code?: string }).code ?? "";
+    if (!service.emulatorConfig || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== "demo-takeme" || !code.includes("getpasswordpolicy-is-not-implemented")) throw error;
+    return { isValid: password.length >= 6, meetsMinPasswordLength: password.length >= 6,
+      passwordPolicy: { customStrengthOptions: { minPasswordLength: 6 }, allowedNonAlphanumericCharacters: "", enforcementState: "ENFORCE", forceUpgradeOnSignin: false } };
+  }
 }
 
 export async function logout() {

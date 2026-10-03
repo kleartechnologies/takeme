@@ -13,7 +13,7 @@ test("Google sign-in uses Firebase provider and the shared profile initializer",
 
   const form = readFileSync(new URL("../src/components/auth/auth-form.tsx", import.meta.url), "utf8");
   assert.match(form, /mode !== "forgot"[\s\S]*Continue with Google/);
-  assert.match(form, /await loginWithGoogle\(\); router\.push\(nextPath\)/);
+  assert.match(form, /await loginWithGoogle\(\); await resume\(\)/);
 });
 
 test("new Google profiles normalize provider names", () => {

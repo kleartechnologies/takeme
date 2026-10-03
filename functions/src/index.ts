@@ -552,3 +552,4 @@ export {
 } from "./protected-transactions";
 
 export { getAccountDeletionStatus, requestAccountDeletion, retryAccountDeletion, processAccountDeletions } from "./account-deletion";
+export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome } from "./auth-onboarding";

@@ -1,72 +1,110 @@
 "use client";
-
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useState } from "react";
-import { Logo } from "@/components/layout/logo";
-import { loginWithEmail, loginWithGoogle, registerWithEmail, resetPassword } from "@/lib/firebase/auth";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useAuth } from "./auth-provider";
+import { AuthShell } from "./auth-shell";
+import { PolicyCheckboxes } from "./policy-checkboxes";
+import { auth, isFirebaseConfigured } from "@/lib/firebase/client";
+import { checkSignupPassword, loginWithEmail, loginWithGoogle, registerWithEmail, resetPassword } from "@/lib/firebase/auth";
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
-import { isFirebaseConfigured } from "@/lib/firebase/client";
-import { PROFILE_NAME_ERROR, validateSignupDisplayName } from "@/lib/firebase/profile-name";
+import { passwordPolicyHelp } from "@/lib/firebase/password-policy";
+import { safeAuthNext, setupDestination } from "@/lib/auth-routing";
+import { acceptWebPolicies, isLocalAccountSetup } from "@/lib/services/account-setup";
+import styles from "./auth.module.css";
 
 type Mode = "login" | "register" | "forgot";
-
 export function AuthForm({ mode }: { mode: Mode }) {
-  const router = useRouter();
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const requested = useSearchParams().get("next");
-  const nextPath = requested?.startsWith("/") && !requested.startsWith("//") && !requested.includes("\\") ? requested : "/profile";
-
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setMessage(""); setError("");
-    if (!email.includes("@")) return setError("Enter a valid email address.");
-    if (mode !== "forgot" && password.length < 8) return setError("Password must be at least 8 characters.");
-    if (mode === "register") {
-      try { validateSignupDisplayName(displayName); }
-      catch { return setError(PROFILE_NAME_ERROR); }
-    }
-    setBusy(true);
+  const router = useRouter(), { user, loading, refreshSetup } = useAuth();
+  const [email, setEmail] = useState(""), [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false), [busy, setBusy] = useState<"email" | "google" | null>(null);
+  const [age, setAge] = useState(false), [agreed, setAgreed] = useState(false);
+  const [sent, setSent] = useState(false), [error, setError] = useState("");
+  const [recoverSetup, setRecoverSetup] = useState(false);
+  const [policyHelp, setPolicyHelp] = useState("Password requirements are checked securely when you create your account.");
+  const errorRef = useRef<HTMLDivElement>(null), submitting = useRef(false);
+  const nextPath = safeAuthNext(useSearchParams().get("next"));
+  const local = isLocalAccountSetup();
+  useEffect(() => {
+    if (mode !== "register" || !local) return;
+    let active = true;
+    checkSignupPassword("").then(status => { if (active) setPolicyHelp(passwordPolicyHelp(status.passwordPolicy)); }).catch(() => {});
+    return () => { active = false; };
+  }, [mode, local]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  const href = (path: string) => `${path}?next=${encodeURIComponent(nextPath)}`;
+  function validationError(message: string) {
+    setError(message);
+    // Repeated identical validation errors must still move focus back to the error.
+    requestAnimationFrame(() => errorRef.current?.focus());
+  }
+  async function resume() {
+    const setup = await refreshSetup();
+    router.replace(setup ? setupDestination(setup.step, nextPath) : nextPath);
+  }
+  async function retrySetup() {
+    if (submitting.current) return;
+    submitting.current = true; setBusy("email"); setError("");
     try {
-      if (mode === "register") { await registerWithEmail(email, password, displayName.trim()); router.push(nextPath); }
-      else if (mode === "login") { await loginWithEmail(email, password); router.push(nextPath); }
-      else { await resetPassword(email); setMessage("Password reset email sent. Check your inbox."); }
+      if (mode === "register" && age && agreed) await acceptWebPolicies(age, agreed);
+      await resume();
     } catch (caught) { setError(friendlyAuthError(caught)); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(null); }
   }
-
-  async function continueWithGoogle() {
-    setMessage(""); setError(""); setBusy(true);
-    try { await loginWithGoogle(); router.push(nextPath); }
-    catch (caught) { setError(friendlyAuthError(caught)); }
-    finally { setBusy(false); }
+  async function submit(event: FormEvent) {
+    event.preventDefault(); if (submitting.current) return; setError("");
+    if (recoverSetup && auth?.currentUser) { await retrySetup(); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return validationError("Enter a valid email address.");
+    if (mode !== "forgot" && !password) return validationError("Enter your password.");
+    if (mode === "register" && (!age || !agreed)) return validationError("Confirm that you are at least 18 and agree to the Terms of Service and Privacy Policy.");
+    if (mode === "register" && !local) return validationError("Account creation will be available after TAKEME’s policies are finalised.");
+    const beforeUid = auth?.currentUser?.uid;
+    submitting.current = true; setBusy("email");
+    try {
+      if (mode === "forgot") { await resetPassword(email.trim()); setSent(true); return; }
+      if (mode === "register") {
+        const status = await checkSignupPassword(password); setPolicyHelp(passwordPolicyHelp(status.passwordPolicy));
+        if (!status.isValid) { setError(passwordPolicyHelp(status.passwordPolicy)); return; }
+        await registerWithEmail(email.trim(), password); await acceptWebPolicies(age, agreed);
+      } else await loginWithEmail(email.trim(), password);
+      await resume();
+    } catch (caught) {
+      const signedIn = mode !== "forgot" && !!auth?.currentUser && (recoverSetup || auth.currentUser.uid !== beforeUid);
+      if (signedIn) setRecoverSetup(true);
+      setError(signedIn ? "You’re signed in, but account setup could not finish. Retry to continue without creating another account." : friendlyAuthError(caught));
+    }
+    finally { submitting.current = false; setBusy(null); }
   }
-
-  return (
-    <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 shadow-[var(--takeme-shadow-md)] sm:p-8">
-      <div className="mb-7"><div className="mb-5"><Logo /></div><p className="eyebrow">Welcome to TAKEME</p><h1 className="mt-2 text-3xl font-bold tracking-[-0.04em]">{mode === "login" ? "Good to see you" : mode === "register" ? "Create your account" : "Reset your password"}</h1><p className="mt-2 text-sm leading-6 text-[var(--takeme-gray)]">{mode === "login" ? "Log in to place bids and manage your listings. Browsing is open to everyone." : mode === "register" ? "Create an account to publish listings or place auction bids." : "We’ll send a reset link to your email address."}</p></div>
-      {!isFirebaseConfigured && <div className="mb-5 rounded-xl border border-[var(--takeme-green)]/25 bg-[var(--takeme-light-green)] p-3 text-xs leading-5 text-[var(--takeme-dark-green)]">Sign-in is temporarily unavailable. Please try again later.</div>}
-      <form onSubmit={submit} className="grid gap-4">
-        {mode === "register" && <label className="form-field"><span>Display name</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" placeholder="Your name" /></label>}
-        <label className="form-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" /></label>
-        {mode !== "forgot" && <label className="form-field"><span className="flex items-center justify-between">Password {mode === "login" && <Link href="/forgot-password" className="text-xs font-semibold text-[var(--takeme-dark-green)]">Forgot password?</Link>}</span><span className="relative"><input className="w-full rounded-xl border border-gray-300 px-3 py-3 pr-11 text-sm outline-none focus:border-[var(--takeme-green)] focus:ring-3 focus:ring-[rgb(0_200_83_/_0.12)]" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} placeholder="At least 8 characters" /><button type="button" className="absolute right-0.5 top-0.5 grid size-11 place-items-center text-[var(--takeme-gray)]" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>}
-        {error && <p className="rounded-xl bg-red-50 p-3 text-xs font-medium leading-5 text-red-700" role="alert">{error}</p>}{message && <p className="rounded-xl bg-[var(--takeme-light-green)] p-3 text-xs font-medium leading-5 text-[var(--takeme-dark-green)]" role="status">{message}</p>}
-        <button disabled={busy} className="button-primary mt-1 h-12" type="submit">{busy && <LoaderCircle size={17} className="animate-spin" />}{mode === "login" ? "Log in" : mode === "register" ? "Create account" : "Send reset link"}</button>
-      </form>
-      {mode !== "forgot" && <div className="mt-5">
-        <div className="flex items-center gap-3 text-xs text-[var(--takeme-gray)]"><span className="h-px flex-1 bg-gray-200" />or<span className="h-px flex-1 bg-gray-200" /></div>
-        <button type="button" disabled={busy || !isFirebaseConfigured} onClick={() => void continueWithGoogle()} className="mt-4 flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-[var(--takeme-charcoal)] transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
-          <span aria-hidden="true" className="bg-gradient-to-br from-blue-500 via-red-500 to-green-500 bg-clip-text text-lg font-bold leading-none text-transparent">G</span>
-          Continue with Google
-        </button>
-      </div>}
-      <p className="mt-6 text-center text-sm text-[var(--takeme-gray)]">{mode === "login" ? <>New here? <Link href={nextPath === "/profile" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-[var(--takeme-dark-green)]">Create an account</Link></> : mode === "register" ? <>Already registered? <Link href={nextPath === "/profile" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-[var(--takeme-dark-green)]">Log in</Link></> : <Link href="/login" className="font-semibold text-[var(--takeme-dark-green)]">Back to login</Link>}</p>
-    </div>
-  );
+  async function google() {
+    if (submitting.current) return;
+    const beforeUid = auth?.currentUser?.uid;
+    submitting.current = true; setError(""); setBusy("google");
+    try { await loginWithGoogle(); await resume(); }
+    catch (caught) {
+      if (auth?.currentUser && auth.currentUser.uid !== beforeUid) { setRecoverSetup(true); setError("You’re signed in with Google. Continue with your signed-in account below to retry setup."); }
+      else setError(friendlyAuthError(caught));
+    }
+    finally { submitting.current = false; setBusy(null); }
+  }
+  return <AuthShell>
+    <p className={styles.eyebrow}>{mode === "forgot" ? "A little help getting back in" : "Welcome to TAKEME"}</p>
+    <h1 className={styles.heading}>{mode === "login" ? "Welcome back" : mode === "register" ? "Find your next great thing" : "Forgot password?"}</h1>
+    <p className={styles.intro}>{mode === "login" ? "Log in to pick up where you left off." : mode === "register" ? "Create your account. Your marketplace profile comes next." : "Enter your email and we’ll send you a password-reset link."}</p>
+    {mode !== "forgot" && <><button className={styles.google} type="button" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !local)} onClick={() => void google()}>{busy === "google" ? <LoaderCircle size={20} className="animate-spin" /> : <Image src="/brand/google-g.png" alt="" width={20} height={20} />}<span>{busy === "google" ? "Connecting…" : "Continue with Google"}</span></button><div className={styles.divider}>or use your email</div></>}
+    <form className={styles.form} onSubmit={event => void submit(event)} noValidate aria-busy={!!busy}>
+      {sent && <div className={styles.success} role="status"><strong>Check your email</strong>If an account exists for that address, you’ll receive reset instructions.</div>}
+      <label className={styles.field} htmlFor="auth-email">Email<input id="auth-email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} inputMode="email" required disabled={!!busy || loading} value={email} onChange={event => { setEmail(event.target.value); setSent(false); }} placeholder="you@example.com" /></label>
+      {mode !== "forgot" && <div className={styles.field}><label htmlFor="auth-password">Password</label><div className={styles.password}><input id="auth-password" required disabled={!!busy || loading} type={showPassword ? "text" : "password"} value={password} onChange={event => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} aria-describedby={mode === "register" ? "password-help" : undefined} /><button disabled={!!busy || loading} type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button></div>{mode === "register" && <p id="password-help" className={styles.helper}>{policyHelp}</p>}</div>}
+      {mode === "login" && <div className={styles.forgot}><Link href={href("/forgot-password")} className={styles.textButton}>Forgot password?</Link></div>}
+      {mode === "register" && <PolicyCheckboxes age={age} agreed={agreed} setAge={setAge} setAgreed={setAgreed} disabled={!!busy || loading} />}
+      {error && <div ref={errorRef} tabIndex={-1} className={styles.error} role="alert">{error}</div>}
+      {!isFirebaseConfigured && <p className={styles.error} role="status">Sign-in is temporarily unavailable. Please try again later.</p>}
+      <button className={styles.primary} type="submit" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !local)}>{busy === "email" && <LoaderCircle className="animate-spin" size={18} />}{busy === "email" ? (mode === "login" ? "Signing in…" : mode === "register" ? "Creating account…" : "Sending…") : recoverSetup || (error && /connect|connection/i.test(error)) ? "Retry" : mode === "login" ? "Log in" : mode === "register" ? "Create account" : sent ? "Send another link" : "Send reset link"}</button>
+    </form>
+    {mode === "register" && <p className={styles.draft}>Local preview · policies v1.0-draft. Legal publication and production signup acceptance remain blocked.</p>}
+    <p className={styles.switch}>{mode === "login" ? <>New to TAKEME? <Link href={href("/register")}>Create account</Link></> : mode === "register" ? <>Already have an account? <Link href={href("/login")}>Log in</Link></> : <Link href={href("/login")}>Back to log in</Link>}</p>
+    {user && <p className={styles.switch}><button className={styles.textButton} disabled={!!busy || loading} onClick={() => void retrySetup()}>Continue with your signed-in account</button></p>}
+  </AuthShell>;
 }

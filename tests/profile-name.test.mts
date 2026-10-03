@@ -3,22 +3,21 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { newPublicProfileFields, normalizeProviderDisplayName, PROFILE_NAME_FALLBACK, validateSignupDisplayName } from "../src/lib/firebase/profile-name.ts";
 
-test("email signup preserves valid trimmed names from two through eighty characters", () => {
+test("profile setup preserves valid trimmed names from two through eighty characters", () => {
   assert.equal(validateSignupDisplayName("AB"), "AB");
   assert.equal(validateSignupDisplayName("  Aminah Lee  "), "Aminah Lee");
   assert.equal(validateSignupDisplayName("A".repeat(80)), "A".repeat(80));
   assert.equal(validateSignupDisplayName("  👩🏽‍💻 Seller  "), "👩🏽‍💻 Seller");
 });
 
-test("email signup rejects overlong and too-short names before Auth creation", () => {
+test("profile setup rejects overlong and too-short names before saving", () => {
   assert.throws(() => validateSignupDisplayName("A".repeat(81)), /2–80 characters/);
   assert.throws(() => validateSignupDisplayName("  A  "), /2–80 characters/);
   assert.throws(() => validateSignupDisplayName("   "), /2–80 characters/);
-  const source = readFileSync(new URL("../src/lib/firebase/auth.ts", import.meta.url), "utf8");
-  const signup = source.slice(source.indexOf("export async function registerWithEmail"), source.indexOf("export async function loginWithEmail"));
-  const validation = signup.indexOf("validateSignupDisplayName(displayName)");
-  const authCreation = signup.indexOf("createUserWithEmailAndPassword(");
-  assert.ok(validation >= 0 && authCreation >= 0 && validation < authCreation);
+  const source = readFileSync(new URL("../src/components/auth/account-onboarding.tsx", import.meta.url), "utf8");
+  assert.ok(source.indexOf("validateSignupDisplayName(name)") < source.indexOf("await updatePublicProfile("));
+  const auth = readFileSync(new URL("../src/lib/firebase/auth.ts", import.meta.url), "utf8");
+  assert.match(auth, /registerWithEmail\(email: string, password: string\)/);
 });
 
 test("provider names are trimmed, bounded, and use a deterministic fallback", () => {

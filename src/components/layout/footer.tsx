@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isAuthPath } from "@/lib/auth-routing";
 import { isSettingsUtilityPath } from "@/lib/settings-routes";
 import { isPublicInformationPath } from "@/lib/public-information";
 import { PublicInformationFooter, PublicInformationLinks } from "@/components/public-information/public-information";
@@ -10,7 +11,7 @@ import { Logo } from "./logo";
 export function Footer() {
   const pathname = usePathname();
   if (isPublicInformationPath(pathname)) return <PublicInformationFooter />;
-  if (isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin") || pathname.startsWith("/messages")) return null;
+  if (isAuthPath(pathname) || isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin") || pathname.startsWith("/messages")) return null;
   return (
     <footer className={`${pathname === "/" || pathname === "/explore" || pathname === "/updates" || pathname === "/saved" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") ? "hidden lg:block " : ""}border-t border-gray-200 bg-white pb-24 pt-7 text-[var(--takeme-gray)] lg:pb-10`}>
       <div className="page-shell grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">

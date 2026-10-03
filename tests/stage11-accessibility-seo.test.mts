@@ -17,13 +17,13 @@ test("saved-search deletion uses the shared named dialog and explicit guarded co
 });
 
 test("private route trees explicitly discourage indexing, including nested account/admin pages", () => {
-  for (const route of ["admin", "profile", "messages", "transactions", "saved-searches", "notification-preferences", "sell", "listings/[id]/edit", "listings/[id]/promote"]) {
+  for (const route of ["admin", "profile", "onboarding", "messages", "transactions", "saved-searches", "notification-preferences", "sell", "listings/[id]/edit", "listings/[id]/promote"]) {
     assert.match(source(`src/app/${route}/layout.tsx`), /robots: \{ index: false, follow: false \}/);
   }
 });
 
 test("small auth control and auction badge retain accessible target/contrast treatment", () => {
-  assert.match(source("src/components/auth/auth-form.tsx"), /grid size-11 place-items-center/);
+  assert.match(source("src/components/auth/auth.module.css"), /\.password button[^}]*width: 44px/);
   assert.match(source("src/components/listings/listing-card.tsx"), /bg-orange-700 text-white/);
   assert.match(source("src/components/forms/sell-form.tsx"), /aria-label="Meet-up location \(optional\)"/);
   assert.match(source("src/app/globals.css"), /\.form-field > select:focus-visible, \.form-field > textarea:focus-visible \{ outline: 3px solid var\(--takeme-dark-green\)/);

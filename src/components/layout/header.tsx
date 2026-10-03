@@ -3,6 +3,7 @@
 import { Bell, Heart, LogOut, Menu, MessageSquare, Search, Settings, SlidersHorizontal, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { isAuthPath } from "@/lib/auth-routing";
 import { isSettingsUtilityPath } from "@/lib/settings-routes";
 import { isPublicInformationPath } from "@/lib/public-information";
 import { PublicInformationHeader } from "@/components/public-information/public-information";
@@ -48,7 +49,7 @@ export function Header() {
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
   if (isPublicInformationPath(pathname)) return <PublicInformationHeader />;
-  if (isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
+  if (isAuthPath(pathname) || isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
   const discoveryHeader = pathname === "/" || pathname === "/explore";
   const profileHeader = pathname.startsWith("/profile") || pathname.startsWith("/sellers/");
