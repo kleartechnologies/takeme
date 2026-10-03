@@ -3,6 +3,7 @@
 import { Bell, Heart, LogOut, Menu, MessageSquare, Search, Settings, SlidersHorizontal, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { isSettingsUtilityPath } from "@/lib/settings-routes";
 import { type FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logout } from "@/lib/firebase/auth";
@@ -44,7 +45,7 @@ export function Header() {
   const { user } = useAuth();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
-  if (pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
+  if (isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
   const discoveryHeader = pathname === "/" || pathname === "/explore";
   const profileHeader = pathname.startsWith("/profile") || pathname.startsWith("/sellers/");
