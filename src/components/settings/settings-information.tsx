@@ -1,5 +1,6 @@
 import { ChevronDown, LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { marketplaceOperator } from "@/content/operator";
 import styles from "./settings.module.css";
 
 export function PrivacySettings() {
@@ -8,7 +9,7 @@ export function PrivacySettings() {
     <section className={styles.card}><h2>Your public profile</h2><p>Your profile photo, display name and general marketplace location can be seen by other people. Listings can show the general area and a meet-up place you explicitly select.</p><Link className={styles.link} href="/profile/settings/edit">Edit public profile</Link></section>
     <section className={styles.card}><h2>Your private details</h2><p>Your account email and saved private address are account-only. A private address is never copied into a listing or selected as a meet-up place automatically.</p><Link className={styles.link} href="/profile/locations">Manage addresses &amp; meet-up places</Link></section>
     <div className={styles.notice}><LockKeyhole size={19} /><span>There are currently no adjustable profile-visibility or messaging-privacy controls.</span></div>
-    <section className={styles.card}><h2>Privacy Policy</h2><p>The public policy has not yet been published. The information here explains current features and is not a substitute for a Privacy Policy.</p><Link className={styles.link} href="/privacy-policy">View policy status</Link></section>
+    <section className={styles.card}><h2>Privacy Policy</h2><p>The policy draft explains current data practices and limited retention. It remains under business and legal review.</p><Link className={styles.link} href="/privacy">Read Privacy Policy draft</Link></section>
     <Link className={styles.link} href="/account-deletion">Account deletion information</Link>
   </>;
 }
@@ -25,9 +26,10 @@ const faqs = [
 export function HelpSettings() {
   return <>
     <p className={styles.intro}>A few useful answers for your next exchange.</p>
+    <Link className={`${styles.link} mb-5`} href="/help">Open the full Help Centre</Link>
     {faqs.map(([section, question, answer]) => <section key={section} className={styles.card}><h2>{section}</h2><details className={styles.faq}><summary>{question}<ChevronDown size={17} aria-hidden="true" /></summary><p>{answer}</p></details></section>)}
     <section className={styles.card}><h2>Safety &amp; reports</h2><p>Report a listing from its detail page, a seller from their profile, or a conversation/message using the available Report action.</p><Link className={styles.link} href="/profile/settings/safety">Read safety guidance</Link></section>
-    <section className={styles.card}><h2>Contact support</h2><p>A direct support contact has not yet been published. Existing Report actions can submit marketplace concerns for review.</p></section>
+    <section className={styles.card}><h2>Contact support</h2><p>Email TAKEME for customer support or privacy/legal enquiries. Existing Report actions can submit marketplace concerns for review.</p><a className={styles.link} href={`mailto:${marketplaceOperator.supportEmail}`}>{marketplaceOperator.supportEmail}</a></section>
     <div className={styles.actions}><Link className={styles.link} href="/help/tiers">How TAKEME tiers work</Link><Link className={styles.link} href="/account-deletion">Account deletion details</Link></div>
   </>;
 }

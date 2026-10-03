@@ -4,6 +4,7 @@ import { Bell, Compass, Plus, Sparkles, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isSettingsUtilityPath } from "@/lib/settings-routes";
+import { isPublicInformationPath } from "@/lib/public-information";
 import { useUnreadCount } from "@/lib/use-unread-count";
 
 const items = [
@@ -17,7 +18,7 @@ const items = [
 export function MobileNav() {
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
-  if (isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
+  if (isPublicInformationPath(pathname) || isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
   return (
     <nav className={`${pathname === "/" || pathname === "/explore" || pathname === "/updates" || pathname === "/saved" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") || pathname.startsWith("/messages") ? "home-bottom-nav " : ""}fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgb(31_41_55_/_0.06)] backdrop-blur-xl lg:hidden`} aria-label="Bottom navigation">
       <div className="mx-auto grid max-w-lg grid-cols-5">

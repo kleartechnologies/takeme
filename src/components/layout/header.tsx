@@ -4,6 +4,8 @@ import { Bell, Heart, LogOut, Menu, MessageSquare, Search, Settings, SlidersHori
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { isSettingsUtilityPath } from "@/lib/settings-routes";
+import { isPublicInformationPath } from "@/lib/public-information";
+import { PublicInformationHeader } from "@/components/public-information/public-information";
 import { type FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { logout } from "@/lib/firebase/auth";
@@ -45,6 +47,7 @@ export function Header() {
   const { user } = useAuth();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
+  if (isPublicInformationPath(pathname)) return <PublicInformationHeader />;
   if (isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin")) return null;
   const accountHref = user ? "/profile" : "/login?next=/profile";
   const discoveryHeader = pathname === "/" || pathname === "/explore";

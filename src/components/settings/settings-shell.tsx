@@ -18,8 +18,8 @@ const navigation = [
   { label: "Security", href: "/profile/settings/security", icon: ShieldCheck },
   { label: "Safety", href: "/profile/settings/safety", icon: ShieldCheck },
   { label: "Help Centre", href: "/profile/settings/help", icon: CircleHelp, group: "Support" },
-  { label: "Terms status", href: "/terms", icon: FileText, group: "Legal · unpublished" },
-  { label: "Privacy Policy status", href: "/privacy-policy", icon: FileText },
+  { label: "Terms draft", href: "/terms", icon: FileText, group: "Legal · drafts" },
+  { label: "Privacy Policy draft", href: "/privacy", icon: FileText },
   { label: "Delete account", href: "/account-deletion", icon: Trash2, group: "Account actions" },
 ];
 

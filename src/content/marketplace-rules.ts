@@ -1,0 +1,21 @@
+// Owner-approved V1 scope, supplied 3 October 2026; publication remains a separate review.
+export const prohibitedItems = [
+  "Illegal goods or services.",
+  "Firearms, ammunition, explosives and regulated weapons.",
+  "Illegal drugs and controlled substances.",
+  "Counterfeit goods and unauthorised replicas.",
+  "Stolen goods.",
+  "Pornography, explicit sexual content or sexual services.",
+  "Human trafficking or exploitation.",
+  "Dangerous or hazardous materials.",
+  "Prescription medicines sold unlawfully.",
+  "Tobacco or nicotine products where unlawful or age-restricted.",
+  "Alcohol where unlawful or age-restricted.",
+  "Gambling services or products where unlawful.",
+  "Fake documents, IDs or credentials.",
+  "Financial scams, pyramid schemes or fraudulent investment offers.",
+  "Malware, stolen accounts, hacked credentials or illegal digital access.",
+  "Goods that infringe copyright, trademark or other intellectual-property rights.",
+  "Wildlife or protected-species products where prohibited.",
+  "Any item TAKEME reasonably determines creates legal, safety, fraud or abuse risk.",
+];
