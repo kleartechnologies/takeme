@@ -3,6 +3,7 @@ import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore, type Firestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions, type Functions } from "firebase/functions";
+import { clientReleaseProofMatches } from "@/lib/release-proof";
 
 export const useFirebaseEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true";
 
@@ -15,7 +16,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || (useFirebaseEmulators ? "1:123456789:web:demo" : undefined),
 };
 
-export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
+const releaseSafe = clientReleaseProofMatches(firebaseConfig, useFirebaseEmulators, process.env.TAKEME_BUILD_RELEASE_PROOF, process.env.NODE_ENV === "production");
+export const isFirebaseConfigured = releaseSafe && Object.values(firebaseConfig).every(Boolean);
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;

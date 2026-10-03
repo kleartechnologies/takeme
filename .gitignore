@@ -14,6 +14,10 @@
 
 # testing
 /coverage
+# Local credential-bearing fixtures and generated verification artifacts
+/tests/stage11-ui-fixture.mjs
+/tests/messaging-ui-fixture.mjs
+/.local-verification/
 
 # next.js
 /.next/

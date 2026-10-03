@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -26,7 +27,7 @@ async function client(label, authenticated = true) {
   connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
   connectStorageEmulator(storage, "127.0.0.1", 9199);
-  if (authenticated) await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  if (authenticated) { await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword()); await acceptDemoPolicies(app); }
   return { app, auth, firestore, functions, storage, uid: auth.currentUser?.uid };
 }
 

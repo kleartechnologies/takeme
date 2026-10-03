@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, signOut } from "firebase/auth";
@@ -10,7 +11,8 @@ const auth = getAuth(app), firestore = getFirestore(app), functions = getFunctio
 connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
 connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
 connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-await createUserWithEmailAndPassword(auth, `lifecycle-${Date.now()}@example.test`, "TestPass123!");
+await createUserWithEmailAndPassword(auth, `lifecycle-${Date.now()}@example.test`, createDemoPassword());
+await acceptDemoPolicies(app);
 const input = { title: "A working camera kit", description: "A complete camera kit with charger and two working batteries.", categoryId: "electronics", condition: "Good", price: 250, listingType: "buy_now", publicLocation: { districtOrCity: "Kuala Lumpur", state: "W.P. Kuala Lumpur", country: "Malaysia" } };
 const listingId = (await httpsCallable(functions, "createFixedListingDraft")(input)).data.listingId;
 const listingRef = doc(firestore, "listings", listingId);

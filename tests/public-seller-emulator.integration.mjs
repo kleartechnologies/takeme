@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { deleteApp, initializeApp } from "firebase/app";
@@ -28,7 +29,8 @@ function app(label) {
 
 const signed = app("public-seller-signed");
 const guest = app("public-seller-guest");
-await createUserWithEmailAndPassword(signed.auth, `public-seller-${suffix}@example.test`, "TestPass123!");
+await createUserWithEmailAndPassword(signed.auth, `public-seller-${suffix}@example.test`, createDemoPassword());
+await acceptDemoPolicies(signed.firebaseApp);
 const sellerIds = Array.from({ length: 40 }, (_, index) => `public-seller-${suffix}-${index}`);
 await Promise.all(sellerIds.map((sellerId, index) => admin.doc(`users/${sellerId}`).set({ uid: sellerId, displayName: `Seller ${index}`, photoURL: null, email: `private-${index}@example.test`, location: "Kuala Lumpur" })));
 await admin.doc(`trustSummaries/${sellerIds[0]}`).set({

@@ -1,3 +1,4 @@
+import { withEligibilityHandling } from "@/lib/services/marketplace-call";
 import { Timestamp, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "@/lib/firebase/client";
@@ -20,7 +21,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export async function updatePublicProfile(input: { displayName: string; location: string; photo?: File | null }): Promise<UserProfile> {
   if (!db || !auth?.currentUser) throw new Error("Sign in to edit your profile.");
-  const uid = auth.currentUser.uid;
+  const uid = auth.currentUser.uid, database = db;
   const displayName = input.displayName.trim();
   const normalizedLocation = input.location.trim() ? parseLegacyGeneralLocation(input.location) : null;
   if (input.location.trim() && !normalizedLocation) throw new Error("Choose a district or city and Malaysian state, not a street address.");
@@ -28,12 +29,13 @@ export async function updatePublicProfile(input: { displayName: string; location
   if (displayName.length < 2 || displayName.length > 80) throw new Error("Display name must be 2–80 characters.");
   if (input.photo && (!storage || !["image/jpeg", "image/png", "image/webp"].includes(input.photo.type) || input.photo.size > 8 * 1024 * 1024)) throw new Error("Choose a JPG, PNG or WebP photo under 8 MB.");
   const update: { displayName: string; location: string; photoURL?: string; updatedAt: ReturnType<typeof serverTimestamp> } = { displayName, location, updatedAt: serverTimestamp() };
-  if (input.photo) {
+  const photo = input.photo;
+  if (photo) {
     const photoRef = ref(storage!, `users/${uid}/profile/avatar`);
-    await uploadBytes(photoRef, input.photo, { contentType: input.photo.type });
+    await withEligibilityHandling(() => uploadBytes(photoRef, photo, { contentType: photo.type }));
     update.photoURL = await getDownloadURL(photoRef);
   }
-  await updateDoc(doc(db, "users", uid), update);
+  await withEligibilityHandling(() => updateDoc(doc(database, "users", uid), update));
   const profile = await getUserProfile(uid);
   if (!profile) throw new Error("Profile could not be loaded after saving.");
   return profile;

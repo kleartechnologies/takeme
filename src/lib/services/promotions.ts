@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 import type { Listing } from "@/types/marketplace";
 
@@ -44,30 +44,30 @@ function sellerService() {
 }
 
 export async function getPromotionPackages() {
-  return (await httpsCallable<void, { packages: PromotionPackage[]; paymentAvailable: boolean; pricingFinal: boolean }>(service(), "getPromotionPackages")()).data;
+  return (await marketplaceCallable<void, { packages: PromotionPackage[]; paymentAvailable: boolean; pricingFinal: boolean }>(service(), "getPromotionPackages")()).data;
 }
 export async function getMyPromotionRequests(listingId: string) {
-  return (await httpsCallable<{ listingId: string }, { promotions: SellerPromotion[] }>(sellerService(), "getMyPromotionRequests")({ listingId })).data.promotions;
+  return (await marketplaceCallable<{ listingId: string }, { promotions: SellerPromotion[] }>(sellerService(), "getMyPromotionRequests")({ listingId })).data.promotions;
 }
 export async function createPromotionRequest(listingId: string, packageId: string) {
-  return (await httpsCallable<{ listingId: string; packageId: string }, { promotionId: string; status: PromotionStatus; paymentAvailable: boolean }>(sellerService(), "createPromotionRequest")({ listingId, packageId })).data;
+  return (await marketplaceCallable<{ listingId: string; packageId: string }, { promotionId: string; status: PromotionStatus; paymentAvailable: boolean }>(sellerService(), "createPromotionRequest")({ listingId, packageId })).data;
 }
 export async function cancelPromotionRequest(promotionId: string) {
-  return (await httpsCallable<{ promotionId: string }, { status: PromotionStatus }>(sellerService(), "cancelPromotionRequest")({ promotionId })).data;
+  return (await marketplaceCallable<{ promotionId: string }, { status: PromotionStatus }>(sellerService(), "cancelPromotionRequest")({ promotionId })).data;
 }
 export async function getPromotionPlacements(listings: Listing[], context: { categoryId?: string; search?: string }) {
   if (!listings.length) return { orderIds: [], badges: {} as Record<string, PromotionBadge> };
   const candidateIds = listings.slice(0, 24).map((listing) => listing.id);
-  const result = (await httpsCallable<{ listingIds: string[]; categoryId?: string; search?: string }, { orderIds: string[]; badges: Record<string, PromotionBadge> }>(service(), "getPromotionPlacements")({ listingIds: candidateIds, ...context })).data;
+  const result = (await marketplaceCallable<{ listingIds: string[]; categoryId?: string; search?: string }, { orderIds: string[]; badges: Record<string, PromotionBadge> }>(service(), "getPromotionPlacements")({ listingIds: candidateIds, ...context })).data;
   const known = new Set(candidateIds);
   const orderIds = [...new Set(result.orderIds.filter((id) => known.has(id)))];
   for (const listing of listings) if (!orderIds.includes(listing.id)) orderIds.push(listing.id);
   return { orderIds, badges: result.badges };
 }
 export async function getFeaturedPromotions() {
-  return (await httpsCallable<void, { items: { listing: Listing; promotionId: string; type: PromotionType }[] }>(service(), "getFeaturedPromotions")()).data.items;
+  return (await marketplaceCallable<void, { items: { listing: Listing; promotionId: string; type: PromotionType }[] }>(service(), "getFeaturedPromotions")()).data.items;
 }
 export function trackPromotionIntent(type: "PROMOTION_IMPRESSION" | "PROMOTION_CLICK", promotion: PromotionBadge, listingId: string, context: "home" | "explore") {
   if (!auth?.currentUser || !functions) return;
-  void httpsCallable(service(), "trackPromotionEngagement")({ type, promotionId: promotion.promotionId, listingId, context }).catch(() => undefined);
+  void marketplaceCallable(service(), "trackPromotionEngagement")({ type, promotionId: promotion.promotionId, listingId, context }).catch(() => undefined);
 }

@@ -1,5 +1,5 @@
 import { Timestamp, doc, getDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, db, functions } from "@/lib/firebase/client";
 import type { ReportReason, ReportTargetType, RoleReputation, TrustSummary } from "@/types/marketplace";
 
@@ -21,6 +21,6 @@ export async function getTrustSummary(uid: string): Promise<TrustSummary | null>
 
 export async function submitReport(input: { targetType: ReportTargetType; targetId: string; reason: ReportReason; details: string; conversationId?: string }) {
   if (!functions || !auth?.currentUser) throw new Error("Sign in to submit a report.");
-  const result = await httpsCallable<typeof input, { reportId: string }>(functions, "submitMarketplaceReport")(input);
+  const result = await marketplaceCallable<typeof input, { reportId: string }>(functions, "submitMarketplaceReport")(input);
   return result.data.reportId;
 }

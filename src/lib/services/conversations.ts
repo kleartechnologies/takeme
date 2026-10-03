@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 
 export interface ConversationSummary {
@@ -13,7 +13,7 @@ export interface Page<T> { items: T[]; cursor: string | null; hasMore: boolean }
 
 async function invoke<T>(name: string, data: Record<string, unknown>): Promise<T> {
   if (!functions || !auth?.currentUser) throw new Error("Sign in to use messages.");
-  return (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
+  return (await marketplaceCallable<Record<string, unknown>, T>(functions, name)(data)).data;
 }
 export const openListingConversation = (listingId: string) => invoke<{ conversationId: string }>("openListingConversation", { listingId }).then((value) => value.conversationId);
 export const openTransactionConversation = (transactionId: string) => invoke<{ conversationId: string }>("openTransactionConversation", { transactionId }).then((value) => value.conversationId);

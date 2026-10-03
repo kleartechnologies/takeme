@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, resolutionCall, runGuardedTransaction } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, resolutionMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { protectedAuditEventId } from "./protected-transaction-domain";
@@ -42,7 +42,7 @@ export const getSellerPaymentOnboarding = onCall(async (request) => {
 });
 
 /** Deliberately non-operational until the provider, legal and rollout gates are approved. */
-export const createProtectedPayment = onCall(async (request) => {
+export const createProtectedPayment = marketplaceMutationCall(async (request) => {
   const userId = requireUid(request.auth?.uid);
   const transactionId = requiredId(request.data?.transactionId, "Transaction");
   const deal = await transactionRef(transactionId).get();
@@ -71,7 +71,7 @@ export function openProtectedDispute(tx: Transaction, transactionId: string, dea
   writeProtectedAuditEvent(tx, { transactionId, eventType: "dispute_opened", idempotencyKey: "buyer-open", actorType: "buyer", actorId: buyerId }, now);
 }
 
-export const respondToProtectedDispute = resolutionCall(async (request) => {
+export const respondToProtectedDispute = resolutionMutationCall(async (request) => {
   const sellerId = requireUid(request.auth?.uid);
   const transactionId = requiredId(request.data?.transactionId, "Transaction");
   const response = typeof request.data?.response === "string" ? request.data.response.trim().slice(0, 2000) : "";
@@ -93,7 +93,7 @@ export const respondToProtectedDispute = resolutionCall(async (request) => {
   });
 });
 
-export const addProtectedDisputeEvidence = resolutionCall(async (request) => {
+export const addProtectedDisputeEvidence = resolutionMutationCall(async (request) => {
   const userId = requireUid(request.auth?.uid);
   const transactionId = requiredId(request.data?.transactionId, "Transaction");
   const idempotencyKey = requiredId(request.data?.idempotencyKey, "Idempotency key");

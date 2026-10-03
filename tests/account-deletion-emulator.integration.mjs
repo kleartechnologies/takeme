@@ -1,3 +1,4 @@
+import { acceptDemoPolicies } from "./helpers/demo-eligibility.mjs";
 // Demo-only tests. Credentials are generated in memory and never logged or saved.
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -38,12 +39,22 @@ async function user(label) {
   const storage = clientStorage(app); connectStorageEmulator(storage, "127.0.0.1", 9199);
   const email = `${label}-${suffix}@example.test`, password = randomUUID() + "!Aa1";
   const credential = await createUserWithEmailAndPassword(a, email, password);
+  await acceptDemoPolicies(app);
   const u = { uid: credential.user.uid, a, f, firestore, storage, email, password, call: async (name, data = {}) => (await httpsCallable(f, name)(data)).data };
   users.push(u); await put(`users/${u.uid}`, { uid: u.uid, displayName: "Demo account", photoURL: null, location: "", createdAt: now(), updatedAt: now() }); return u;
 }
-async function request(u) { const status = await u.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION }); const op = await read(`accountDeletionOperations/${u.uid}`); if (op?.alias) aliases.add(op.alias); return status; }
+async function request(u) { const status = await u.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION, expectedOwnerUid: u.uid }); assert.equal(await exists(`users/${u.uid}/private/onboarding`), false, "Deletion initiation erases acceptance immediately"); const op = await read(`accountDeletionOperations/${u.uid}`); if (op?.alias) aliases.add(op.alias); return status; }
 async function deleted(u) { assert.equal((await read(`accountDeletionOperations/${u.uid}`)).state, "completed"); await assert.rejects(() => auth.getUser(u.uid), { code: "auth/user-not-found" }); assert.equal(await exists(`users/${u.uid}`), false); }
-async function seedOperation(u) { aliases.add(`deleted-${suffix}-${u.uid}`); await put(`accountLifecycles/${u.uid}`, { state: "deletion_pending", alias: `deleted-${suffix}-${u.uid}` }); await put(`accountDeletionOperations/${u.uid}`, { uid: u.uid, alias: `deleted-${suffix}-${u.uid}`, state: "pending", requestedAt: now(), attempts: 0, policyVersion: DELETION_POLICY_VERSION }); }
+async function seedOperation(u) {
+  const alias = `deleted-${suffix}-${u.uid}`; aliases.add(alias);
+  const lifecycle = db.doc(`accountLifecycles/${u.uid}`), operation = db.doc(`accountDeletionOperations/${u.uid}`);
+  tracked.add(lifecycle.path); tracked.add(operation.path);
+  await db.runTransaction(async tx => {
+    tx.set(lifecycle, { state: "deletion_pending", alias });
+    tx.delete(db.doc(`users/${u.uid}/private/onboarding`));
+    tx.set(operation, { uid: u.uid, alias, state: "pending", requestedAt: now(), attempts: 0, policyVersion: DELETION_POLICY_VERSION });
+  });
+}
 async function upload(path) { storagePaths.add(path); await bucket.file(path).save(Buffer.from("emulator-test-object"), { resumable: false, metadata: { contentType: "image/png" } }); }
 function listing(owner, extra = {}) { return { id: "demo", sellerId: owner.uid, title: "Demo camera", description: "Synthetic emulator listing only", categoryId: "electronics", condition: "Good", price: 100, listingType: "buy_now", status: "active", imageUrls: [], privacyVersion: 2, publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" }, location: "Jitra, Kedah", createdAt: now(), updatedAt: now(), ...extra }; }
 function auction(owner, bidder, count) { return listing(owner, { listingType: "auction", auctionStatus: "active", startingBid: 10000, currentBid: count ? 12000 : 0, minimumBidIncrement: 500, currentBidderId: count ? bidder.uid : null, winnerId: null, bidCount: count, auctionStartAt: Timestamp.fromMillis(Date.now() - 60000), auctionEndAt: Timestamp.fromMillis(Date.now() + 3600000) }); }
@@ -57,12 +68,22 @@ try {
   const controlBefore = JSON.stringify(await read(`users/${control.uid}`));
   await check("unauthenticated, recent-auth, owner-only input and policy validation", async () => {
     const u = await user("auth-safety");
-    const response = await fetch("http://127.0.0.1:5001/demo-takeme/asia-southeast1/requestAccountDeletion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION } }) });
+    const response = await fetch("http://127.0.0.1:5001/demo-takeme/asia-southeast1/requestAccountDeletion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION, expectedOwnerUid: u.uid } }) });
     assert.equal(response.status, 401);
-    await assert.rejects(() => u.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION, uid: control.uid }));
+    for (const name of ["requestAccountDeletion", "retryAccountDeletion"]) {
+      const data = name === "requestAccountDeletion" ? { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION } : {};
+      for (const expectedOwnerUid of [undefined, control.uid]) {
+        await assert.rejects(() => u.call(name, { ...data, ...(expectedOwnerUid ? { expectedOwnerUid } : {}) }), error => error.details?.reason === "account-changed");
+        assert.equal(await exists(`accountLifecycles/${u.uid}`), false);
+        assert.equal(await exists(`accountDeletionOperations/${u.uid}`), false);
+        assert.ok(await auth.getUser(u.uid));
+        assert.equal(await exists(`users/${u.uid}/private/onboarding`), true);
+      }
+    }
+    await assert.rejects(() => u.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION, expectedOwnerUid: u.uid, uid: control.uid }));
     const token = await u.a.currentUser.getIdToken(); const parts = token.split("."); const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString()); claims.auth_time = Math.floor(Date.now() / 1000) - 600;
     const stale = `${parts[0]}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.`;
-    const staleResponse = await fetch("http://127.0.0.1:5001/demo-takeme/asia-southeast1/requestAccountDeletion", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${stale}` }, body: JSON.stringify({ data: { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION } }) });
+    const staleResponse = await fetch("http://127.0.0.1:5001/demo-takeme/asia-southeast1/requestAccountDeletion", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${stale}` }, body: JSON.stringify({ data: { confirmation: "DELETE", policyVersion: DELETION_POLICY_VERSION, expectedOwnerUid: u.uid } }) });
     assert.equal(staleResponse.status, 400); assert.equal((await staleResponse.json()).error.details.reason, "recent-auth-required");
     await reauthenticateWithCredential(u.a.currentUser, EmailAuthProvider.credential(u.email, u.password)); await u.a.currentUser.getIdToken(true);
     assert.equal((await request(u)).state, "completed"); await deleted(u);
@@ -121,6 +142,7 @@ try {
   await check("accepted unfinished deal waits; existing two-party completion remains usable", async () => {
     const u = await user("deal"); const id = `deal-${suffix}`; const lid = `deal-listing-${suffix}`; await put(`listings/${lid}`, listing(control, { status: "ended" })); await put(`transactions/${id}`, deal(u, control, lid)); await put(`listingDeals/${lid}`, { transactionId: id, status: "in_progress" });
     assert.equal((await request(u)).state, "pending"); await assert.rejects(() => u.call("createFixedListingDraft", {})); await assert.rejects(() => u.call("submitOffer", {}));
+    await assert.rejects(() => uploadBytes(storageRef(u.storage, `users/${u.uid}/profile/stale-token.png`), new Uint8Array([1]), { contentType: "image/png" }), /unauthorized|permission/i);
     assert.ok((await u.call("getReputationPolicy")).thresholds); await assert.rejects(() => control.call("openTransactionConversation", { transactionId: id }));
     const view = await u.call("getTransactionDetail", { transactionId: id }); assert.equal(view.transaction.buyerId, u.uid);
     await u.call("confirmTransactionCompletion", { transactionId: id }); await control.call("confirmTransactionCompletion", { transactionId: id }); assert.equal((await read(`transactions/${id}`)).status, "completed"); await processAccountDeletion(u.uid); await deleted(u); assert.equal(await exists(`trustSummaries/${u.uid}`), false);

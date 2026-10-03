@@ -2,10 +2,13 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { marketplaceCall, runGuardedTransaction } from "./account-lifecycle";
+import { acceptanceRef, currentReleasePolicy, hasCurrentAcceptance, initializeDemoPolicyMirror, policyMirrorMatches, releasePolicyRef, runtimePolicyContext } from "./account-eligibility";
+import { demoReleasePolicy, type ReleasePolicy } from "./release-policy";
 
-// Local draft acceptance only. Publication approval must precede any production replacement.
-export const AUTH_POLICY_VERSION = "1.0-draft";
-const setupRef = (uid: string) => getFirestore().doc(`users/${uid}/private/onboarding`);
+// Compatibility export for existing demo fixtures; the source lives in release-policy.ts.
+export const AUTH_POLICY_VERSION = demoReleasePolicy.termsVersion;
+const setupRef = acceptanceRef;
+export { hasCurrentAcceptance } from "./account-eligibility";
 
 export function requireOnboardingDemo() {
   const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
@@ -14,46 +17,51 @@ export function requireOnboardingDemo() {
   }
 }
 
-export function hasCurrentAcceptance(data: DocumentData | undefined) {
-  return data?.termsVersion === AUTH_POLICY_VERSION && data?.privacyVersion === AUTH_POLICY_VERSION
-    && !!data.termsAcceptedAt?.toMillis && !!data.privacyAcceptedAt?.toMillis && !!data.age18ConfirmedAt?.toMillis
-    && data.acceptanceSource === "web";
-}
-
-export function validateAcceptance(data: DocumentData) {
+export function validateAcceptance(data: DocumentData, policy: ReleasePolicy = demoReleasePolicy) {
   if (data.acceptTerms !== true || data.acceptPrivacy !== true || data.confirmAge18 !== true) throw new HttpsError("invalid-argument", "Confirm that you are 18 or older and accept both policies.");
-  if (data.termsVersion !== AUTH_POLICY_VERSION || data.privacyVersion !== AUTH_POLICY_VERSION) throw new HttpsError("failed-precondition", "Read and accept the current policy versions.");
+  if (data.termsVersion !== policy.termsVersion || data.privacyVersion !== policy.privacyVersion) throw new HttpsError("failed-precondition", "Read and accept the current policy versions.");
 }
 
 export const getAccountSetupStatus = onCall(async request => {
-  requireOnboardingDemo();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
   const uid = request.auth.uid;
   let identity;
   try { identity = await getAuth().getUser(uid); }
   catch { throw new HttpsError("unauthenticated", "Sign in again."); }
   if (identity.disabled) throw new HttpsError("unauthenticated", "Sign in again.");
+  await initializeDemoPolicyMirror();
   return getFirestore().runTransaction(async tx => {
     const lifecycle = await tx.get(getFirestore().doc(`accountLifecycles/${uid}`));
     if (lifecycle.exists) return { step: "deletion" };
+    const context = runtimePolicyContext();
+    const mirror = await tx.get(releasePolicyRef());
+    const policyAvailable = policyMirrorMatches(mirror.data(), context);
+    const metadata = {
+      policyAvailable,
+      termsVersion: policyAvailable ? context!.policy.termsVersion : null,
+      privacyVersion: policyAvailable ? context!.policy.privacyVersion : null,
+      minimumAge: 18,
+    };
+    if (!policyAvailable) return { step: "acceptance", ...metadata };
     const setup = (await tx.get(setupRef(uid))).data();
-    if (!hasCurrentAcceptance(setup)) return { step: "acceptance" };
+    if (!hasCurrentAcceptance(setup, context!.policy)) return { step: "acceptance", ...metadata };
     const profile = (await tx.get(getFirestore().doc(`users/${uid}`))).data();
-    if (!setup?.profileCompletedAt || !profile || typeof profile.displayName !== "string" || Array.from(profile.displayName.trim()).length < 2) return { step: "profile" };
-    return { step: setup.welcomeCompletedAt ? "ready" : "welcome" };
+    if (!setup?.profileCompletedAt || !profile || typeof profile.displayName !== "string" || Array.from(profile.displayName.trim()).length < 2) return { step: "profile", ...metadata };
+    return { step: setup.welcomeCompletedAt ? "ready" : "welcome", ...metadata };
   });
 });
 
 export const acceptWebPolicies = marketplaceCall(async request => {
-  requireOnboardingDemo();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
-  validateAcceptance(request.data ?? {});
+  await initializeDemoPolicyMirror();
   const ref = setupRef(request.auth.uid);
   await runGuardedTransaction(getFirestore(), async tx => {
+    const policy = await currentReleasePolicy(tx);
+    validateAcceptance(request.data ?? {}, policy);
     const previous = (await tx.get(ref)).data();
-    if (hasCurrentAcceptance(previous)) return; // Retry never changes the original acceptance time.
+    if (hasCurrentAcceptance(previous, policy)) return; // Retry never changes the original acceptance time.
     tx.set(ref, {
-      termsVersion: AUTH_POLICY_VERSION, privacyVersion: AUTH_POLICY_VERSION,
+      termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,
       termsAcceptedAt: FieldValue.serverTimestamp(), privacyAcceptedAt: FieldValue.serverTimestamp(),
       age18ConfirmedAt: FieldValue.serverTimestamp(), acceptanceSource: "web",
       ...(previous?.profileCompletedAt ? { profileCompletedAt: previous.profileCompletedAt } : {}),
@@ -64,13 +72,13 @@ export const acceptWebPolicies = marketplaceCall(async request => {
 });
 
 export const completeFirstTimeProfile = marketplaceCall(async request => {
-  requireOnboardingDemo();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
   const uid = request.auth.uid, ref = setupRef(uid);
   await runGuardedTransaction(getFirestore(), async tx => {
+    const policy = await currentReleasePolicy(tx);
     const setup = (await tx.get(ref)).data();
     const profile = (await tx.get(getFirestore().doc(`users/${uid}`))).data();
-    if (!hasCurrentAcceptance(setup)) throw new HttpsError("failed-precondition", "Accept the policies first.");
+    if (!hasCurrentAcceptance(setup, policy)) throw new HttpsError("failed-precondition", "Accept the policies first.");
     const length = typeof profile?.displayName === "string" ? Array.from(profile.displayName.trim()).length : 0;
     if (length < 2 || length > 80) throw new HttpsError("failed-precondition", "Save a display name of 2–80 characters first.");
     if (!setup?.profileCompletedAt) tx.update(ref, { profileCompletedAt: FieldValue.serverTimestamp() });
@@ -79,12 +87,12 @@ export const completeFirstTimeProfile = marketplaceCall(async request => {
 });
 
 export const finishAccountWelcome = marketplaceCall(async request => {
-  requireOnboardingDemo();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
   const ref = setupRef(request.auth.uid);
   await runGuardedTransaction(getFirestore(), async tx => {
+    const policy = await currentReleasePolicy(tx);
     const setup = (await tx.get(ref)).data();
-    if (!hasCurrentAcceptance(setup) || !setup?.profileCompletedAt) throw new HttpsError("failed-precondition", "Complete account setup first.");
+    if (!hasCurrentAcceptance(setup, policy) || !setup?.profileCompletedAt) throw new HttpsError("failed-precondition", "Complete account setup first.");
     if (!setup.welcomeCompletedAt) tx.update(ref, { welcomeCompletedAt: FieldValue.serverTimestamp() });
   });
   return { completed: true };

@@ -18,7 +18,8 @@ const { initializeApp: initializeAdmin, deleteApp: deleteAdmin } = require("fire
 const { getFirestore: getAdminFirestore, Timestamp } = require("firebase-admin/firestore");
 const { getAuth: getAdminAuth } = require("firebase-admin/auth");
 const admin = initializeAdmin({ projectId }); const db = getAdminFirestore();
-const clients = [], policy = { acceptTerms: true, acceptPrivacy: true, confirmAge18: true, termsVersion: "1.0-draft", privacyVersion: "1.0-draft" };
+const { demoReleasePolicy } = require("../functions/lib/release-policy.js");
+const clients = [], policy = { acceptTerms: true, acceptPrivacy: true, confirmAge18: true, termsVersion: demoReleasePolicy.termsVersion, privacyVersion: demoReleasePolicy.privacyVersion };
 let passed = 0;
 async function check(label, fn) { await fn(); console.log(`PASS ${++passed}: ${label}`); }
 async function client(provider = "password") {
@@ -113,7 +114,7 @@ try {
   });
   await check("real account deletion removes the private acceptance record and Auth identity", async () => {
     assert.equal((await setupRef(google).get()).exists, true);
-    assert.equal((await google.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: "v1-2026-10-03" })).state, "completed");
+    assert.equal((await google.call("requestAccountDeletion", { confirmation: "DELETE", policyVersion: "v1-2026-10-03", expectedOwnerUid: google.uid })).state, "completed");
     assert.equal((await setupRef(google).get()).exists, false);
     await assert.rejects(() => getAdminAuth().getUser(google.uid), { code: "auth/user-not-found" });
   });

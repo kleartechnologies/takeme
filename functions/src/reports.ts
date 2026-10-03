@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
+import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 
@@ -11,7 +11,7 @@ const reasons: Record<string, string[]> = {
 };
 function id(value: unknown) { if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) throw new HttpsError("invalid-argument", "Invalid target."); return value; }
 
-export const submitMarketplaceReport = onCall(async (request) => {
+export const submitMarketplaceReport = marketplaceMutationCall(async (request) => {
   const reporterId = request.auth?.uid;
   if (!reporterId) throw new HttpsError("unauthenticated", "Sign in to report content.");
   const targetType = String(request.data?.targetType ?? "");

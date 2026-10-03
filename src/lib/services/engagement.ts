@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 import { announceFollowChange } from "@/lib/marketplace-state-events";
 
@@ -11,7 +11,7 @@ export type FollowingSeller = { sellerId: string; displayName: string; photoURL:
 
 async function call<T>(name: string, payload: Record<string, unknown> = {}, publicCall = false): Promise<T> {
   if (!functions || (!publicCall && !auth?.currentUser)) throw new Error("Sign in to manage engagement.");
-  return (await httpsCallable<Record<string, unknown>, T>(functions, name)(payload)).data;
+  return (await marketplaceCallable<Record<string, unknown>, T>(functions, name)(payload)).data;
 }
 
 export const getUnreadCount = () => call<{ unreadCount: number }>("getUnreadCount");

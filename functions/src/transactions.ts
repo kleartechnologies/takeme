@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, resolutionCall, runGuardedTransaction, accountIsActive, visibleParticipantId } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, resolutionCall, resolutionMutationCall, runGuardedTransaction, accountIsActive, visibleParticipantId } from "./account-lifecycle";
 import { monthsAfter } from "./account-deletion-retention";
 import { createHash } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
@@ -52,7 +52,7 @@ function requireLiveBuyNow(data: DocumentData | undefined, sellerId?: string) {
 }
 
 /** A request is an offer, never a transaction or payment. */
-export const submitOffer = onCall(async (request) => {
+export const submitOffer = marketplaceMutationCall(async (request) => {
   const buyerId = uid(request.auth?.uid);
   const listingId = id(request.data?.listingId, "Listing");
   const type = request.data?.type;
@@ -83,7 +83,7 @@ export const submitOffer = onCall(async (request) => {
 });
 
 /** Seller accepts/rejects/counters; buyer accepts a counter or withdraws. */
-export const respondToOffer = onCall(async (request) => {
+export const respondToOffer = marketplaceMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const offerId = id(request.data?.offerId, "Offer");
   const action = request.data?.action;
@@ -179,7 +179,7 @@ export const onAuctionWonCreateTransaction = onDocumentUpdated("listings/{listin
 });
 
 /** Two independent confirmations atomically grant completion credit exactly once. */
-export const confirmTransactionCompletion = resolutionCall(async (request) => {
+export const confirmTransactionCompletion = resolutionMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const ref = dealRef(transactionId);
@@ -221,7 +221,7 @@ export const confirmTransactionCompletion = resolutionCall(async (request) => {
   });
 });
 
-export const requestTransactionCancellation = resolutionCall(async (request) => {
+export const requestTransactionCancellation = resolutionMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const reason = typeof request.data?.reason === "string" ? request.data.reason.trim().slice(0, 500) : "";
@@ -248,7 +248,7 @@ export const requestTransactionCancellation = resolutionCall(async (request) => 
   });
 });
 
-export const declineTransactionCancellation = resolutionCall(async (request) => {
+export const declineTransactionCancellation = resolutionMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const ref = dealRef(transactionId);
@@ -262,7 +262,7 @@ export const declineTransactionCancellation = resolutionCall(async (request) => 
   });
 });
 
-export const disputeTransaction = resolutionCall(async (request) => {
+export const disputeTransaction = resolutionMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const reason = typeof request.data?.reason === "string" ? request.data.reason.trim().slice(0, 1000) : "";
@@ -336,7 +336,7 @@ function applyVisibleReview(tx: Transaction, reviewId: string, data: DocumentDat
 }
 
 /** Immutable private submissions; only the double-blind release writes public reviews/ratings. */
-export const submitTransactionReview = onCall(async (request) => {
+export const submitTransactionReview = marketplaceMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId, "Transaction");
   const rating = request.data?.rating;
@@ -410,7 +410,7 @@ export const getPublicReviews = onCall(async (request) => {
     tags: item.data().tags, comment: item.data().comment, createdAt: iso(item.data().createdAt) })) };
 });
 
-export const reportPublicReview = onCall(async (request) => {
+export const reportPublicReview = marketplaceMutationCall(async (request) => {
   const reporterId = uid(request.auth?.uid);
   const reviewId = id(request.data?.reviewId, "Review");
   const reason = request.data?.reason;

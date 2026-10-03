@@ -1,8 +1,15 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { validatePublicLocation, displayPublicLocation, publishableLocation, isPublicListingSafe } = require("../lib/general-location.js");
+const { validatePublicLocation, displayPublicLocation, publishableLocation, isPublicListingSafe, publicProfileLocation } = require("../lib/general-location.js");
 
 const publicLocation = { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" };
+
+test("Following only projects a validated public city/state from legacy profiles", () => {
+  assert.equal(publicProfileLocation("Jitra, Kedah"), "Jitra, Kedah");
+  for (const value of ["No 99 Jalan Synthetic, Kedah", "jLn Synthetic, Kedah", "lRg Synthetic, Kedah", "TaMaN Synthetic, Kedah", "Condo Synthetic, Kedah", "Unit Alpha, Kedah", "Jitra", "Jitra, Unknown", undefined]) {
+    assert.equal(publicProfileLocation(value), "");
+  }
+});
 
 test("server accepts only structured general Malaysian locations", () => {
   assert.equal(displayPublicLocation(validatePublicLocation(publicLocation)), "Jitra, Kedah");

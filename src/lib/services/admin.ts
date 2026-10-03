@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 
 export type AdminSection = "overview" | "users" | "listings" | "transactions" | "revenue" | "intelligence" | "engagement" | "promotions" | "reviews" | "reports" | "settings";
@@ -19,7 +19,7 @@ export interface AdminRecord { row: AdminRow; detail: Record<string, unknown> }
 
 async function invoke<T>(name: string, data: Record<string, unknown>): Promise<T> {
   if (!auth?.currentUser || !functions) throw new Error("Administrator sign-in is required.");
-  return (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data;
+  return (await marketplaceCallable<Record<string, unknown>, T>(functions, name)(data)).data;
 }
 export const getAdminMetrics = (section: AdminSection, preset: AdminPreset, from?: string, to?: string) => invoke<AdminMetrics>("getAdminMetrics", { section, preset, from, to });
 export const getAdminPage = (section: AdminList, cursor?: string, status?: string) => invoke<AdminPage>("getAdminPage", { section, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}) });

@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -5,9 +6,9 @@ import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "fi
 import { connectFirestoreEmulator, doc, getDoc, getFirestore, serverTimestamp, setDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
-const projectId = "demo-takeme-engagement";
-process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:18080";
-process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:19099";
+const projectId = "demo-takeme";
+process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 process.env.GCLOUD_PROJECT = projectId;
 const requireFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
 const { getFirestore: getAdminFirestore, Timestamp } = requireFunctions("firebase-admin/firestore");
@@ -19,10 +20,11 @@ const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.c
 async function client(label) {
   const app = initializeApp(config, `${label}-${suffix}`);
   const auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app, "asia-southeast1");
-  connectAuthEmulator(auth, "http://127.0.0.1:19099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 18080);
-  connectFunctionsEmulator(functions, "127.0.0.1", 15001);
-  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword());
+  await acceptDemoPolicies(app);
   await admin.doc(`users/${auth.currentUser.uid}`).set({ uid: auth.currentUser.uid, displayName: `${label} user`, photoURL: null, location: "Kuala Lumpur", createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
   return { app, auth, db, functions, uid: auth.currentUser.uid };
 }
@@ -32,7 +34,8 @@ async function eventually(check, label, attempts = 80) {
   throw new Error(`Timed out waiting for ${label}`);
 }
 async function drainJobs() {
-  for (let i = 0; i < 12; i += 1) {
+  // Existing demo jobs may precede this suite's jobs; keep the drain bounded.
+  for (let i = 0; i < 500; i += 1) {
     const jobs = await admin.collection("engagementJobs").limit(1).get();
     if (jobs.empty) return;
     await functionsModule.processEngagementJobs.run();

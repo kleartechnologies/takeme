@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
@@ -12,7 +13,8 @@ connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
 connectFirestoreEmulator(db, "127.0.0.1", 8080);
 
 try {
-  const credential = await createUserWithEmailAndPassword(auth, `provider-profile-${Date.now()}@example.test`, "TestPass123!");
+  const credential = await createUserWithEmailAndPassword(auth, `provider-profile-${Date.now()}@example.test`, createDemoPassword());
+  await acceptDemoPolicies(app);
   const profileRef = doc(db, "users", credential.user.uid);
   await setDoc(profileRef, {
     ...newPublicProfileFields({ uid: credential.user.uid, displayName: " X ", photoURL: null }),
@@ -20,7 +22,8 @@ try {
   });
   assert.equal((await getDoc(profileRef)).data()?.displayName, "TAKEME member");
   await assert.rejects(() => updateDoc(profileRef, { displayName: "X" }), /permission/i);
-  const longName = await createUserWithEmailAndPassword(auth, `long-provider-profile-${Date.now()}@example.test`, "TestPass123!");
+  const longName = await createUserWithEmailAndPassword(auth, `long-provider-profile-${Date.now()}@example.test`, createDemoPassword());
+  await acceptDemoPolicies(app);
   const longRef = doc(db, "users", longName.user.uid);
   await setDoc(longRef, {
     ...newPublicProfileFields({ uid: longName.user.uid, displayName: "A".repeat(81), photoURL: null }),

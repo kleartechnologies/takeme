@@ -22,6 +22,15 @@ export function displayPublicLocation(location: PublicLocation) {
   return `${location.districtOrCity}, ${location.state}`;
 }
 
+/** Legacy profiles may contain an exact address; project only validated city/state. */
+export function publicProfileLocation(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const parts = value.split(", ");
+  if (parts.length !== 2) return "";
+  const location = validatePublicLocation({ districtOrCity: parts[0], state: parts[1], country: "Malaysia" });
+  return location && displayPublicLocation(location) === value ? value : "";
+}
+
 export function publishableLocation(data: Record<string, unknown>): PublicLocation | null {
   const location = validatePublicLocation(data.publicLocation);
   if (!location || data.location !== displayPublicLocation(location)) return null;

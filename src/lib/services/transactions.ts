@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 import type { MarketplaceOffer, MarketplaceTransaction, PaymentMethod, ProtectedTransactionDetail, PublicReview, ReputationTier, SellerPaymentOnboarding } from "@/types/marketplace";
 
@@ -8,7 +8,7 @@ function service(authenticated = true) {
   return functions;
 }
 async function invoke<T>(name: string, payload: Record<string, unknown> = {}, authenticated = true): Promise<T> {
-  return (await httpsCallable<Record<string, unknown>, T>(service(authenticated), name)(payload)).data;
+  return (await marketplaceCallable<Record<string, unknown>, T>(service(authenticated), name)(payload)).data;
 }
 
 export interface ReputationPolicy {

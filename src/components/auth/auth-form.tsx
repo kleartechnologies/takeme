@@ -12,7 +12,7 @@ import { checkSignupPassword, loginWithEmail, loginWithGoogle, registerWithEmail
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
 import { passwordPolicyHelp } from "@/lib/firebase/password-policy";
 import { safeAuthNext, setupDestination } from "@/lib/auth-routing";
-import { acceptWebPolicies, isLocalAccountSetup } from "@/lib/services/account-setup";
+import { acceptWebPolicies, isLocalAccountSetup, accountPolicyAvailable, accountReleasePolicy } from "@/lib/services/account-setup";
 import styles from "./auth.module.css";
 
 type Mode = "login" | "register" | "forgot";
@@ -26,13 +26,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [policyHelp, setPolicyHelp] = useState("Password requirements are checked securely when you create your account.");
   const errorRef = useRef<HTMLDivElement>(null), submitting = useRef(false);
   const nextPath = safeAuthNext(useSearchParams().get("next"));
-  const local = isLocalAccountSetup();
+  const local = isLocalAccountSetup(), available = accountPolicyAvailable(), policy = accountReleasePolicy();
   useEffect(() => {
-    if (mode !== "register" || !local) return;
+    if (mode !== "register" || !available) return;
     let active = true;
     checkSignupPassword("").then(status => { if (active) setPolicyHelp(passwordPolicyHelp(status.passwordPolicy)); }).catch(() => {});
     return () => { active = false; };
-  }, [mode, local]);
+  }, [mode, available]);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   const href = (path: string) => `${path}?next=${encodeURIComponent(nextPath)}`;
   function validationError(message: string) {
@@ -42,7 +42,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
   async function resume() {
     const setup = await refreshSetup();
-    router.replace(setup ? setupDestination(setup.step, nextPath) : nextPath);
+    if (!setup) throw new Error("Account status could not be checked.");
+    router.replace(setupDestination(setup.step, nextPath));
   }
   async function retrySetup() {
     if (submitting.current) return;
@@ -59,7 +60,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return validationError("Enter a valid email address.");
     if (mode !== "forgot" && !password) return validationError("Enter your password.");
     if (mode === "register" && (!age || !agreed)) return validationError("Confirm that you are at least 18 and agree to the Terms of Service and Privacy Policy.");
-    if (mode === "register" && !local) return validationError("Account creation will be available after TAKEME’s policies are finalised.");
+    if (mode === "register" && !available) return validationError("Account creation will be available after TAKEME’s policies are finalised.");
     const beforeUid = auth?.currentUser?.uid;
     submitting.current = true; setBusy("email");
     try {
@@ -92,7 +93,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     <p className={styles.eyebrow}>{mode === "forgot" ? "A little help getting back in" : "Welcome to TAKEME"}</p>
     <h1 className={styles.heading}>{mode === "login" ? "Welcome back" : mode === "register" ? "Find your next great thing" : "Forgot password?"}</h1>
     <p className={styles.intro}>{mode === "login" ? "Log in to pick up where you left off." : mode === "register" ? "Create your account. Your marketplace profile comes next." : "Enter your email and we’ll send you a password-reset link."}</p>
-    {mode !== "forgot" && <><button className={styles.google} type="button" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !local)} onClick={() => void google()}>{busy === "google" ? <LoaderCircle size={20} className="animate-spin" /> : <Image src="/brand/google-g.png" alt="" width={20} height={20} />}<span>{busy === "google" ? "Connecting…" : "Continue with Google"}</span></button><div className={styles.divider}>or use your email</div></>}
+    {mode !== "forgot" && <><button className={styles.google} type="button" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !available)} onClick={() => void google()}>{busy === "google" ? <LoaderCircle size={20} className="animate-spin" /> : <Image src="/brand/google-g.png" alt="" width={20} height={20} />}<span>{busy === "google" ? "Connecting…" : "Continue with Google"}</span></button><div className={styles.divider}>or use your email</div></>}
     <form className={styles.form} onSubmit={event => void submit(event)} noValidate aria-busy={!!busy}>
       {sent && <div className={styles.success} role="status"><strong>Check your email</strong>If an account exists for that address, you’ll receive reset instructions.</div>}
       <label className={styles.field} htmlFor="auth-email">Email<input id="auth-email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} inputMode="email" required disabled={!!busy || loading} value={email} onChange={event => { setEmail(event.target.value); setSent(false); }} placeholder="you@example.com" /></label>
@@ -101,9 +102,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
       {mode === "register" && <PolicyCheckboxes age={age} agreed={agreed} setAge={setAge} setAgreed={setAgreed} disabled={!!busy || loading} />}
       {error && <div ref={errorRef} tabIndex={-1} className={styles.error} role="alert">{error}</div>}
       {!isFirebaseConfigured && <p className={styles.error} role="status">Sign-in is temporarily unavailable. Please try again later.</p>}
-      <button className={styles.primary} type="submit" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !local)}>{busy === "email" && <LoaderCircle className="animate-spin" size={18} />}{busy === "email" ? (mode === "login" ? "Signing in…" : mode === "register" ? "Creating account…" : "Sending…") : recoverSetup || (error && /connect|connection/i.test(error)) ? "Retry" : mode === "login" ? "Log in" : mode === "register" ? "Create account" : sent ? "Send another link" : "Send reset link"}</button>
+      <button className={styles.primary} type="submit" disabled={!!busy || loading || !isFirebaseConfigured || (mode === "register" && !available)}>{busy === "email" && <LoaderCircle className="animate-spin" size={18} />}{busy === "email" ? (mode === "login" ? "Signing in…" : mode === "register" ? "Creating account…" : "Sending…") : recoverSetup || (error && /connect|connection/i.test(error)) ? "Retry" : mode === "login" ? "Log in" : mode === "register" ? "Create account" : sent ? "Send another link" : "Send reset link"}</button>
     </form>
-    {mode === "register" && <p className={styles.draft}>Local preview · policies v1.0-draft. Legal publication and production signup acceptance remain blocked.</p>}
+    {mode === "register" && <p className={styles.draft}>{local ? `Local preview · Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}. Acceptance is for demo accounts only.` : available ? `Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}.` : "Account creation is awaiting final policy publication and launch approval."}</p>}
     <p className={styles.switch}>{mode === "login" ? <>New to TAKEME? <Link href={href("/register")}>Create account</Link></> : mode === "register" ? <>Already have an account? <Link href={href("/login")}>Log in</Link></> : <Link href={href("/login")}>Back to log in</Link>}</p>
     {user && <p className={styles.switch}><button className={styles.textButton} disabled={!!busy || loading} onClick={() => void retrySetup()}>Continue with your signed-in account</button></p>}
   </AuthShell>;

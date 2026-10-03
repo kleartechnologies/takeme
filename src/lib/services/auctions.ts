@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { functions } from "@/lib/firebase/client";
 import type { AuctionListingInput, AuctionStatus } from "@/types/marketplace";
 
@@ -26,7 +26,7 @@ function callableError(error: unknown) {
 
 async function call<Request, Response>(name: string, data: Request) {
   try {
-    const result = await httpsCallable<Request, Response>(requireFunctions(), name)(data);
+    const result = await marketplaceCallable<Request, Response>(requireFunctions(), name)(data);
     return result.data;
   } catch (error) {
     throw callableError(error);

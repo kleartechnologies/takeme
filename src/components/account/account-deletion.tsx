@@ -6,7 +6,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { auth } from "@/lib/firebase/client";
 import { logout } from "@/lib/firebase/auth";
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
-import { getAccountDeletionStatus, initiateAccountDeletion, reauthenticateForDeletion, type DeletionStatus } from "@/lib/services/account-deletion";
+import { marketplaceOperator } from "@/content/operator";
+import { assertCurrentDeletionOwner, getAccountDeletionAvailability, getAccountDeletionStatus, initiateAccountDeletion, reauthenticateForDeletion, type DeletionStatus } from "@/lib/services/account-deletion";
 
 const blockers: Record<string, string> = {
   live_auction: "An auction with existing bids must finish without changing the bids or winner.",
@@ -41,13 +42,24 @@ export function AccountDeletionFlow() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [statusUnavailable, setStatusUnavailable] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [availabilityError, setAvailabilityError] = useState(false);
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
   const statusHeading = useRef<HTMLHeadingElement>(null);
   const providers = user?.providerData.map((provider) => provider.providerId) ?? [];
   const method = selectedMethod ?? (providers.includes("password") ? "password" : "google");
   const requested = visibleStatus && visibleStatus.state !== "not_requested" && visibleStatus.state !== "completed";
 
   useEffect(() => {
-    if (!user) return;
+    let active = true;
+    void getAccountDeletionAvailability().then(result => {
+      if (active) { setAvailable(result.available); setAvailabilityError(false); }
+    }).catch(() => { if (active) { setAvailable(null); setAvailabilityError(true); } });
+    return () => { active = false; };
+  }, [configured, availabilityRevision]);
+
+  useEffect(() => {
+    if (!user || available !== true) return;
     let active = true;
     const read = async () => {
       try { const next = await getAccountDeletionStatus(); if (active && auth?.currentUser?.uid === user.uid) { setStatusOwner(user.uid); setStatus(next); setStatusUnavailable(false); if (next.state === "completed") { await logout(); requestAnimationFrame(() => statusHeading.current?.focus()); } } }
@@ -56,28 +68,30 @@ export function AccountDeletionFlow() {
     void read();
     const timer = setInterval(() => void read(), 10_000);
     return () => { active = false; clearInterval(timer); };
-  }, [user]);
+  }, [user, available]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!user || busy || confirmation !== "DELETE") return;
+    if (!user || available !== true || busy || confirmation !== "DELETE") return;
     setBusy(true); setError("");
     try {
+      assertCurrentDeletionOwner(user.uid);
       await reauthenticateForDeletion(user, method, password);
       setPassword("");
-      const next = await initiateAccountDeletion(Boolean(requested));
+      assertCurrentDeletionOwner(user.uid);
+      const next = await initiateAccountDeletion(user.uid, Boolean(requested));
       if (auth?.currentUser?.uid !== user.uid) return;
       setStatusOwner(user.uid); setStatus(next); setConfirmation("");
       if (next.state === "completed") await logout();
       requestAnimationFrame(() => statusHeading.current?.focus());
-    } catch (caught) { setError(friendlyAuthError(caught)); }
+    } catch (caught) { setConfirmation(""); setError(friendlyAuthError(caught)); }
     finally { setPassword(""); setBusy(false); }
   }
 
   if (visibleStatus?.state === "completed") return <section className="profile-settings-card mt-6" aria-live="polite"><h2 ref={statusHeading} tabIndex={-1} className="text-lg font-semibold">Your TAKEME account was deleted</h2><p className="mt-3 text-sm leading-6">Required live-data cleanup and Firebase Auth account deletion succeeded. Only the limited history and restricted evidence described above may remain until their retention limits expire.</p></section>;
   return <section className="profile-settings-card mt-6" aria-busy={busy}>
     <h2 ref={statusHeading} tabIndex={-1} className="text-lg font-semibold">{requested ? "Account deletion progress" : "Request account deletion"}</h2>
-    {loading ? <p role="status" className="mt-3">Loading your account…</p> : !configured ? <p role="alert" className="mt-3">Account deletion and sign-in are temporarily unavailable.</p> : !user ? <div className="mt-4 space-y-3"><p className="text-sm leading-6">Sign in securely with your existing email/password or Google account. Your account information is shown only after authentication.</p><Link href="/login?next=/account-deletion" className="button-primary min-h-12 px-5">Sign in to request deletion</Link></div> : <>
+    {loading ? <p role="status" className="mt-3">Loading your account…</p> : !configured ? <p role="alert" className="mt-3">Account deletion and sign-in are temporarily unavailable.</p> : available !== true ? <div className="mt-4 space-y-3"><p role={availabilityError ? "alert" : "status"} className="text-sm leading-6">{availabilityError ? "Deletion availability could not be checked. No deletion request has been submitted." : available === null ? "Checking deletion availability…" : "Account deletion is not enabled for this environment. No deletion request has been submitted. Contact TAKEME support for help."}</p>{availabilityError && <button className="button-primary min-h-12 px-5" onClick={() => setAvailabilityRevision(value => value + 1)}>Check again</button>}<a className="inline-block underline" href={`mailto:${marketplaceOperator.supportEmail}`}>Contact TAKEME support</a></div> : !user ? <div className="mt-4 space-y-3"><p className="text-sm leading-6">Sign in securely with your existing email/password or Google account. Your account information is shown only after authentication.</p><Link href="/login?next=/account-deletion" className="button-primary min-h-12 px-5">Sign in to request deletion</Link></div> : <>
       <p className="mt-3 break-words text-sm">Signed in as {user.email ?? "your TAKEME account"}.</p>
       {statusUnavailable && <p role="status" className="mt-3 text-sm">Progress could not be refreshed. This does not mean deletion succeeded. You can reauthenticate and safely retry.</p>}
       {requested && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6" role="status"><p className="font-semibold">{visibleStatus.state === "failed" ? "Cleanup needs a retry" : visibleStatus.state === "blocked" ? "Deletion needs data classification" : "Deletion pending"}</p><p>Your account is not fully deleted. Normal marketplace activity is blocked.</p>{visibleStatus.blockers?.length ? <ul className="mt-2 list-disc pl-5">{visibleStatus.blockers.map((reason) => <li key={reason}>{blockers[reason] ?? "An existing marketplace obligation needs resolution."}</li>)}</ul> : <p>Required cleanup is still in progress.</p>}<Link href="/profile/transactions" className="mt-3 inline-block font-semibold underline">Resolve existing transactions</Link></div>}

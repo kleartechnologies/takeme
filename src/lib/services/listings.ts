@@ -18,6 +18,7 @@ import { formatPublicLocation, parsePublicLocation } from "@/lib/general-locatio
 import { prepareListingImage, uploadListingImagesWith } from "@/lib/listing-image-upload";
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
 import { createFixedDraft, publishFixed, removeFixed, updateFixed } from "@/lib/services/fixed-listings";
+import { withEligibilityHandling } from "@/lib/services/marketplace-call";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
 
@@ -167,7 +168,7 @@ async function uploadListingImages(uid: string, listingId: string, files: File[]
   return uploadListingImagesWith(uid, listingId, files, {
     prepare: prepareListingImage,
     reference: (path) => ref(services.storage, path),
-    upload: (objectRef, blob, contentType) => uploadBytes(objectRef, blob, { contentType, cacheControl: "public,max-age=31536000,immutable" }),
+    upload: (objectRef, blob, contentType) => withEligibilityHandling(() => uploadBytes(objectRef, blob, { contentType, cacheControl: "public,max-age=31536000,immutable" })),
     downloadUrl: getDownloadURL,
     remove: deleteObject,
     uniqueId: () => crypto.randomUUID(),

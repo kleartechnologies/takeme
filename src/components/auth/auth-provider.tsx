@@ -6,9 +6,10 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { auth, db, isFirebaseConfigured } from "@/lib/firebase/client";
-import { getAccountSetupStatus, isLocalAccountSetup, type AccountSetupStatus } from "@/lib/services/account-setup";
+import { getAccountSetupStatus, type AccountSetupStatus } from "@/lib/services/account-setup";
 import { isAuthPath, isPendingResolutionPath, safeAuthNext, setupDestination } from "@/lib/auth-routing";
 import { isPublicInformationPath } from "@/lib/public-information";
+import { ACCOUNT_ELIGIBILITY_EVENT } from "@/lib/account-eligibility";
 import { logout } from "@/lib/firebase/auth";
 
 interface AuthContextValue {
@@ -33,14 +34,14 @@ function AccountSetupGate({ children }: { children: React.ReactNode }) {
   const { user, setup, setupError, refreshSetup } = useAuth();
   const path = usePathname(), router = useRouter();
   const exempt = isAuthPath(path) || isPublicInformationPath(path);
-  const redirect = !!user && isLocalAccountSetup() && !exempt && !!setup
+  const redirect = !!user && !exempt && !!setup
     && (setup.step === "deletion" ? !isPendingResolutionPath(path) : setup.step !== "ready");
   useEffect(() => {
     if (!redirect || !setup) return;
     const intended = safeAuthNext(`${path}${window.location.search}${window.location.hash}`);
     router.replace(setupDestination(setup.step, intended));
   }, [redirect, path, router, setup]);
-  if (!user || !isLocalAccountSetup() || exempt) return children;
+  if (!user || exempt) return children;
   if (setupError) return <main className="page-shell grid min-h-[75vh] place-content-center gap-4 text-center"><h1 className="text-2xl font-bold">Let’s reconnect</h1><p role="alert">Your account status could not be checked. Please try again.</p><button className="button-primary" onClick={() => void refreshSetup().catch(() => {})}>Retry</button><Link className="min-h-11 underline" href="/account-deletion">Account deletion</Link><button className="min-h-11 underline" onClick={() => void logout()}>Sign out</button></main>;
   if (!setup || redirect) return <main className="grid min-h-[75vh] place-content-center" role="status">Checking your TAKEME account…</main>;
   return children;
@@ -57,12 +58,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setupRequest = useRef(0);
   const refreshSetup = useCallback(async () => {
     const current = auth?.currentUser;
-    if (!current || !isLocalAccountSetup()) return null;
+    if (!current) return null;
     const request = ++setupRequest.current;
     try {
       const status = await getAccountSetupStatus();
       if (request === setupRequest.current && auth?.currentUser?.uid === current.uid) setSetupState({ uid: current.uid, status, error: false });
-      return status;
+      return request === setupRequest.current && auth?.currentUser?.uid === current.uid ? status : null;
     } catch (error) {
       if (request === setupRequest.current && auth?.currentUser?.uid === current.uid) setSetupState({ uid: current.uid, status: null, error: true });
       throw error;
@@ -80,11 +81,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshSetup]);
 
   useEffect(() => {
+    const recheck = (event: Event) => {
+      const uid = (event as CustomEvent<{ uid: string }>).detail?.uid;
+      if (uid && auth?.currentUser?.uid === uid) void refreshSetup().catch(() => {});
+    };
+    window.addEventListener(ACCOUNT_ELIGIBILITY_EVENT, recheck);
+    return () => window.removeEventListener(ACCOUNT_ELIGIBILITY_EVENT, recheck);
+  }, [refreshSetup]);
+
+  useEffect(() => {
     if (!user || !db) return;
-    return onSnapshot(doc(db, "accountLifecycles", user.uid), (snapshot) => {
+    let active = true;
+    const unsubscribe = onSnapshot(doc(db, "accountLifecycles", user.uid), (snapshot) => {
+      if (!active || auth?.currentUser?.uid !== user.uid) return;
       setPendingAccount(snapshot.data()?.state === "deletion_pending" ? user.uid : null);
       if (snapshot.exists()) { setupRequest.current++; setSetupState({ uid: user.uid, status: { step: "deletion" }, error: false }); }
     }, () => {});
+    return () => { active = false; unsubscribe(); };
   }, [user]);
 
   const ownSetup = setupState?.uid === user?.uid ? setupState : null;

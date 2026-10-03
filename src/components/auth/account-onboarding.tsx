@@ -8,19 +8,26 @@ import { useAuth } from "./auth-provider";
 import { AuthShell } from "./auth-shell";
 import { PolicyCheckboxes } from "./policy-checkboxes";
 import { ProfileAvatar } from "@/components/profile/profile-ui";
-import { db } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import { createProfileIfMissing } from "@/lib/firebase/profile-bootstrap";
 import { PROFILE_NAME_FALLBACK, validateSignupDisplayName } from "@/lib/firebase/profile-name";
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
 import { logout } from "@/lib/firebase/auth";
 import { safeAuthNext, setupDestination, type SetupStep } from "@/lib/auth-routing";
-import { acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome, isLocalAccountSetup } from "@/lib/services/account-setup";
+import { acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome, isLocalAccountSetup, accountPolicyAvailable, accountReleasePolicy } from "@/lib/services/account-setup";
 import { getUserProfile, updatePublicProfile } from "@/lib/services/users";
 import { MALAYSIAN_STATES, formatPublicLocation, makePublicLocation, parseLegacyGeneralLocation } from "@/lib/general-location";
 import styles from "./auth.module.css";
 
 export function AccountOnboarding({ step }: { step: Exclude<SetupStep, "ready" | "deletion"> }) {
+  const { user } = useAuth();
+  return <AccountOnboardingForm key={user?.uid ?? "signed-out"} step={step} />;
+}
+
+function AccountOnboardingForm({ step }: { step: Exclude<SetupStep, "ready" | "deletion"> }) {
   const { user, loading, setup, setupError, refreshSetup } = useAuth();
+  const policy = accountReleasePolicy(), local = isLocalAccountSetup();
+  const available = accountPolicyAvailable() && setup?.policyAvailable !== false;
   const router = useRouter(), nextPath = safeAuthNext(useSearchParams().get("next"));
   const [age, setAge] = useState(false), [agreed, setAgreed] = useState(false);
   const [name, setName] = useState(""), [city, setCity] = useState(""), [state, setState] = useState("");
@@ -31,7 +38,6 @@ export function AccountOnboarding({ step }: { step: Exclude<SetupStep, "ready" |
   function validationError(message: string) { setError(message); requestAnimationFrame(() => errorRef.current?.focus()); }
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => {
-    if (!isLocalAccountSetup()) return;
     if (!loading && !user) router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
     else if (!busy && setup && setup.step !== step) router.replace(setupDestination(setup.step, nextPath));
   }, [loading, user, setup, step, nextPath, router, busy]);
@@ -61,19 +67,26 @@ export function AccountOnboarding({ step }: { step: Exclude<SetupStep, "ready" |
     }
     submitting.current = true; setBusy(true);
     try {
+      const expectedUid = user?.uid;
+      const assertSameAccount = () => {
+        if (!expectedUid || auth?.currentUser?.uid !== expectedUid) throw Object.assign(new Error("The signed-in account changed."), { details: { reason: "account-setup-changed" } });
+      };
+      assertSameAccount();
       if (step === "acceptance") await acceptWebPolicies(age, agreed);
       if (step === "profile") {
         const area = makePublicLocation(city, state);
         await updatePublicProfile({ displayName: name.trim(), location: area ? formatPublicLocation(area) : "", photo });
+        assertSameAccount();
         await completeFirstTimeProfile();
       }
       if (step === "welcome") await finishAccountWelcome();
+      assertSameAccount();
       const status = await refreshSetup();
       if (status) router.replace(setupDestination(status.step, nextPath));
     } catch (caught) { setError(friendlyAuthError(caught)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  if (!isLocalAccountSetup()) return <AuthShell><h1 className={styles.heading}>Account setup is unavailable</h1><p className={styles.intro}>This local policy preview is awaiting launch approval.</p><Link href="/explore" className={styles.primary}>Explore TAKEME</Link></AuthShell>;
+  if (user && setup && !available) return <AuthShell><h1 className={styles.heading}>Account setup is awaiting approval</h1><p className={styles.intro}>TAKEME’s final policies are not yet available. Marketplace activity will remain unavailable until publication is approved.</p><button className={styles.primary} onClick={() => void refreshSetup().catch(() => {})}>Check again</button><Link href="/account-deletion" className={styles.textButton}>Account deletion</Link><button className={styles.textButton} onClick={() => void logout()}>Sign out</button></AuthShell>;
   if (!user || !setup || setup.step !== step) return <AuthShell><h1 className={styles.heading}>One moment…</h1><p role={setupError ? "alert" : "status"} className={styles.intro}>{setupError ? "Your account status could not be checked. Please try again." : "Checking your TAKEME account."}</p>{setupError && <><button className={styles.primary} onClick={() => void refreshSetup().catch(() => {})}>Retry</button><button className={styles.textButton} onClick={() => void logout()}>Sign out</button></>}<Link href="/account-deletion" className={styles.textButton}>Account deletion</Link></AuthShell>;
   return <AuthShell><div className={step === "welcome" ? styles.welcome : undefined}>
     {step === "welcome" && <Image className={styles.mascot} src="/brand/mascot-3d-happy.png" alt="Happy TAKEME mascot" width={168} height={168} priority />}
@@ -92,7 +105,7 @@ export function AccountOnboarding({ step }: { step: Exclude<SetupStep, "ready" |
       {error && <div className={styles.error} ref={errorRef} tabIndex={-1} role="alert">{error}</div>}
       {step === "profile" && !profileReady && error ? <button className={styles.primary} type="button" onClick={() => setRevision(value => value + 1)}>Retry</button> : <button className={styles.primary} disabled={busy || (step === "profile" && !profileReady)} type="submit">{busy && <LoaderCircle size={18} className="animate-spin" />}{busy ? "Saving…" : step === "acceptance" ? "Agree & continue" : step === "profile" ? "Continue" : nextPath === "/explore" ? "Start exploring" : "Continue to TAKEME"}</button>}
     </form>
-    {step === "acceptance" && <p className={styles.draft}>Local preview · Terms and Privacy v1.0-draft. Acceptance is recorded for this demo account only. These policies are not published or final.</p>}
+    {step === "acceptance" && <p className={styles.draft}>{local ? `Local preview · Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}. Acceptance is recorded for this demo account only. These policies are not published or final.` : `Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}.`}</p>}
     {step !== "welcome" && <p className={styles.switch}><button className={styles.textButton} disabled={busy} onClick={() => void logout()}>Sign out</button> · <Link href="/account-deletion">Account deletion</Link></p>}
   </div></AuthShell>;
 }

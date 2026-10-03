@@ -4,6 +4,31 @@ service cloud.firestore {
     function authenticated() { return request.auth != null; }
     function signedIn() { return authenticated() && !exists(/databases/$(database)/documents/accountLifecycles/$(request.auth.uid)); }
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
+    // BEGIN GENERATED RELEASE POLICY — functions/src/release-policy.ts
+    function configuredAcceptance(acceptance) {
+      return acceptance.termsAcceptedAt is timestamp && acceptance.privacyAcceptedAt is timestamp
+        && acceptance.age18ConfirmedAt is timestamp && acceptance.acceptanceSource == 'web'
+        && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)
+        && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == "1.0-draft"
+          && acceptance.privacyVersion == "1.0-draft")
+          || false);
+    }
+    // END GENERATED RELEASE POLICY
+    function marketplaceEligible() {
+      let policy = get(/databases/$(database)/documents/releasePolicies/current).data;
+      let acceptance = get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data;
+      return signedIn() && policy.publicationApproved == true && policy.minimumAge == 18
+        && policy.projectId == request.auth.token.aud
+        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme')
+          || (policy.releaseTarget == 'production' && !policy.projectId.matches('demo-.*')
+            && !policy.termsVersion.matches('.*[Dd][Rr][Aa][Ff][Tt].*|.*[Dd][Ee][Mm][Oo].*|.*[Tt][Ee][Ss][Tt].*')
+            && !policy.privacyVersion.matches('.*[Dd][Rr][Aa][Ff][Tt].*|.*[Dd][Ee][Mm][Oo].*|.*[Tt][Ee][Ss][Tt].*')))
+        && policy.termsVersion is string && policy.termsVersion.size() > 0
+        && policy.privacyVersion is string && policy.privacyVersion.size() > 0
+        && acceptance.termsVersion == policy.termsVersion && acceptance.privacyVersion == policy.privacyVersion
+        && configuredAcceptance(acceptance);
+    }
+    function eligibleOwner(uid) { return owns(uid) && marketplaceEligible(); }
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
     function parentListing(listingId) { return get(/databases/$(database)/documents/listings/$(listingId)).data; }
     function transactionData(transactionId) { return get(/databases/$(database)/documents/transactions/$(transactionId)).data; }
@@ -18,7 +43,7 @@ service cloud.firestore {
     function validProfileLocation(value) {
       return value is string && (value == '' || (
         value.matches("^[A-Za-z .'-]{2,60}, (Johor|Kedah|Kelantan|Melaka|Negeri Sembilan|Pahang|Perak|Perlis|Pulau Pinang|Sabah|Sarawak|Selangor|Terengganu|W[.]P[.] Kuala Lumpur|W[.]P[.] Labuan|W[.]P[.] Putrajaya)$")
-        && !value.matches('.*(Jalan|jalan|Taman|taman|Lorong|lorong|Unit|unit|Apartment|apartment).*')
+        && !value.matches('(?i).*\\b(jalan|jln|lorong|lrg|taman|tmn|persiaran|kampung|kg|no|lot|unit|blok|block|apartment|condominium|condo|residensi|residence)\\b.*')
       ));
     }
     function validGeneralLocation(value) {
@@ -27,6 +52,7 @@ service cloud.firestore {
         && value.keys().hasOnly(['districtOrCity', 'state', 'country'])
         && value.districtOrCity is string && value.districtOrCity.size() >= 2 && value.districtOrCity.size() <= 60
         && value.state is string && value.state.size() >= 3 && value.state.size() <= 30
+        && validProfileLocation(value.districtOrCity + ', ' + value.state)
         && value.country == 'Malaysia';
     }
     function publicListingSafe(data) {
@@ -57,6 +83,7 @@ service cloud.firestore {
     }
 
     match /accountLifecycles/{uid} { allow get: if authenticated() && request.auth.uid == uid; allow list, write: if false; }
+    match /releasePolicies/{id} { allow get: if id == 'current'; allow list, write: if false; }
     match /accountDeletionOperations/{uid} { allow read, write: if false; }
     match /accountDeletionEvidence/{path=**} { allow read, write: if false; }
     match /accountDeletionSecurityHolds/{path=**} { allow read, write: if false; }
@@ -67,34 +94,34 @@ service cloud.firestore {
       allow get: if owns(uid) || (!exists(/databases/$(database)/documents/accountLifecycles/$(uid)) && publicProfileSafe(resource.data, uid));
       allow list: if false;
       allow create: if owns(uid) && validPublicProfile(request.resource.data, uid);
-      allow update: if (owns(uid)
+      allow update: if (eligibleOwner(uid)
           && validPublicProfile(request.resource.data, uid)
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.createdAt == resource.data.createdAt)
-        || isAdmin();
-      allow delete: if isAdmin();
+        || (isAdmin() && marketplaceEligible());
+      allow delete: if isAdmin() && marketplaceEligible();
 
       match /saved/{listingId} {
         allow get: if owns(uid);
         allow list: if owns(uid) && request.query.limit <= 13;
-        allow create: if owns(uid)
+        allow create: if eligibleOwner(uid)
           && request.resource.data.keys().hasAll(['listingId', 'savedAt'])
           && request.resource.data.keys().hasOnly(['listingId', 'savedAt'])
           && request.resource.data.listingId == listingId
           && request.resource.data.savedAt == request.time
           && exists(/databases/$(database)/documents/listings/$(listingId))
           && parentListing(listingId).status == 'active';
-        allow delete: if owns(uid);
+        allow delete: if eligibleOwner(uid);
         allow update: if false;
       }
       match /meetupLocations/{meetupLocationId} {
         allow get: if owns(uid);
         allow list: if owns(uid) && request.query.limit <= 20;
-        allow create: if owns(uid) && validMeetup(request.resource.data, uid);
-        allow update: if owns(uid) && validMeetup(request.resource.data, uid)
+        allow create: if eligibleOwner(uid) && validMeetup(request.resource.data, uid);
+        allow update: if eligibleOwner(uid) && validMeetup(request.resource.data, uid)
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.createdAt == resource.data.createdAt;
-        allow delete: if owns(uid);
+        allow delete: if eligibleOwner(uid);
       }
       match /notifications/{notificationId} {
         allow read, write: if false;
@@ -107,7 +134,7 @@ service cloud.firestore {
     match /privateUserAddresses/{uid} {
       allow get: if owns(uid) || isAdmin();
       allow list: if false;
-      allow create, update: if owns(uid)
+      allow create, update: if eligibleOwner(uid)
         && request.resource.data.keys().hasAll(['uid', 'addressLine1', 'addressLine2', 'postcode', 'city', 'state', 'country', 'updatedAt'])
         && request.resource.data.keys().hasOnly(['uid', 'addressLine1', 'addressLine2', 'postcode', 'city', 'state', 'country', 'updatedAt'])
         && request.resource.data.uid == uid
@@ -118,7 +145,7 @@ service cloud.firestore {
         && request.resource.data.state is string && request.resource.data.state.size() <= 40
         && request.resource.data.country == 'Malaysia'
         && request.resource.data.updatedAt is timestamp;
-      allow delete: if owns(uid);
+      allow delete: if eligibleOwner(uid);
     }
 
     match /listings/{listingId} {
@@ -130,7 +157,7 @@ service cloud.firestore {
         || isAdmin();
       // Owner history and public browsing use server-owned field projections.
       allow list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() && marketplaceEligible();
 
       match /bids/{bidId} {
         allow read: if isAdmin();
@@ -138,7 +165,7 @@ service cloud.firestore {
       }
     }
 
-    match /categories/{categoryId} { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{categoryId} { allow read: if true; allow write: if isAdmin() && marketplaceEligible(); }
     match /favorites/{favoriteId} { allow read, write: if false; }
 
     match /transactions/{transactionId} {
@@ -202,7 +229,7 @@ service cloud.firestore {
     match /promotionPackages/{packageId} {
       allow get: if isAdmin();
       allow list: if isAdmin() && request.query.limit <= 20;
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() && marketplaceEligible();
     }
     match /promotions/{promotionId} {
       allow get: if isAdmin() || (signedIn() && resource.data.sellerId == request.auth.uid);

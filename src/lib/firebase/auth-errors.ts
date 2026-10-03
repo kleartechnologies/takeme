@@ -1,4 +1,13 @@
+import { eligibilityMessage } from "../account-eligibility.ts";
 export function friendlyAuthError(error: unknown) {
+  if (error && typeof error === "object" && "details" in error && error.details && typeof error.details === "object" && "reason" in error.details && error.details.reason === "account-setup-changed") {
+    return "Your signed-in account changed. Review the current account before continuing account setup.";
+  }
+  if (error && typeof error === "object" && "details" in error && error.details && typeof error.details === "object" && "reason" in error.details && error.details.reason === "account-changed") {
+    return "Your signed-in account changed. Review the current account and confirm your identity again before requesting deletion.";
+  }
+  const policyMessage = eligibilityMessage(error);
+  if (policyMessage) return policyMessage;
   const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
   if (code === "auth/email-already-in-use") return "This email already has an account. Try logging in instead.";
   if (["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(code)) return "The email or password is incorrect. Please try again.";

@@ -1,3 +1,4 @@
+import { withEligibilityHandling } from "@/lib/services/marketplace-call";
 import {
   Timestamp,
   collection,
@@ -43,7 +44,7 @@ export async function saveListing(listingId: string) {
   const { uid } = requireSavedServices();
   const reference = savedRef(uid, listingId);
   try {
-    await setDoc(reference, { listingId, savedAt: serverTimestamp() });
+    await withEligibilityHandling(() => setDoc(reference, { listingId, savedAt: serverTimestamp() }));
     announceSavedChange({ uid, listingId, saved: true });
     return true;
   } catch (error) {
@@ -56,7 +57,7 @@ export async function saveListing(listingId: string) {
 
 export async function removeSavedListing(listingId: string) {
   const { uid } = requireSavedServices();
-  await deleteDoc(savedRef(uid, listingId));
+  await withEligibilityHandling(() => deleteDoc(savedRef(uid, listingId)));
   announceSavedChange({ uid, listingId, saved: false });
 }
 

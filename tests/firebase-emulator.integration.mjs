@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
@@ -13,7 +14,8 @@ async function client(label) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword());
+  await acceptDemoPolicies(app);
   return { app, auth, firestore, functions };
 }
 const owner = await client("rules-owner");

@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -5,9 +6,9 @@ import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "fi
 import { connectFirestoreEmulator, doc, getFirestore, serverTimestamp, setDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
-const projectId = "demo-takeme-location";
-process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:18080";
-process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:19099";
+const projectId = "demo-takeme";
+process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 process.env.GCLOUD_PROJECT = projectId;
 const requireFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
 requireFunctions("./lib/index.js");
@@ -19,10 +20,11 @@ const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.c
 async function client(label) {
   const app = initializeApp(config, `${label}-${suffix}`);
   const auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app, "asia-southeast1");
-  connectAuthEmulator(auth, "http://127.0.0.1:19099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 18080);
-  connectFunctionsEmulator(functions, "127.0.0.1", 15001);
-  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword());
+  await acceptDemoPolicies(app);
   return { app, auth, db, functions, uid: auth.currentUser.uid };
 }
 

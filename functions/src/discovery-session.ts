@@ -1,4 +1,5 @@
 import { accountIsActive, runGuardedTransaction } from "./account-lifecycle";
+import { marketplaceAccountIsEligible } from "./account-eligibility";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import type { CandidateSource } from "./intelligence-domain";
@@ -8,7 +9,7 @@ export interface ServedListing { id: string; source: CandidateSource; sectionId:
 export async function createDiscoverySession(uid: string, listings: ServedListing[], now = new Date()) {
   if (!listings.length) return null;
   const ref = getFirestore().collection("discoverySessions").doc();
-  const created = await runGuardedTransaction(getFirestore(), async (tx) => { if (!(await accountIsActive(uid, tx))) return false; tx.create(ref, { userId: uid, listings: listings.slice(0, 80), createdAt: Timestamp.fromDate(now), expiresAt: Timestamp.fromMillis(now.getTime() + 2 * 60 * 60_000) }); return true; });
+  const created = await runGuardedTransaction(getFirestore(), async (tx) => { if (!(await accountIsActive(uid, tx)) || !(await marketplaceAccountIsEligible(uid, tx))) return false; tx.create(ref, { userId: uid, listings: listings.slice(0, 80), createdAt: Timestamp.fromDate(now), expiresAt: Timestamp.fromMillis(now.getTime() + 2 * 60 * 60_000) }); return true; });
   if (!created) return null;
   return ref.id;
 }

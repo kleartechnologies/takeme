@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -23,7 +24,7 @@ async function client(label, signedIn = true) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  if (signedIn) await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  if (signedIn) { await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword()); await acceptDemoPolicies(app); }
   return { app, auth, db, functions, uid: auth.currentUser?.uid };
 }
 const call = (person, name, data = {}) => httpsCallable(person.functions, name)(data).then((result) => result.data);

@@ -1,18 +1,38 @@
-# TAKEME V1 account deletion (demo validation)
+# TAKEME V1 account deletion (local validation and production qualification)
 
 Policy version: `v1-2026-10-03`. The policy is the owner's approved deletion-impact map and revisions. This document describes implementation, not Privacy Policy or Terms.
 
 ## Safety boundary
 
-New deletion callables, the worker and retention enforcement require `demo-takeme` and exactly the loopback Auth 9099, Firestore 8080 and Storage 9199 emulator hosts. No default `.firebaserc` project, production credentials, provider network calls or `.env.local` are used. This is intentionally disabled outside the verified demo environment. Production enablement needs separate review and authorisation.
+Deletion callables, the worker and retention enforcement share `qualifyDeletionExecution` from `functions/src/deletion-config.ts`. The verified demo environment requires `demo-takeme` and exactly the loopback Auth 9099, Firestore 8080 and Storage 9199 emulator hosts. Missing/unknown/mixed environments fail closed. No default `.firebaserc` project or browser-supplied resource selects the deletion target.
+
+Production execution remains disabled by default and by the unapproved final policy in the central `functions/src/release-policy.ts`. The production path now supports explicit resource qualification; that is not production activation or a live-resource connectivity/permission test. No production credentials, provider requests, `.env.local` changes or destructive production checks were used.
+
+## Production resource qualification (inactive)
+
+All of the following must agree before a production deletion handler can run:
+
+- `TAKEME_RELEASE_TARGET=production` and `TAKEME_DELETION_ENVIRONMENT=production`.
+- Explicit `TAKEME_ENABLE_PRODUCTION_DELETION=true`. Missing, false or any other value refuses execution; this sprint does not set it.
+- `TAKEME_FIREBASE_PROJECT_ID`, the deployment's `GCLOUD_PROJECT`/`GOOGLE_CLOUD_PROJECT` identity and Admin app `projectId` must match. An alternate runtime project variable cannot override a mismatch. A demo or malformed project is rejected.
+- `TAKEME_STORAGE_BUCKETS`: an explicit comma-separated list of the target project's existing default Firebase bucket names (`<project>.firebasestorage.app` and/or `<project>.appspot.com`). Admin app `storageBucket` must be in this allowlist. The code never assumes that a second production bucket exists; list only owner-verified buckets. Foreign, demo, empty and duplicate bucket entries fail closed.
+- Emulator host/hub overrides must be absent. Production final Terms/Privacy publication approval and versions must pass the server-owned central policy validation; environment flags cannot approve a draft.
+
+The SDK obtains trusted app metadata from the initialized Admin app. Qualification reads this metadata and environment only; it does not discover a project through credentials/network or initialise a second app. The actual bucket existence, access permissions, deployed rules/indexes, scheduled worker execution, failure monitoring and backup/log restoration procedures still require a separately authorised release verification. Functions remain in `asia-southeast1`; the five-minute UTC maintenance schedule uses the same resource gate as requests, retries and expiry enforcement.
+
+Storage cleanup enumerates only the qualified buckets. Evidence URLs are parsed as supported Firebase download URLs, with an exact environment origin and owned `users/<uid>/` object prefix. Foreign hosts/buckets/owners, malformed encodings, traversal, credentials and ambiguous paths are rejected. No URL is fetched; any approved byte copy uses the Admin bucket/object API. Demo uses only its explicit loopback endpoint and both known demo bucket variants.
+
+`getAccountDeletionAvailability` is a public, config-only callable returning `{ available, environment }`. It exposes no resource identifiers, account status or configuration error details and performs no Auth/Firestore/Storage request. The client can report temporary unavailability without mounting a destructive form. The actual owner/status/request/retry handlers independently recheck qualification; a previous availability response never authorises cleanup.
+
+Pure synthetic configuration tests qualify resource metadata without SDK/network access or destructive execution. A synthetic final policy may be passed only to the pure test helper; runtime handlers always use the source-owned policy, which remains unapproved. Current approved retention, reauthentication, safe obligations, cleanup stages and idempotency are unchanged. Final legal review must reconcile supplier disclosure/retention obligations before any production activation; this sprint makes no new legal or retention decision.
 
 ## One workflow
 
-Settings links to `/account-deletion`. The public page is readable without an account and links to existing browser sign-in. Both entry points use `requestAccountDeletion` with the authenticated server UID, a current policy version and explicit `DELETE` confirmation. `auth_time` must be within five minutes. The client always reauthenticates with its existing password or Google provider, then refreshes its ID token. Passwords/provider credentials never reach the deletion callable and are not persisted by the page.
+Settings links to `/account-deletion`. The public page is readable without an account and links to existing browser sign-in. Both entry points use `requestAccountDeletion` with a current policy version, explicit `DELETE` confirmation and required `expectedOwnerUid` captured from the account displayed for confirmation. The server compares that value only with `request.auth.uid` before any lifecycle or cleanup work; it never selects another owner from the payload. Missing/mismatched binding fails closed with `account-changed`. The client checks its active account before and after reauthentication and refreshes its ID token. `auth_time` must be within five minutes. Passwords/provider credentials never reach the deletion callable and are not persisted by the page.
 
-The request transaction creates `accountLifecycles/{uid}` (`deletion_pending`) and `accountDeletionOperations/{uid}`. Lifecycle creation races transactionally with normal marketplace writes. The operation persists phase, attempts, generic blockers/failure codes and a leased worker claim. `pending`, `cleaning`, `blocked`, `failed` and `completed` are distinct. Missing resources are successful cleanup; missing Auth is successful only within an existing operation. A ten-minute lease prevents concurrent workers. Expired leases are recoverable.
+The request transaction creates `accountLifecycles/{uid}` (`deletion_pending`) and `accountDeletionOperations/{uid}` and atomically erases the private onboarding/acceptance record. Storage rules can therefore deny stale-token uploads immediately using their bounded eligibility lookup, before worker cleanup begins. No acceptance history is retained by this workflow. Lifecycle creation races transactionally with normal marketplace writes. The operation persists phase, attempts, generic blockers/failure codes and a leased worker claim. `pending`, `cleaning`, `blocked`, `failed` and `completed` are distinct. Missing resources are successful cleanup; missing Auth is successful only within an existing operation. A ten-minute lease prevents concurrent workers. Expired leases are recoverable.
 
-`retryAccountDeletion` uses the same worker and recent-auth check. A five-minute scheduled worker resumes pending/failing/expired-lease operations. The emulator does not automatically run Cloud Scheduler; use the demo-only local runner for automatic local progress, or invoke the worker in integration tests. No new unauthenticated deletion mechanism exists.
+`retryAccountDeletion` requires the same `expectedOwnerUid` equality binding and recent-auth check, then uses the same worker. A five-minute scheduled worker resumes pending/failing/expired-lease operations. The emulator does not automatically run Cloud Scheduler; use the demo-only local runner for automatic local progress, or invoke the worker in integration tests. No new unauthenticated deletion mechanism exists.
 
 Auth is revoked/deleted only after safe cleanup, all marketplace blockers have resolved and final cleanup succeeds. Failure after Auth deletion remains a failed operation until the worker confirms completion. A still-valid signed pre-deletion ID token can read its own completed operation status; no caller-selected UID is accepted. Operation data is never directly client-readable. Completion is not a claim that retained history, case evidence or backups/logs have already expired.
 

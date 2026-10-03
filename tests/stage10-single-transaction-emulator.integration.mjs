@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { deleteApp, initializeApp } from "firebase/app";
@@ -5,7 +6,7 @@ import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, getIdToke
 import { connectFirestoreEmulator, doc, getDoc, getFirestore, setDoc, updateDoc } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
-// This suite runs alone against a fresh demo-takeme emulator instance.
+// Fresh actors and baseline deltas let this suite share the demo-takeme emulators.
 const projectId = "demo-takeme";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
@@ -27,7 +28,7 @@ async function client(label, signedIn = true) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  if (signedIn) await createUserWithEmailAndPassword(auth, `stage10-${label}-${suffix}@example.test`, "TestPass123!");
+  if (signedIn) { await createUserWithEmailAndPassword(auth, `stage10-${label}-${suffix}@example.test`, createDemoPassword()); await acceptDemoPolicies(app); }
   return { app, auth, db, functions, uid: auth.currentUser?.uid };
 }
 const call = (person, name, data = {}) => httpsCallable(person.functions, name)(data).then((response) => response.data);
@@ -47,14 +48,16 @@ await getIdToken(outsider.auth.currentUser, true);
 
 const revenue = () => call(outsider, "getAdminMetrics", { section: "revenue", preset: "all" });
 const before = await revenue();
-assert.equal(card(before, "GMV"), 0);
-assert.equal(await count("transactions"), 0);
+const baselineGmv = card(before, "GMV");
+const baselineTransactions = await count("transactions");
+const baselinePublicReviews = await count("publicReviews");
+assert.equal(typeof baselineGmv, "number");
 
 const offer = await call(buyer, "submitOffer", { listingId, type: "buy_now", paymentMethod: "other" });
 const accepted = await call(seller, "respondToOffer", { offerId: offer.offerId, action: "accept" });
 const transactionId = accepted.transactionId;
 const ref = admin.doc(`transactions/${transactionId}`);
-assert.equal(await count("transactions"), 1);
+assert.equal(await count("transactions"), baselineTransactions + 1);
 let deal = (await ref.get()).data();
 assert.equal(deal.status, "in_progress");
 assert.equal(deal.listingId, listingId);
@@ -63,9 +66,9 @@ assert.equal(deal.sellerId, seller.uid);
 assert.equal(deal.amountSen, amountSen);
 assert.equal(deal.settlementMode, "standard");
 assert.equal(deal.paymentProvider, "none");
-assert.equal(card(await revenue(), "GMV"), 0);
+assert.equal(card(await revenue(), "GMV"), baselineGmv);
 assert.equal((await call(seller, "respondToOffer", { offerId: offer.offerId, action: "accept" })).transactionId, transactionId);
-assert.equal(await count("transactions"), 1);
+assert.equal(await count("transactions"), baselineTransactions + 1);
 
 const buyerDetail = await call(buyer, "getTransactionDetail", { transactionId });
 const sellerDetail = await call(seller, "getTransactionDetail", { transactionId });
@@ -94,7 +97,7 @@ assert.equal(deal.sellerConfirmedAt, null, "A buyer-supplied seller role cannot 
 assert.equal(deal.status, "in_progress");
 assert.equal((await summary(buyer.uid, "buyer"))?.completedCount ?? 0, 0);
 assert.equal((await summary(seller.uid, "seller"))?.completedCount ?? 0, 0);
-assert.equal(card(await revenue(), "GMV"), 0);
+assert.equal(card(await revenue(), "GMV"), baselineGmv);
 await assert.rejects(() => call(buyer, "submitTransactionReview", { transactionId, rating: 5, tags: [], comment: "Still early" }), /complete|window/i);
 assert.equal((await call(buyer, "confirmTransactionCompletion", { transactionId })).alreadyConfirmed, true);
 assert.equal((await ref.get()).data().sellerConfirmedAt, null);
@@ -108,15 +111,15 @@ assert.equal(deal.amountSen, amountSen);
 assert.equal(deal.buyerId, buyer.uid);
 assert.equal(deal.sellerId, seller.uid);
 assert.equal(deal.listingId, listingId);
-assert.equal(await count("transactions"), 1);
+assert.equal(await count("transactions"), baselineTransactions + 1);
 assert.equal((await summary(buyer.uid, "buyer")).completedCount, 1);
 assert.equal((await summary(seller.uid, "seller")).completedCount, 1);
-assert.equal(card(await revenue(), "GMV"), amountSen);
+assert.equal(card(await revenue(), "GMV"), baselineGmv + amountSen);
 assert.equal((await call(buyer, "confirmTransactionCompletion", { transactionId })).alreadyConfirmed, true);
 assert.equal((await call(seller, "confirmTransactionCompletion", { transactionId })).alreadyConfirmed, true);
 assert.equal((await summary(buyer.uid, "buyer")).completedCount, 1);
 assert.equal((await summary(seller.uid, "seller")).completedCount, 1);
-assert.equal(card(await revenue(), "GMV"), amountSen);
+assert.equal(card(await revenue(), "GMV"), baselineGmv + amountSen);
 assert.equal((await admin.collection("marketplaceEvents").where("transactionId", "==", transactionId).where("eventType", "==", "TRANSACTION_COMPLETED").get()).size, 1);
 
 const policy = await call(guest, "getReputationPolicy");
@@ -125,11 +128,11 @@ assert.ok(Math.abs(deal.reviewWindowEndAt.toMillis() - deal.completedAt.toMillis
 await assert.rejects(() => call(outsider, "submitTransactionReview", { transactionId, rating: 5, tags: [], comment: "Impostor" }), /not yours|permission/i);
 await assert.rejects(() => call(buyer, "submitTransactionReview", { transactionId, reviewerRole: "seller", rating: 5, tags: ["Easy to deal with"], comment: "Wrong role" }), /tags/i);
 await assert.rejects(() => call(seller, "submitTransactionReview", { transactionId, reviewerRole: "buyer", rating: 5, tags: ["Item as described"], comment: "Wrong role" }), /tags/i);
-assert.equal(await count("publicReviews"), 0);
+assert.equal(await count("publicReviews"), baselinePublicReviews);
 const buyerReview = await call(buyer, "submitTransactionReview", { transactionId, reviewerRole: "seller", rating: 5, tags: ["Item as described"], comment: "Emulator seller review" });
 assert.equal(buyerReview.submitted, true);
 assert.equal(buyerReview.visible, false);
-assert.equal(await count("publicReviews"), 0);
+assert.equal(await count("publicReviews"), baselinePublicReviews);
 assert.equal((await admin.doc(`transactions/${transactionId}/reviews/${buyer.uid}`).get()).data().reviewedUserId, seller.uid);
 assert.equal((await admin.doc(`transactions/${transactionId}/reviews/${buyer.uid}`).get()).data().reviewerRole, "buyer", "A forged reviewerRole cannot turn a buyer review into a seller review.");
 await assert.rejects(() => call(buyer, "submitTransactionReview", { transactionId, rating: 5, tags: [], comment: "Duplicate" }), /already|reviewed/i);
@@ -139,7 +142,7 @@ assert.equal(sellerReview.visible, true);
 assert.equal((await admin.doc(`transactions/${transactionId}/reviews/${seller.uid}`).get()).data().reviewedUserId, buyer.uid);
 assert.equal((await admin.doc(`transactions/${transactionId}/reviews/${seller.uid}`).get()).data().reviewerRole, "seller", "A forged reviewerRole cannot turn a seller review into a buyer review.");
 await assert.rejects(() => call(seller, "submitTransactionReview", { transactionId, rating: 4, tags: [], comment: "Duplicate" }), /already|reviewed/i);
-assert.equal(await count("publicReviews"), 2);
+assert.equal(await count("publicReviews"), baselinePublicReviews + 2);
 assert.equal((await summary(seller.uid, "seller")).reviewCount, 1);
 assert.equal((await summary(seller.uid, "seller")).averageRating, 5);
 assert.equal((await summary(buyer.uid, "buyer")).reviewCount, 1);
@@ -158,8 +161,8 @@ await assert.rejects(() => setDoc(doc(buyer.db, "trustSummaries", seller.uid), {
 await assert.rejects(() => updateDoc(doc(buyer.db, "trustSummaries", buyer.uid), { "buyer.completedCount": 999 }), /permission/i);
 await assert.rejects(() => setDoc(doc(buyer.db, `transactions/${transactionId}/reviews/${buyer.uid}`), { rating: 1 }), /permission/i);
 await assert.rejects(() => updateDoc(doc(seller.db, "transactions", transactionId), { status: "completed", amountSen: 1 }), /permission/i);
-assert.equal(await count("transactions"), 1);
-assert.equal(card(await revenue(), "GMV"), amountSen);
+assert.equal(await count("transactions"), baselineTransactions + 1);
+assert.equal(card(await revenue(), "GMV"), baselineGmv + amountSen);
 
 await Promise.all([seller, buyer, outsider, guest].map(({ app }) => deleteApp(app)));
 await deleteAdmin(adminApp);

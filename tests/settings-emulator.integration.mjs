@@ -1,3 +1,4 @@
+import { acceptDemoPolicies } from "./helpers/demo-eligibility.mjs";
 // Demo-only integration checks. Test credentials remain in memory and are never logged.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -37,6 +38,7 @@ async function client(label, signedIn = true) {
   clients.push(person);
   if (signedIn) {
     const user = (await createUserWithEmailAndPassword(auth, email, randomUUID() + "!Aa1")).user;
+    await acceptDemoPolicies(app);
     person.uid = user.uid;
     await createProfileIfMissing(firestore, user, "Settings demo");
   }

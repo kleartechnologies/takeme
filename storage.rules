@@ -1,7 +1,24 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // BEGIN GENERATED RELEASE POLICY — functions/src/release-policy.ts
+    function configuredAcceptance(acceptance) {
+      return acceptance.termsAcceptedAt is timestamp && acceptance.privacyAcceptedAt is timestamp
+        && acceptance.age18ConfirmedAt is timestamp && acceptance.acceptanceSource == 'web'
+        && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)
+        && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == "1.0-draft"
+          && acceptance.privacyVersion == "1.0-draft")
+          || false);
+    }
+    // END GENERATED RELEASE POLICY
     function signedIn() { return request.auth != null && !firestore.exists(/databases/(default)/documents/accountLifecycles/$(request.auth.uid)); }
+    // Acceptance is removed atomically when deletion starts, so writes need only
+    // this owner document and (for listing media) the existing listing document.
+    function eligibleOwner(uid) {
+      let acceptance = firestore.get(/databases/(default)/documents/users/$(uid)/private/onboarding).data;
+      return request.auth != null && request.auth.uid == uid && configuredAcceptance(acceptance)
+        && bucket in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app'];
+    }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function validImage() {
       return request.resource.size <= 8 * 1024 * 1024
@@ -11,7 +28,7 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/listings/$(listingId)).data;
     }
     function canManageListingMedia(uid, listingId) {
-      return isOwner(uid)
+      return eligibleOwner(uid)
         && listing(listingId).sellerId == uid
         && (
           (listing(listingId).listingType == 'buy_now' && listing(listingId).status in ['draft', 'active'])
@@ -24,8 +41,8 @@ service firebase.storage {
 
     match /users/{uid}/profile/{fileName} {
       allow read: if true;
-      allow create, update: if isOwner(uid) && validImage();
-      allow delete: if isOwner(uid);
+      allow create, update: if eligibleOwner(uid) && validImage();
+      allow delete: if eligibleOwner(uid);
     }
 
     match /users/{uid}/listings/{listingId}/{fileName} {

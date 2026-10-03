@@ -7,6 +7,8 @@ import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { monthsAfter } from "./account-deletion-retention";
 import { lifecycleRef } from "./account-lifecycle";
+import { ownedDeletionMedia, qualifyDeletionExecution } from "./deletion-config";
+import { assertDeletionOwnerBinding } from "./deletion-confirmation";
 
 export const DELETION_POLICY_VERSION = "v1-2026-10-03";
 const DAY = 86_400_000;
@@ -19,17 +21,20 @@ const stamp = (date: number) => Timestamp.fromMillis(date);
 const iso = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
 const keep = (data: DocumentData, keys: string[]) => Object.fromEntries(keys.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]));
 
-/** No credentials/default project are consulted. This release is deliberately demo-only. */
-export function requireDeletionDemo() {
-  const project = process.env.GCLOUD_PROJECT || getApp().options.projectId;
-  if (project !== "demo-takeme" || process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIREBASE_AUTH_EMULATOR_HOST !== "127.0.0.1:9099" || process.env.FIREBASE_STORAGE_EMULATOR_HOST !== "127.0.0.1:9199") {
-    throw new HttpsError("failed-precondition", "Account deletion is enabled only in the verified demo emulator environment.");
-  }
+/** Default-off production execution; all cleanup entry points share the same trusted resource gate. */
+export function requireDeletionResources() {
+  try { return qualifyDeletionExecution({ env: process.env, appProjectId: getApp().options.projectId, appStorageBucket: getApp().options.storageBucket }); }
+  catch { throw new HttpsError("failed-precondition", "Account deletion is temporarily unavailable.", { reason: "deletion-unavailable" }); }
 }
+export const getAccountDeletionAvailability = onCall(() => {
+  try { const resources = requireDeletionResources(); return { available: true, environment: resources.environment }; }
+  catch { return { available: false, environment: "unavailable" }; }
+});
 async function owner(request: CallableRequest, recent: boolean) {
-  requireDeletionDemo();
+  requireDeletionResources();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to manage your TAKEME account deletion.");
   const uid = request.auth.uid;
+  if (recent) assertDeletionOwnerBinding(uid, request.data?.expectedOwnerUid);
   try { if ((await getAuth().getUser(uid)).disabled) throw new HttpsError("unauthenticated", "Sign in again."); }
   catch (error) { if ((error as { code?: string }).code === "auth/user-not-found") throw new HttpsError("unauthenticated", "This account no longer exists."); throw error; }
   const age = Date.now() / 1000 - Number(request.auth.token.auth_time);
@@ -41,7 +46,7 @@ function publicStatus(data: DocumentData | undefined) {
   return { state: data.state, phase: data.phase, blockers: data.blockers ?? [], failureCode: data.failureCode ?? null, requestedAt: iso(data.requestedAt), completedAt: iso(data.completedAt), policyVersion: data.policyVersion };
 }
 export const getAccountDeletionStatus = onCall(async (request) => {
-  requireDeletionDemo();
+  requireDeletionResources();
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to check deletion progress.");
   const data = (await operations.doc(request.auth.uid).get()).data();
   // A still-valid, signed pre-deletion ID token can acknowledge completion after
@@ -52,11 +57,14 @@ export const getAccountDeletionStatus = onCall(async (request) => {
 });
 export const requestAccountDeletion = onCall({ timeoutSeconds: 540 }, async (request) => {
   const uid = await owner(request, true);
-  if (request.data?.confirmation !== "DELETE" || request.data?.policyVersion !== DELETION_POLICY_VERSION || Object.keys(request.data ?? {}).some((key) => !["confirmation", "policyVersion"].includes(key))) throw new HttpsError("invalid-argument", "Confirm the current TAKEME deletion policy by typing DELETE.");
+  if (request.data?.confirmation !== "DELETE" || request.data?.policyVersion !== DELETION_POLICY_VERSION || Object.keys(request.data ?? {}).some((key) => !["confirmation", "policyVersion", "expectedOwnerUid"].includes(key))) throw new HttpsError("invalid-argument", "Confirm the current TAKEME deletion policy by typing DELETE.");
   await db.runTransaction(async (tx) => {
     const ref = operations.doc(uid); const existing = await tx.get(ref);
     if (existing.exists) return;
     const alias = `deleted-${randomUUID().replaceAll("-", "")}`;
+    // Storage's bounded eligibility check reads this server-owned record. Remove it
+    // atomically with the lifecycle marker so stale tokens cannot authorise uploads.
+    tx.delete(db.doc(`users/${uid}/private/onboarding`));
     tx.create(ref, { uid, alias, state: "pending", phase: "personal_data", policyVersion: DELETION_POLICY_VERSION, requestedAt: Timestamp.now(), updatedAt: Timestamp.now(), blockers: [], attempts: 0 });
     tx.create(lifecycleRef(uid), { state: "deletion_pending", alias, requestedAt: Timestamp.now() });
   });
@@ -65,6 +73,7 @@ export const requestAccountDeletion = onCall({ timeoutSeconds: 540 }, async (req
 });
 export const retryAccountDeletion = onCall({ timeoutSeconds: 540 }, async (request) => {
   const uid = await owner(request, true);
+  if (Object.keys(request.data ?? {}).some(key => key !== "expectedOwnerUid")) throw new HttpsError("invalid-argument", "Review the current account before retrying deletion.");
   if (!(await operations.doc(uid).get()).exists) throw new HttpsError("failed-precondition", "Request deletion first.");
   await processAccountDeletion(uid);
   return publicStatus((await operations.doc(uid).get()).data());
@@ -105,7 +114,7 @@ async function pseudonymise(doc: DocumentSnapshot, uid: string, alias: string, k
   });
 }
 async function storagePrefix(prefix: string) {
-  for (const name of ["demo-takeme.firebasestorage.app", "demo-takeme.appspot.com"]) {
+  for (const name of requireDeletionResources().storageBuckets) {
     const bucket = getStorage().bucket(name);
     for (;;) { const [files] = await bucket.getFiles({ prefix, maxResults: 100, autoPaginate: false }); if (!files.length) break; for (const file of files) await file.delete({ ignoreNotFound: true }); }
   }
@@ -164,17 +173,17 @@ async function blockers(identities: string[]) {
 }
 
 async function copyEvidenceMedia(value: unknown, uid: string, evidenceId: string): Promise<string[]> {
+  const resources = requireDeletionResources();
   const paths: string[] = [];
   const values = Array.isArray(value) ? value : [value];
   for (const item of values) {
     const url = typeof item === "string" ? item : item && typeof item === "object" ? (item as Record<string, unknown>).url : null;
     if (typeof url !== "string") continue;
-    const match = /\/b\/(demo-takeme(?:\.firebasestorage\.app|\.appspot\.com))\/o\/([^?]+)/.exec(url);
-    if (!match) continue;
-    const object = decodeURIComponent(match[2]!);
-    if (!object.startsWith(`users/${uid}/`)) continue;
+    const media = ownedDeletionMedia(url, uid, resources);
+    if (!media) continue;
+    const object = media.object;
     const target = `accountDeletionEvidence/${evidenceId}/${digest(object)}`;
-    const bucket = getStorage().bucket(match[1]!);
+    const bucket = getStorage().bucket(media.bucket);
     try { const [bytes] = await bucket.file(object).download(); await bucket.file(target).save(bytes, { resumable: false, metadata: { contentType: "application/octet-stream" } }); paths.push(target); }
     catch (error) { if ((error as { code?: number }).code !== 404) throw error; }
   }
@@ -347,7 +356,7 @@ async function financialCheck(uid: string, alias: string) {
 }
 
 export async function processAccountDeletion(uid: string, injectFailure?: (phase: string) => void) {
-  requireDeletionDemo();
+  requireDeletionResources();
   const ref = operations.doc(uid); const lease = randomUUID();
   const data = await db.runTransaction(async (tx) => {
     const doc = await tx.get(ref); const state = doc.data();
@@ -398,7 +407,7 @@ export async function processAccountDeletion(uid: string, injectFailure?: (phase
 }
 
 export async function enforceDeletionRetention(now = Timestamp.now()) {
-  requireDeletionDemo();
+  requireDeletionResources();
   for (const collection of ["accountDeletionEvidence", "accountDeletionSecurityHolds"]) {
     await pages(db.collection(collection), async (doc) => {
       const data = doc.data();
@@ -422,7 +431,7 @@ export async function enforceDeletionRetention(now = Timestamp.now()) {
   await pages(operations.where("state", "==", "completed").where("expiresAt", "<=", now).orderBy("expiresAt"), async (doc) => { await erase(lifecycleRef(doc.id)); await erase(doc.ref); });
 }
 export async function runDeletionMaintenance() {
-  requireDeletionDemo();
+  requireDeletionResources();
   for (const state of ["pending", "failed", "cleaning"]) await pages(operations.where("state", "==", state), async (doc) => { await processAccountDeletion(doc.id); });
   await enforceDeletionRetention();
 }

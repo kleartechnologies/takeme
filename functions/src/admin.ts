@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getAuth } from "firebase-admin/auth";
 import { AggregateField, getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
@@ -351,7 +351,7 @@ export const getAdminRecord = onCall(async (request) => {
   return { row, detail: { tags: data.tags ?? [], comment: data.comment ?? "", publishedAt: iso(data.publishedAt) } };
 });
 
-export const updateAdminReport = onCall(async (request) => {
+export const updateAdminReport = marketplaceMutationCall(async (request) => {
   const adminId = requireAdmin(request);
   const reportId = requiredId(request.data?.reportId);
   const status = request.data?.status;

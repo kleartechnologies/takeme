@@ -1,4 +1,5 @@
-import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { publicProfileLocation } from "./general-location";
 import { randomUUID } from "node:crypto";
 import { getFirestore, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -77,7 +78,7 @@ export const getNotifications = onCall(async (request) => {
   return { items: visible.map((item) => ({ id: item.id, ...item.data(), createdAt: iso(item.data().createdAt), readAt: iso(item.data().readAt), openedAt: iso(item.data().openedAt) })), cursor: visible.at(-1)?.id ?? null, hasMore: snapshot.size > 20 };
 });
 
-export const markNotificationRead = onCall(async (request) => {
+export const markNotificationRead = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const notificationId = validId(request.data?.notificationId, "Notification");
   const ref = db.collection("users").doc(uid).collection("notifications").doc(notificationId);
@@ -92,7 +93,7 @@ export const markNotificationRead = onCall(async (request) => {
   return { read: true };
 });
 
-export const openNotification = onCall(async (request) => {
+export const openNotification = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const notificationId = validId(request.data?.notificationId, "Notification");
   const ref = db.collection("users").doc(uid).collection("notifications").doc(notificationId);
@@ -113,7 +114,7 @@ export const openNotification = onCall(async (request) => {
   });
 });
 
-export const markAllNotificationsRead = onCall(async (request) => {
+export const markAllNotificationsRead = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const ref = db.collection("users").doc(uid).collection("notifications");
   const page = await ref.where("readAt", "==", null).limit(PAGE).get();
@@ -135,7 +136,7 @@ export const getNotificationPreferences = onCall(async (request) => {
   const item = await db.collection("notificationPreferences").doc(uid).get();
   return { preferences: Object.fromEntries(optionalTypes.map((type) => [type, item.data()?.[type] ?? "instant"])) };
 });
-export const setNotificationPreference = onCall(async (request) => {
+export const setNotificationPreference = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const type = request.data?.type as OptionalType;
   const frequency = request.data?.frequency as Frequency;
@@ -151,7 +152,7 @@ export const getFollowState = onCall(async (request) => {
   const [relation, summary] = await Promise.all([uid ? follows(sellerId).doc(uid).get() : Promise.resolve(null), db.collection("sellerFollowSummaries").doc(sellerId).get()]);
   return { following: Boolean(relation?.exists), followerCount: Math.max(0, Number(summary.data()?.followerCount ?? 0)) };
 });
-export const setSellerFollow = onCall(async (request) => {
+export const setSellerFollow = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const sellerId = validId(request.data?.sellerId, "Seller");
   const following = request.data?.following;
@@ -192,12 +193,12 @@ export const getFollowing = onCall(async (request) => {
     db.getAll(...visible.map((item) => db.collection("users").doc(item.id))),
     db.getAll(...visible.map((item) => db.collection("trustSummaries").doc(item.id))),
   ]) : [[], []];
-  return { items: visible.map((item, index) => ({ sellerId: item.id, createdAt: iso(item.data().createdAt), displayName: profiles[index]?.data()?.displayName ?? "Seller", photoURL: profiles[index]?.data()?.photoURL ?? null, location: profiles[index]?.data()?.location ?? "", sellerTier: trust[index]?.data()?.seller?.tier ?? null, sellerReviewCount: Number(trust[index]?.data()?.seller?.reviewCount ?? 0), sellerAverageRating: Number(trust[index]?.data()?.seller?.averageRating ?? 0) })), cursor: visible.at(-1)?.id ?? null, hasMore: page.size > 20 };
+  return { items: visible.map((item, index) => ({ sellerId: item.id, createdAt: iso(item.data().createdAt), displayName: profiles[index]?.data()?.displayName ?? "Seller", photoURL: profiles[index]?.data()?.photoURL ?? null, location: publicProfileLocation(profiles[index]?.data()?.location), sellerTier: trust[index]?.data()?.seller?.tier ?? null, sellerReviewCount: Number(trust[index]?.data()?.seller?.reviewCount ?? 0), sellerAverageRating: Number(trust[index]?.data()?.seller?.averageRating ?? 0) })), cursor: visible.at(-1)?.id ?? null, hasMore: page.size > 20 };
 });
 
 const searches = db.collection("savedSearches");
 const searchFingerprint = (uid: string, criteria: SearchCriteria) => db.collection("savedSearchFingerprints").doc(stableId(uid, JSON.stringify(criteria)));
-export const saveSearch = onCall(async (request) => {
+export const saveSearch = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   let criteria: SearchCriteria;
   try { criteria = parseSearch(request.data?.criteria); } catch (error) { throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "Search is invalid."); }
@@ -231,7 +232,7 @@ export const saveSearch = onCall(async (request) => {
   });
   return { searchId };
 });
-export const deleteSavedSearch = onCall(async (request) => {
+export const deleteSavedSearch = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const searchId = validId(request.data?.searchId, "Search");
   const ref = searches.doc(searchId);

@@ -1,4 +1,5 @@
-import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { marketplaceAccountIsEligible } from "./account-eligibility";
 import { createHash } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -54,7 +55,7 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
     ? db.collection("discoveryAttributions").doc(hash(`${uid}|${signal.listingId}`)) : null;
   const promotionListingRef = promotionRef && signal.listingId ? db.collection("listings").doc(signal.listingId) : null;
   return runGuardedTransaction(db, async (transaction) => {
-    if (!(await accountIsActive(uid, transaction))) return { accepted: false, reason: "account_unavailable" as const };
+    if (!(await accountIsActive(uid, transaction)) || !(await marketplaceAccountIsEligible(uid, transaction))) return { accepted: false, reason: "account_unavailable" as const };
     const [existing, interest, trend, quota, promotion, promotionListing] = await Promise.all([
       transaction.get(eventRef), transaction.get(interestRef), trendRef ? transaction.get(trendRef) : null, quotaRef ? transaction.get(quotaRef) : null,
       promotionRef ? transaction.get(promotionRef) : null, promotionListingRef ? transaction.get(promotionListingRef) : null,
@@ -125,7 +126,7 @@ async function listingSignal(listingId: string, type: MarketplaceEventType, extr
   return { signal: { type, listingId, categoryId: String(data.categoryId ?? ""), price: amount, location: displayPublicLocation(publishableLocation(data)!), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
 }
 
-export const trackMarketplaceEvent = onCall(async (request) => {
+export const trackMarketplaceEvent = marketplaceMutationCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to record marketplace activity.");
   const input = request.data;
@@ -232,7 +233,7 @@ export const onCompletedTransactionInterest = onDocumentCreated("marketplaceEven
   const ledgerRef = db.collection("intelligenceCompletions").doc(data.transactionId);
   const interestRef = db.collection("userInterests").doc(data.userId);
   await runGuardedTransaction(db, async (tx) => {
-    if (!(await accountIsActive(data.userId, tx))) return;
+    if (!(await accountIsActive(data.userId, tx)) || !(await marketplaceAccountIsEligible(data.userId, tx))) return;
     const [transaction, ledger, interest] = await Promise.all([tx.get(transactionRef), tx.get(ledgerRef), tx.get(interestRef)]);
     const deal = transaction.data();
     if (ledger.exists || !deal || deal.status !== "completed" || deal.buyerId !== data.userId

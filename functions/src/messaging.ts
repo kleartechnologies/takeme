@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
@@ -18,7 +18,7 @@ function baseConversation(listing: FirebaseFirestore.DocumentData, listingId: st
   return { id: `${listingId}_${buyerId}`, listingId, listingTitle: String(listing.title ?? "Listing").slice(0, 80), listingImage: Array.isArray(listing.imageUrls) && typeof listing.imageUrls[0] === "string" ? listing.imageUrls[0] : null, sellerId: listing.sellerId, buyerId, participants: [buyerId, listing.sellerId], transactionId, status: "open", latestMessage: null, lastMessageAt: null, unreadBy: { [buyerId]: 0, [listing.sellerId]: 0 }, createdAt: now, updatedAt: now };
 }
 
-export const openListingConversation = onCall(async (request) => {
+export const openListingConversation = marketplaceMutationCall(async (request) => {
   const buyerId = uid(request.auth?.uid);
   const listingId = id(request.data?.listingId);
   const ref = db.collection("conversations").doc(`${listingId}_${buyerId}`);
@@ -34,7 +34,7 @@ export const openListingConversation = onCall(async (request) => {
   return { conversationId: ref.id };
 });
 
-export const openTransactionConversation = onCall(async (request) => {
+export const openTransactionConversation = marketplaceMutationCall(async (request) => {
   const userId = uid(request.auth?.uid);
   const transactionId = id(request.data?.transactionId);
   const transaction = await db.collection("transactions").doc(transactionId).get();
@@ -98,7 +98,7 @@ export const getConversationMessages = onCall(async (request) => {
   return { items: visible.map((item) => ({ id: item.id, senderId: item.data().senderId, body: item.data().body, createdAt: iso(item.data().createdAt) })), cursor: visible.at(-1)?.id ?? null, hasMore: page.size > 20 };
 });
 
-export const sendConversationMessage = onCall(async (request) => {
+export const sendConversationMessage = marketplaceMutationCall(async (request) => {
   const senderId = uid(request.auth?.uid);
   const conversationId = id(request.data?.conversationId);
   if (typeof request.data?.body !== "string") throw new HttpsError("invalid-argument", "Enter a message.");
@@ -118,7 +118,7 @@ export const sendConversationMessage = onCall(async (request) => {
   return { messageId: messageRef.id };
 });
 
-export const markConversationSeen = onCall(async (request) => {
+export const markConversationSeen = marketplaceMutationCall(async (request) => {
   const userId = uid(request.auth?.uid); const ref = db.collection("conversations").doc(id(request.data?.conversationId));
   await runGuardedTransaction(db, async (tx) => { const current = await tx.get(ref); participant(current.data(), userId); tx.update(ref, { [`unreadBy.${userId}`]: 0 }); });
   return { seen: true };

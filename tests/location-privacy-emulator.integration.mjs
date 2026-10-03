@@ -1,3 +1,4 @@
+import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -5,9 +6,9 @@ import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "fi
 import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
-const projectId = "demo-takeme-location";
-process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:18080";
-process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:19099";
+const projectId = "demo-takeme";
+process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 process.env.GCLOUD_PROJECT = projectId;
 const requireFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
 const { initializeApp: initializeAdminApp } = requireFunctions("firebase-admin/app");
@@ -20,10 +21,10 @@ const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.c
 async function client(label, authenticated = true) {
   const app = initializeApp(config, `${label}-${suffix}`);
   const auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app, "asia-southeast1");
-  connectAuthEmulator(auth, "http://127.0.0.1:19099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 18080);
-  connectFunctionsEmulator(functions, "127.0.0.1", 15001);
-  if (authenticated) await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, "TestPass123!");
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  if (authenticated) { await createUserWithEmailAndPassword(auth, `${label}-${suffix}@example.test`, createDemoPassword()); await acceptDemoPolicies(app); }
   return { app, auth, db, functions, uid: auth.currentUser?.uid };
 }
 
@@ -60,12 +61,12 @@ try {
   await assert.rejects(() => getDocs(query(collection(seller.db, "listings"), where("sellerId", "==", seller.uid), orderBy("createdAt", "desc"), limit(10))), /permission/i);
   const ownerListings = (await httpsCallable(seller.functions, "getMyListingHistory")({})).data;
   assert.deepEqual(new Set(ownerListings.listings.map((item) => item.id)), new Set([safeId, unsafeId, legacyId]));
-  const publicPage = (await httpsCallable(guest.functions, "getPublicListingPage")({ filters: { pageSize: 10 }, cursor: null })).data;
+  const publicPage = (await httpsCallable(guest.functions, "getPublicListingPage")({ filters: { sellerId: seller.uid, pageSize: 10 }, cursor: null })).data;
   assert.deepEqual(publicPage.listings.map((item) => item.id), [safeId]);
   assert.equal(publicPage.listings[0].location, "Jitra, Kedah");
   assert.equal(JSON.stringify(publicPage).includes("No 40 Jalan Example"), false);
   assert.equal(JSON.stringify(publicPage).includes("Private residence"), false);
-  const smallPage = (await httpsCallable(guest.functions, "getPublicListingPage")({ filters: { pageSize: 1 }, cursor: null })).data;
+  const smallPage = (await httpsCallable(guest.functions, "getPublicListingPage")({ filters: { sellerId: seller.uid, pageSize: 1 }, cursor: null })).data;
   assert.deepEqual(smallPage.listings.map((item) => item.id), [safeId], "An unsafe first candidate must not starve a safe later listing.");
   const sellerPage = (await httpsCallable(guest.functions, "getPublicListingPage")({ filters: { sellerId: seller.uid, pageSize: 10 }, cursor: null })).data;
   assert.deepEqual(sellerPage.listings.map((item) => item.id), [safeId]);

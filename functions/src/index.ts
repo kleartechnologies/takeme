@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, runGuardedTransaction } from "./account-lifecycle";
+import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getApp, initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -179,7 +179,7 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
   return value as string[];
 }
 
-export const createFixedListingDraft = onCall(async (request) => {
+export const createFixedListingDraft = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const content = parseFixedPayload(request.data);
   const meetup = await selectedMeetup(uid, content.meetupLocationId);
@@ -195,7 +195,7 @@ async function requireFixedOwner(uid: string, listingId: string) {
   if (snapshot.data()?.listingType !== "buy_now") throw new HttpsError("failed-precondition", "This listing is not fixed-price.");
 }
 
-export const publishFixedListing = onCall(async (request) => {
+export const publishFixedListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   await requireFixedOwner(uid, listingId);
@@ -212,7 +212,7 @@ export const publishFixedListing = onCall(async (request) => {
   return { listingId };
 });
 
-export const updateFixedListing = onCall(async (request) => {
+export const updateFixedListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   const content = parseFixedPayload(request.data, true);
@@ -232,7 +232,7 @@ export const updateFixedListing = onCall(async (request) => {
 
 // Cloud Run's browser preflight invoker binding is repaired separately by
 // scripts/repair-remove-fixed-listing-invoker.sh; callable auth remains required.
-export const removeFixedListing = onCall(async (request) => {
+export const removeFixedListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const listingId = requireId(request.data?.listingId, "Listing ID");
   const ref = db.collection(LISTINGS).doc(listingId);
@@ -301,7 +301,7 @@ function serializeAuction(data: DocumentData) {
   };
 }
 
-export const createAuctionListing = onCall(async (request) => {
+export const createAuctionListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const now = new Date();
   const input = parseListingPayload(request.data, now);
@@ -330,7 +330,7 @@ export const createAuctionListing = onCall(async (request) => {
   return { listingId: listingRef.id };
 });
 
-export const publishAuctionListing = onCall(async (request) => {
+export const publishAuctionListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown; imageUrls?: unknown };
   const listingId = requireId(input?.listingId, "Listing ID");
@@ -353,7 +353,7 @@ export const publishAuctionListing = onCall(async (request) => {
   return serializeAuction(result);
 });
 
-export const updateAuctionListing = onCall(async (request) => {
+export const updateAuctionListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const payload = request.data as Record<string, unknown>;
   const listingId = requireId(payload?.listingId, "Listing ID");
@@ -377,7 +377,7 @@ export const updateAuctionListing = onCall(async (request) => {
   return { listingId };
 });
 
-export const placeBid = onCall(async (request) => {
+export const placeBid = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown; amount?: unknown };
   const listingId = requireId(input?.listingId, "Listing ID");
@@ -421,7 +421,7 @@ export const placeBid = onCall(async (request) => {
   return serializeAuction(result);
 });
 
-export const cancelAuction = onCall(async (request) => {
+export const cancelAuction = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
   const input = request.data as { listingId?: unknown };
   const listingId = requireId(input?.listingId, "Listing ID");
@@ -551,5 +551,5 @@ export {
   addProtectedDisputeEvidence,
 } from "./protected-transactions";
 
-export { getAccountDeletionStatus, requestAccountDeletion, retryAccountDeletion, processAccountDeletions } from "./account-deletion";
+export { getAccountDeletionAvailability, getAccountDeletionStatus, requestAccountDeletion, retryAccountDeletion, processAccountDeletions } from "./account-deletion";
 export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome } from "./auth-onboarding";

@@ -4,6 +4,8 @@ TAKEME is a mobile-first peer-to-peer marketplace for Malaysia. The local source
 
 Brand: **Same Stuff. A Brighter Tomorrow.** · **Buy. Sell. Give. Reuse.** · Poppins · `#00C853`, `#006233`, `#E8F5E9`, `#1F2937`, `#6B7280`, `#FAFAFA`.
 
+V1 website release qualification now fails closed. Use `npm run build:demo` for local optimized verification; `npm run build` requires an explicit validated release target. Final production policy publication/acceptance and deletion activation remain blocked pending separate approval. See the current [production release runbook](docs/production-deployment-runbook.md); historical phase deployment counts below are not the current inventory.
+
 ## Phase 13 — engagement and retention
 
 Saved listings remain the watchlist. Seller follows and explicitly saved searches can produce real, deduplicated in-app alerts; fixed-price history is server-owned in integer sen. `/updates` is a paginated notification center with a server-maintained unread summary, preferences, and deep links. Auction and transaction alerts observe authoritative events only. The private admin Engagement view reports aggregate counts without notification content. Push, email, daily digest, messaging alerts, and protected-payment alerts are not active. See [engagement and retention](docs/engagement-retention.md) for the architecture and release prerequisites, and [mobile engagement](docs/mobile-engagement.md) for the Flutter contract. No deployment, GitHub push, or live payment connection is performed in this phase.
@@ -48,15 +50,14 @@ Requirements: Node.js 22, npm, Java, Firebase CLI. Use a **demo project ID** for
 ```bash
 npm install
 npm --prefix functions install
-cp .env.example .env.local
 ```
 
-Set `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true` in `.env.local`. The Firebase client supplies demo config only in this mode. In separate terminals:
+No `.env.local` is required. Supply the verified demo configuration in the local process; do not use production credentials for local work. In separate terminals:
 
 ```bash
 npm --prefix functions run build
 firebase emulators:start --project demo-takeme --only auth,firestore,storage,functions
-npm run dev
+NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-takeme npm run dev
 ```
 
 Configured ports: Auth `9099`, Firestore `8080`, Storage `9199`, Functions `5001`, Emulator UI `4000`. The default Functions region is `asia-southeast1`.
@@ -70,7 +71,7 @@ node tests/auction-emulator.integration.mjs # requires the four emulators above
 node tests/trust-emulator.integration.mjs # requires Auth + Firestore emulators
 npm run lint
 npx tsc --noEmit
-npm run build
+npm run build:demo
 ```
 
 The emulator integration test creates only demo-project accounts/listings/bids and checks callable authorization, minimum bids, concurrency, immutable history, direct-write denial, cancellation, expiry, and winner finalization. It does not create production data.

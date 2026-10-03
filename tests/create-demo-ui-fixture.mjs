@@ -1,13 +1,17 @@
 // Local visual fixtures only. Every SDK is explicitly attached to demo emulators.
-// Run while `firebase emulators:start --project demo-takeme` is running.
+// Run with demo-takeme emulators: node tests/create-demo-ui-fixture.mjs [private-output.json].
+// Never print or commit the generated output; it contains disposable emulator credentials.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { resolve, dirname, relative } from "node:path";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { acceptDemoPolicies } from "./helpers/demo-eligibility.mjs";
 
 const projectId = "demo-takeme";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
@@ -17,10 +21,14 @@ const functionsRequire = createRequire(new URL("../functions/package.json", impo
 const { getFirestore: getAdminFirestore, Timestamp } = functionsRequire("firebase-admin/firestore");
 const { _test } = functionsRequire("./lib/index.js");
 const adminDb = getAdminFirestore();
-const suffix = Date.now();
-const password = "LocalTest123!"; // Disposable emulator credential; never production.
+const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
+const outputPath = resolve(process.argv[2] || ".local-verification/ui-fixture.json");
+const repoPath = resolve(new URL("..", import.meta.url).pathname);
+const relativeOutput = relative(repoPath, outputPath);
+if (!relativeOutput.startsWith("..") && !relativeOutput.startsWith(".local-verification/")) throw new Error("Store credential output outside Git or in .local-verification only.");
 const apps = [];
 async function person(role) {
+  const password = randomUUID();
   const app = initializeApp({ projectId, apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.com`, storageBucket: `${projectId}.firebasestorage.app`, appId: "1:123456789:web:demo" }, `${role}-${suffix}`);
   apps.push(app);
   const auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app, "asia-southeast1"), storage = getStorage(app);
@@ -32,7 +40,10 @@ async function person(role) {
   await createUserWithEmailAndPassword(auth, email, password);
   const uid = auth.currentUser.uid;
   await setDoc(doc(db, "users", uid), { uid, displayName: `Local ${role}`, photoURL: null, location: "Jitra, Kedah", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  return { app, uid, email, db, functions, storage };
+  await acceptDemoPolicies(app, functions);
+  await httpsCallable(functions, "completeFirstTimeProfile")({});
+  await httpsCallable(functions, "finishAccountWelcome")({});
+  return { app, uid, email, password, db, functions, storage };
 }
 const call = async (user, name, data = {}) => (await httpsCallable(user.functions, name)(data)).data;
 try {
@@ -88,5 +99,8 @@ try {
     const publicState = await call(buyer, "getPublicListingDetail", { listingId: created.listingId });
     assert.equal(publicState.listing.id, created.listingId);
   }
-  console.log(JSON.stringify({ projectId, matrix, seller: { uid: seller.uid, email: seller.email }, buyer: { uid: buyer.uid, email: buyer.email }, listingId, availableListingId, auctionId: auction.listingId, auctionStartAt: new Date(start).toISOString(), draftId: draft.listingId, offerId: offer.offerId, transactionId: accepted.transactionId, conversationId: conversation.conversationId }, null, 2));
+  const fixture = { projectId, matrix, seller: { uid: seller.uid, email: seller.email, password: seller.password }, buyer: { uid: buyer.uid, email: buyer.email, password: buyer.password }, listingId, availableListingId, auctionId: auction.listingId, auctionStartAt: new Date(start).toISOString(), draftId: draft.listingId, offerId: offer.offerId, transactionId: accepted.transactionId, conversationId: conversation.conversationId };
+  mkdirSync(dirname(outputPath), { recursive: true, mode: 0o700 });
+  writeFileSync(outputPath, JSON.stringify(fixture, null, 2), { mode: 0o600, flag: "wx" });
+  console.log("Demo UI fixtures created. Credentials are stored only in the private local output file.");
 } finally { await Promise.all(apps.map(deleteApp)); }

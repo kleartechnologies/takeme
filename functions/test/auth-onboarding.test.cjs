@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { AUTH_POLICY_VERSION, hasCurrentAcceptance, validateAcceptance, requireOnboardingDemo } = require('../lib/auth-onboarding');
+const { demoReleasePolicy } = require('../lib/release-policy');
 test('acceptance requires three explicit confirmations and exact stable versions', () => {
   const accepted = { acceptTerms: true, acceptPrivacy: true, confirmAge18: true, termsVersion: AUTH_POLICY_VERSION, privacyVersion: AUTH_POLICY_VERSION };
   validateAcceptance(accepted);
@@ -10,9 +11,9 @@ test('acceptance requires three explicit confirmations and exact stable versions
 test('a boolean or client-looking date cannot establish server acceptance', () => {
   const timestamp = { toMillis: () => 1 };
   const data = { termsVersion: AUTH_POLICY_VERSION, privacyVersion: AUTH_POLICY_VERSION, termsAcceptedAt: timestamp, privacyAcceptedAt: timestamp, age18ConfirmedAt: timestamp, acceptanceSource: 'web' };
-  assert.ok(hasCurrentAcceptance(data));
-  assert.equal(hasCurrentAcceptance(undefined), false);
-  for (const field of ['termsAcceptedAt', 'privacyAcceptedAt', 'age18ConfirmedAt']) assert.equal(hasCurrentAcceptance({ ...data, [field]: '2026-10-03' }), false);
+  assert.ok(hasCurrentAcceptance(data, demoReleasePolicy));
+  assert.equal(hasCurrentAcceptance(undefined, demoReleasePolicy), false);
+  for (const field of ['termsAcceptedAt', 'privacyAcceptedAt', 'age18ConfirmedAt']) assert.equal(hasCurrentAcceptance({ ...data, [field]: '2026-10-03' }, demoReleasePolicy), false);
 });
 test('local draft functions refuse production or incomplete emulator configuration', () => {
   const keys = ['GCLOUD_PROJECT', 'GOOGLE_CLOUD_PROJECT', 'FIREBASE_AUTH_EMULATOR_HOST', 'FIRESTORE_EMULATOR_HOST'];

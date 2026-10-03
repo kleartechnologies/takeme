@@ -1,4 +1,4 @@
-import { marketplaceCall as onCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
@@ -56,7 +56,7 @@ async function packages(): Promise<PromotionPackage[]> {
 
 export const getPromotionPackages = onCall(async () => ({ packages: await packages(), paymentAvailable: PROMOTION_PAYMENT_GATEWAY.available, pricingFinal: false }));
 
-export const createPromotionRequest = onCall(async (request) => {
+export const createPromotionRequest = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const listingId = requiredId(request.data?.listingId, "Listing");
   const packageId = requiredId(request.data?.packageId, "Package");
@@ -90,7 +90,7 @@ export const createPromotionRequest = onCall(async (request) => {
   return { promotionId: promotionRef.id, status: "pending_payment", paymentAvailable: PROMOTION_PAYMENT_GATEWAY.available };
 });
 
-export const cancelPromotionRequest = onCall(async (request) => {
+export const cancelPromotionRequest = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const promotionId = requiredId(request.data?.promotionId, "Promotion");
   const ref = db.collection("promotions").doc(promotionId);
@@ -155,7 +155,7 @@ export const getFeaturedPromotions = onCall(async () => {
   return { items };
 });
 
-export const trackPromotionEngagement = onCall(async (request) => {
+export const trackPromotionEngagement = marketplaceMutationCall(async (request) => {
   const uid = requireUid(request.auth?.uid);
   const type = request.data?.type;
   if (type !== "PROMOTION_IMPRESSION" && type !== "PROMOTION_CLICK") throw new HttpsError("invalid-argument", "Invalid promotion event.");
