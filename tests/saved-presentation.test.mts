@@ -22,12 +22,14 @@ test('statuses never describe sold, ended, cancelled or expired records as avail
   assert.equal(savedAvailability({...auction,auctionStatus:'cancelled'},now),'Auction cancelled');
   assert.equal(savedAvailability({...auction,auctionStatus:'ended'},now),'Auction ended');
 });
-test('auction outcomes use actual final amounts in sen without guessing a result from the current bid', () => {
+test('ended auction outcomes show actual final bids without claiming a completed sale', () => {
   const ended = listing({listingType:'auction',status:'ended',auctionStatus:'ended',bidCount:2,currentBid:95000,finalBid:98000});
-  assert.equal(auctionOutcome(ended)?.replace(/\s/g, ''),'SoldforRM980.00');
+  assert.equal(auctionOutcome(ended)?.replace(/\s/g, ''),'FinalbidRM980.00');
+  assert.equal(auctionOutcome({...ended,status:'sold',finalBid:235000})?.replace(/\s/g, ''),'FinalbidRM2,350.00');
   assert.equal(auctionOutcome({...ended,finalBid:null}),null);
   assert.equal(auctionOutcome({...ended,bidCount:0,finalBid:null}),'No bids');
   assert.equal(auctionOutcome({...ended,status:'active',auctionStatus:'active'}),null);
+  assert.equal(auctionOutcome({...ended,status:'active',auctionStatus:'scheduled'}),null);
   assert.equal(auctionOutcome({...ended,auctionStatus:'cancelled'}),null);
 });
 test('saved search destinations round-trip every actual filter, encoded text and zero maximum price', () => {

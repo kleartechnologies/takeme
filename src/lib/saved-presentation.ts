@@ -23,7 +23,8 @@ export function auctionOutcome(listing: Listing): string | null {
   if (listing.auctionStatus === 'cancelled' || listing.auctionStatus !== 'ended' && listing.status !== 'ended') return null;
   if (!(listing.bidCount ?? 0)) return 'No bids';
   if (typeof listing.finalBid !== 'number') return null;
-  return `Sold for ${new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 2 }).format(listing.finalBid / 100)}`;
+  // Auction finalization does not confirm that the exchange was completed.
+  return `Final bid ${new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR', maximumFractionDigits: 2 }).format(listing.finalBid / 100)}`;
 }
 export function savedSearchHref(criteria: SearchCriteria) {
   const query = new URLSearchParams();

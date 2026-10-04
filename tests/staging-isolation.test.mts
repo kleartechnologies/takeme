@@ -105,7 +105,47 @@ test("qualified staging metadata fetches only its callable and filters foreign m
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, `https://asia-southeast1-${stagingEnvironment.projectId}.cloudfunctions.net/getPublicListingDetail`);
   assert.equal(requests[0].init?.cache, "no-store");
-  assert.equal(requests[0].init?.redirect, "error");
+  assert.equal(requests[0].init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { data: { listingId: "owned-stage-listing" } });
+  assert.equal(requests[0].init?.redirect, "manual");
+  const metadata = buildListingMetadata("owned-stage-listing", listing, stagingEnvironment.siteUrl);
+  assert.deepEqual(metadata.title, { absolute: "Synthetic item | TAKEME" });
+  assert.equal(metadata.openGraph?.title, "Synthetic item | TAKEME");
+  assert.deepEqual(metadata.robots, { index: false, follow: false });
+});
+
+test("staging metadata rejects every redirect without following even an expected destination", async t => {
+  const { env } = fixture();
+  const endpoint = metadataEndpoint(env)!;
+  let calls = 0;
+  for (const destination of [endpoint, "https://untrusted.example.test/listing", "https://asia-southeast1-takeme-52b80.cloudfunctions.net/getPublicListingDetail"]) {
+    for (const status of [301, 302, 303, 307, 308]) {
+      t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+        calls++;
+        assert.equal(url, endpoint);
+        assert.equal(init?.redirect, "manual");
+        return new Response(null, { status, headers: { Location: destination } });
+      });
+      const listing = await withEnvironment(env, () => getPublicListingForMetadata("owned-stage-listing"));
+      assert.equal(listing, null);
+      assert.deepEqual(buildListingMetadata("owned-stage-listing", listing, stagingEnvironment.siteUrl).robots, { index: false, follow: false });
+    }
+  }
+  assert.equal(calls, 15);
+});
+
+test("missing, private, failed and malformed staging metadata responses remain unavailable", async t => {
+  const { env } = fixture();
+  for (const [status, body] of [[404, {}], [403, {}], [503, {}], [200, { result: { listing: null } }],
+    [200, { result: { listing: { status: "draft", title: "Private draft" } } }],
+    [200, { result: { listing: { status: "active", title: "Invalid projection" } } }], [200, "invalid-json"]] as const) {
+    t.mock.method(globalThis, "fetch", async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status }));
+    const listing = await withEnvironment(env, () => getPublicListingForMetadata("missing-stage-listing"));
+    assert.equal(listing, null);
+    const metadata = buildListingMetadata("missing-stage-listing", listing, stagingEnvironment.siteUrl);
+    assert.deepEqual(metadata.title, { absolute: "Listing unavailable | TAKEME" });
+    assert.deepEqual(metadata.robots, { index: false, follow: false });
+  }
 });
 
 test("staging media and social previews reject foreign buckets, hosts and redirect-like queries", () => {

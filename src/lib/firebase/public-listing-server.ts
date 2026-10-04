@@ -27,7 +27,10 @@ export async function getPublicListingForMetadata(id: string): Promise<PublicLis
   const staging = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === stagingEnvironment.projectId;
 
   try {
-    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { listingId: id } }), cache: "no-store", ...(staging ? { redirect: "error" as const } : {}) });
+    // workerd rejects redirect:"error" during request construction. Manual mode
+    // makes the response observable without following it; every non-2xx result,
+    // including redirects to the same endpoint, remains unavailable below.
+    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { listingId: id } }), cache: "no-store", ...(staging ? { redirect: "manual" as const } : {}) });
     if (!response.ok) return null;
     const payload = await response.json() as { result?: { listing?: Record<string, unknown> } };
     const data = payload.result?.listing;
