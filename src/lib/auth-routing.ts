@@ -1,8 +1,9 @@
 export type SetupStep = "acceptance" | "profile" | "welcome" | "ready" | "deletion";
+export const MARKETPLACE_HOME = "/explore";
 export const authPaths = ["/login", "/register", "/forgot-password", "/onboarding/acceptance", "/onboarding/profile", "/onboarding/welcome"];
 export function isAuthPath(path: string) { return authPaths.includes(path); }
 
-export function safeAuthNext(value: string | null | undefined, fallback = "/explore") {
+export function safeAuthNext(value: string | null | undefined, fallback = MARKETPLACE_HOME) {
   if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\u0000-\u0020\u007f]/.test(value)) return fallback;
   try {
     const decoded = decodeURIComponent(value);
@@ -14,10 +15,20 @@ export function safeAuthNext(value: string | null | undefined, fallback = "/expl
   } catch { return fallback; }
 }
 
-export function setupDestination(step: SetupStep, intended: string) {
+export function setupDestination(step: SetupStep, intended?: string | null) {
   if (step === "deletion") return "/account-deletion";
   const next = safeAuthNext(intended);
   return step === "ready" ? next : `/onboarding/${step}?next=${encodeURIComponent(next)}`;
+}
+
+export function welcomeDestinations(intended?: string | null) {
+  const next = safeAuthNext(intended);
+  return {
+    explore: MARKETPLACE_HOME,
+    secondary: next === MARKETPLACE_HOME
+      ? { label: "Sell Something", destination: "/sell" }
+      : { label: "Continue where you left off", destination: next },
+  };
 }
 
 // Pending accounts retain only the already approved resolution and deletion surfaces.

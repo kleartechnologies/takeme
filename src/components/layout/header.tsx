@@ -79,7 +79,7 @@ export function Header() {
     {pathname === "/" && <div className="page-shell flex gap-2 pb-3 lg:hidden"><SearchForm /><Link href="/explore" aria-label="Browse with filters" className="grid size-11 shrink-0 place-items-center rounded-full border border-gray-200 bg-[var(--takeme-off-white)] shadow-sm"><SlidersHorizontal size={21} /></Link></div>}
     {open && <nav id="marketplace-menu" className="border-t border-gray-200 bg-white px-5 py-3 lg:hidden" aria-label="Mobile menu"><div className="mx-auto grid max-w-7xl gap-0.5">
       {menuLinks.map((link) => <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{link.label}</Link>)}
-      <Link href={accountHref} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{user ? "My Listings" : "Log in or register"}</Link>
+      <Link href={user ? accountHref : "/login"} onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]">{user ? "My Listings" : "Log in or register"}</Link>
       {user && <button type="button" onClick={() => { setOpen(false); void logout(); }} className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold hover:bg-[var(--takeme-light-green)] hover:text-[var(--takeme-dark-green)]"><LogOut size={17} /> Sign out</button>}
     </div></nav>}
   </header>;

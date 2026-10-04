@@ -87,6 +87,24 @@ try {
     for (const person of [owner, google]) assert.equal((await person.call("getAccountSetupStatus")).step, "ready");
     assert.equal((await other.call("getAccountSetupStatus")).step, "acceptance");
   });
+  await check("signup, welcome and returning authentication never execute marketplace actions", async () => {
+    for (const person of [owner, google]) {
+      const queries = [
+        db.collection("listings").where("sellerId", "==", person.uid),
+        db.collection("conversations").where("participants", "array-contains", person.uid),
+        ...["offers", "transactions"].flatMap(collection => [
+          db.collection(collection).where("buyerId", "==", person.uid),
+          db.collection(collection).where("sellerId", "==", person.uid),
+        ]),
+        db.collectionGroup("bids").where("bidderId", "==", person.uid),
+        db.collectionGroup("messages").where("senderId", "==", person.uid),
+        db.collection("users").doc(person.uid).collection("saved"),
+        db.collection("users").doc(person.uid).collection("following"),
+        db.collection("savedSearches").where("userId", "==", person.uid),
+      ];
+      for (const query of queries) assert.equal((await query.limit(1).get()).empty, true);
+    }
+  });
   await check("wrong passwords and duplicate email fail; six-character demo password is accepted", async () => {
     await assert.rejects(() => signInWithEmailAndPassword(guest.auth, owner.email, randomUUID()), /invalid|password/i);
     await assert.rejects(() => createUserWithEmailAndPassword(guest.auth, owner.email, randomUUID()), /already/i);

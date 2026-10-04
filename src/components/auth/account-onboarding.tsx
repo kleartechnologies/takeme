@@ -13,7 +13,7 @@ import { createProfileIfMissing } from "@/lib/firebase/profile-bootstrap";
 import { PROFILE_NAME_FALLBACK, validateSignupDisplayName } from "@/lib/firebase/profile-name";
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
 import { logout } from "@/lib/firebase/auth";
-import { safeAuthNext, setupDestination, type SetupStep } from "@/lib/auth-routing";
+import { safeAuthNext, setupDestination, welcomeDestinations, type SetupStep } from "@/lib/auth-routing";
 import { acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome, isLocalAccountSetup, accountPolicyAvailable, accountReleasePolicy } from "@/lib/services/account-setup";
 import { getUserProfile, updatePublicProfile } from "@/lib/services/users";
 import { MALAYSIAN_STATES, formatPublicLocation, makePublicLocation, parseLegacyGeneralLocation } from "@/lib/general-location";
@@ -29,17 +29,19 @@ function AccountOnboardingForm({ step }: { step: Exclude<SetupStep, "ready" | "d
   const policy = accountReleasePolicy(), local = isLocalAccountSetup();
   const available = accountPolicyAvailable() && setup?.policyAvailable !== false;
   const router = useRouter(), nextPath = safeAuthNext(useSearchParams().get("next"));
+  const welcome = welcomeDestinations(nextPath);
   const [age, setAge] = useState(false), [agreed, setAgreed] = useState(false);
   const [name, setName] = useState(""), [city, setCity] = useState(""), [state, setState] = useState("");
   const [photo, setPhoto] = useState<File | null>(null), [photoURL, setPhotoURL] = useState<string | null>(null);
   const [profileReady, setProfileReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const errorRef = useRef<HTMLDivElement>(null), fileInput = useRef<HTMLInputElement>(null), submitting = useRef(false);
+  const welcomeDestination = useRef<string | null>(null);
   function validationError(message: string) { setError(message); requestAnimationFrame(() => errorRef.current?.focus()); }
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => {
     if (!loading && !user) router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
-    else if (!busy && setup && setup.step !== step) router.replace(setupDestination(setup.step, nextPath));
+    else if (!busy && setup && setup.step !== step) router.replace(setupDestination(setup.step, welcomeDestination.current ?? nextPath));
   }, [loading, user, setup, step, nextPath, router, busy]);
   useEffect(() => {
     if (step !== "profile" || !user || setup?.step !== "profile" || !db) return;
@@ -57,8 +59,11 @@ function AccountOnboardingForm({ step }: { step: Exclude<SetupStep, "ready" | "d
     void load().catch(() => { if (active) setError("Your profile could not be loaded. Please try again."); });
     return () => { active = false; };
   }, [user, setup?.step, step, revision]);
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (submitting.current) return; setError("");
+    const destination = step === "welcome"
+      ? safeAuthNext((event.nativeEvent as SubmitEvent).submitter?.getAttribute("value"))
+      : nextPath;
     if (step === "acceptance" && (!age || !agreed)) return validationError("Confirm that you are at least 18 and agree to both policies to continue.");
     if (step === "profile") {
       try { validateSignupDisplayName(name); } catch { return validationError("Display name must be 2–80 characters."); }
@@ -79,10 +84,13 @@ function AccountOnboardingForm({ step }: { step: Exclude<SetupStep, "ready" | "d
         assertSameAccount();
         await completeFirstTimeProfile();
       }
-      if (step === "welcome") await finishAccountWelcome();
+      if (step === "welcome") {
+        welcomeDestination.current = destination;
+        await finishAccountWelcome();
+      }
       assertSameAccount();
       const status = await refreshSetup();
-      if (status) router.replace(setupDestination(status.step, nextPath));
+      if (status) router.replace(setupDestination(status.step, destination));
     } catch (caught) { setError(friendlyAuthError(caught)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -103,7 +111,8 @@ function AccountOnboardingForm({ step }: { step: Exclude<SetupStep, "ready" | "d
       </>}
       {step === "welcome" && <div className={styles.chips}>{["New", "Branded", "Preloved", "Auctions"].map(item => <span key={item}>{item}</span>)}</div>}
       {error && <div className={styles.error} ref={errorRef} tabIndex={-1} role="alert">{error}</div>}
-      {step === "profile" && !profileReady && error ? <button className={styles.primary} type="button" onClick={() => setRevision(value => value + 1)}>Retry</button> : <button className={styles.primary} disabled={busy || (step === "profile" && !profileReady)} type="submit">{busy && <LoaderCircle size={18} className="animate-spin" />}{busy ? "Saving…" : step === "acceptance" ? "Agree & continue" : step === "profile" ? "Continue" : nextPath === "/explore" ? "Start exploring" : "Continue to TAKEME"}</button>}
+      {step === "profile" && !profileReady && error ? <button className={styles.primary} type="button" onClick={() => setRevision(value => value + 1)}>Retry</button> : <button className={styles.primary} disabled={busy || (step === "profile" && !profileReady)} type="submit" value={step === "welcome" ? welcome.explore : undefined}>{busy && <LoaderCircle size={18} className="animate-spin" />}{busy ? "Saving…" : step === "acceptance" ? "Agree & continue" : step === "profile" ? "Continue" : "Start Exploring"}</button>}
+      {step === "welcome" && <button className={styles.textButton} type="submit" value={welcome.secondary.destination} disabled={busy}>{welcome.secondary.label}</button>}
     </form>
     {step === "acceptance" && <p className={styles.draft}>{local ? `Local preview · Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}. Acceptance is recorded for this demo account only. These policies are not published or final.` : `Terms ${policy.termsVersion} / Privacy ${policy.privacyVersion}.`}</p>}
     {step !== "welcome" && <p className={styles.switch}><button className={styles.textButton} disabled={busy} onClick={() => void logout()}>Sign out</button> · <Link href="/account-deletion">Account deletion</Link></p>}
