@@ -2,6 +2,7 @@ import { stagingEnvironment } from "../functions/src/staging-environment.ts";
 
 const tokenLimit = 16384;
 const certificates = new Map();
+const approvedStagingEmails = new Set(["amirulaidi@gmail.com", "zweetdata@gmail.com"]);
 function normalizeEmail(value) { return typeof value === "string" ? value.trim().toLowerCase() : ""; }
 function decodePart(value) {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error();
@@ -14,8 +15,10 @@ function accessConfiguration(env) {
   if (!/^https:\/\/[a-z0-9][a-z0-9-]{0,62}\.cloudflareaccess\.com$/.test(issuer || "") || !/^[a-f0-9]{64}$/.test(env.CF_ACCESS_AUD || "")) return null;
   try {
     const emails = JSON.parse(env.CF_ACCESS_ALLOWED_EMAILS || "");
-    if (!Array.isArray(emails) || emails.length !== 1 || emails.some(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email)))) return null;
-    return { issuer, audience: env.CF_ACCESS_AUD, emails: emails.map(normalizeEmail) };
+    if (!Array.isArray(emails) || emails.length !== approvedStagingEmails.size) return null;
+    const normalized = emails.map(normalizeEmail);
+    if (new Set(normalized).size !== approvedStagingEmails.size || normalized.some(email => !approvedStagingEmails.has(email))) return null;
+    return { issuer, audience: env.CF_ACCESS_AUD, emails: normalized };
   } catch { return null; }
 }
 

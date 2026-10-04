@@ -4,13 +4,14 @@ import { stagingAccessAllowed, createStagingWorker } from "../workers/staging-ac
 import { stagingEnvironment as staging } from "../functions/src/staging-environment.ts";
 
 const audience = "a".repeat(64), issuer = "https://qualification.cloudflareaccess.com";
-const email = "approved@example.test";
+const approvedEmails = ["amirulaidi@gmail.com", "zweetdata@gmail.com"];
+const email = approvedEmails[0];
 const now = 1900000000000;
 const env = {
   TAKEME_RELEASE_TARGET: "staging", TAKEME_FIREBASE_PROJECT_ID: staging.projectId,
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: staging.projectId, NEXT_PUBLIC_SITE_URL: staging.siteUrl,
   NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false", TAKEME_ENABLE_PRODUCTION_DELETION: "false",
-  CF_ACCESS_TEAM_DOMAIN: issuer, CF_ACCESS_AUD: audience, CF_ACCESS_ALLOWED_EMAILS: JSON.stringify([email]),
+  CF_ACCESS_TEAM_DOMAIN: issuer, CF_ACCESS_AUD: audience, CF_ACCESS_ALLOWED_EMAILS: JSON.stringify(approvedEmails),
 };
 const pair = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
 const publicKey = { ...await crypto.subtle.exportKey("jwk", pair.publicKey), kid: "ephemeral-test-key", alg: "RS256", use: "sig" };
@@ -50,17 +51,45 @@ test("native Access identity without an email denies", async () => {
 });
 
 test("native Access identity requires exact email equality", async () => {
-  for (const wrong of ["other@example.test", `${email}.attacker.test`, `prefix-${email}`]) {
+  for (const wrong of ["other@example.test", "third@gmail.com", "*@gmail.com", ...approvedEmails.flatMap(email => [`${email}.attacker.test`, `prefix-${email}`])]) {
     assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), env, { context: nativeContext({ email: wrong }), fetch: noCertificateIO }), false);
   }
 });
 
-test("native Access accepts only the normalized mixed-case approved email", async () => {
-  assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), env, { context: nativeContext({ email: `  ${email.toUpperCase()}  ` }), fetch: noCertificateIO }), true);
+test("native Access accepts both normalized mixed-case approved emails", async () => {
+  for (const email of approvedEmails) assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), env, { context: nativeContext({ email: `  ${email.toUpperCase()}  ` }), fetch: noCertificateIO }), true);
 });
 
-test("native Access accepts the exact approved email without request identity headers", async () => {
-  assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), env, { context: nativeContext({ email }), fetch: noCertificateIO }), true);
+test("native Access accepts both exact approved emails without request identity headers", async () => {
+  for (const email of approvedEmails) assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), env, { context: nativeContext({ email }), fetch: noCertificateIO }), true);
+});
+
+test("allowlist configuration accepts only the exact unique approved pair after normalization, in either order", async () => {
+  for (const emails of [approvedEmails, [...approvedEmails].reverse(), [...approvedEmails].reverse().map(email => `  ${email.toUpperCase()}  `)]) {
+    const configured = { ...env, CF_ACCESS_ALLOWED_EMAILS: JSON.stringify(emails) };
+    for (const email of approvedEmails) assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl), configured, { context: nativeContext({ email }), fetch: noCertificateIO }), true);
+  }
+});
+
+test("malformed, missing, duplicate, arbitrary or extra allowlist entries fail closed before certificate or app IO", async () => {
+  const assertion = await token();
+  let certificateCalls = 0, appCalls = 0;
+  const fetch = async () => { certificateCalls++; throw new Error("Invalid configuration must not fetch certificates"); };
+  const worker = createStagingWorker({ fetch: async () => { appCalls++; return new Response("Unexpected app IO"); } }, { now, fetch });
+  const malformed = [undefined, "", "not-json", "null", JSON.stringify(email), JSON.stringify({ emails: approvedEmails }),
+    ...[[], [email], [email, email], [email, `  ${email.toUpperCase()}  `], [null, approvedEmails[1]], [123, approvedEmails[1]],
+      ["", approvedEmails[1]], ["invalid", approvedEmails[1]], ["*@gmail.com", approvedEmails[1]], ["gmail.com", approvedEmails[1]],
+      [email, "third@gmail.com"], ["first@example.test", "second@example.test"], [...approvedEmails, "third@gmail.com"]].map(emails => JSON.stringify(emails))];
+  for (const CF_ACCESS_ALLOWED_EMAILS of malformed) {
+    const configured = { ...env, CF_ACCESS_ALLOWED_EMAILS };
+    for (const headers of [{}, { "Cf-Access-Jwt-Assertion": assertion }, { Cookie: `CF_Authorization=${assertion}` }] as HeadersInit[]) {
+      const request = new Request(staging.siteUrl, { headers });
+      assert.equal(await stagingAccessAllowed(request, configured, { now, context: nativeContext({ email }), fetch }), false);
+      assert.equal((await worker.fetch(request, configured, {})).status, 403);
+    }
+  }
+  assert.equal(certificateCalls, 0);
+  assert.equal(appCalls, 0);
 });
 
 test("invalid native context denies without falling back to a valid signed application cookie", async () => {
@@ -74,9 +103,13 @@ test("invalid native context denies without falling back to a valid signed appli
 });
 
 test("Static Assets paths accept a fully verified application cookie when native context and assertion are absent", async () => {
-  const assertion = await token({ email: `  ${email.toUpperCase()}  ` });
-  for (const path of ["/", "/login", "/privacy", "/_next/static/source.js", "/_next/image?url=%2Fbrand%2Fimage.png"]) {
-    assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl + path, { headers: { Cookie: `other=ignored; CF_Authorization=${assertion}; preference=test` } }), env, { now, context: {}, fetch: certificateFetch }), true);
+  for (const email of approvedEmails) {
+    for (const identity of [email, `  ${email.toUpperCase()}  `]) {
+      const assertion = await token({ email: identity });
+      for (const path of ["/", "/login", "/privacy", "/_next/static/source.js", "/_next/image?url=%2Fbrand%2Fimage.png"]) {
+        assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl + path, { headers: { Cookie: `other=ignored; CF_Authorization=${assertion}; preference=test` } }), env, { now, context: {}, fetch: certificateFetch }), true);
+      }
+    }
   }
 });
 
@@ -128,16 +161,36 @@ test("Worker passes the real invocation context to the guard and denies before d
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
-test("Access requires a real RS256 signature, exact issuer/audience, live dates and the approved tester email", async () => {
+test("Access requires a real RS256 signature, exact issuer/audience, live dates and one of the two approved tester emails", async () => {
   const options = { now, fetch: certificateFetch };
   const valid = await token();
-  assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl, { headers: { "Cf-Access-Jwt-Assertion": valid } }), env, options), true);
-  for (const [change, header] of [[{ email: "other@example.test" }, {}], [{ aud: ["b".repeat(64)] }, {}], [{ iss: "https://different.cloudflareaccess.com" }, {}], [{ exp: Math.floor(now / 1000) }, {}], [{ nbf: Math.floor(now / 1000) + 600 }, {}], [{ iat: Math.floor(now / 1000) + 600 }, {}], [{}, { alg: "HS256" }], [{}, { kid: "unknown" }]]) {
+  for (const email of approvedEmails) {
+    for (const identity of [email, `  ${email.toUpperCase()}  `]) assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl, { headers: { "Cf-Access-Jwt-Assertion": await token({ email: identity }) } }), env, options), true);
+  }
+  for (const [change, header] of [[{ email: undefined }, {}], [{ email: "" }, {}], [{ email: "   " }, {}], [{ email: 123 }, {}], [{ email: "other@example.test" }, {}], [{ email: "third@gmail.com" }, {}], [{ email: "*@gmail.com" }, {}], [{ aud: ["b".repeat(64)] }, {}], [{ iss: "https://different.cloudflareaccess.com" }, {}], [{ exp: Math.floor(now / 1000) }, {}], [{ nbf: Math.floor(now / 1000) + 600 }, {}], [{ iat: Math.floor(now / 1000) + 600 }, {}], [{}, { alg: "HS256" }], [{}, { kid: "unknown" }]]) {
     assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl, { headers: { "Cf-Access-Jwt-Assertion": await token(change, header) } }), env, options), false);
   }
   const invalid = valid.slice(0, -20) + "a".repeat(20);
   assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl, { headers: { "Cf-Access-Jwt-Assertion": invalid } }), env, options), false);
   assert.equal(await stagingAccessAllowed(new Request(staging.siteUrl, { headers: { "Cf-Access-Jwt-Assertion": valid } }), env, { now, fetch: async () => new Response("unavailable", { status: 503 }) }), false);
+});
+
+test("approved identities cannot use the staging wrapper for a production target or origin", async () => {
+  let certificateCalls = 0, appCalls = 0;
+  const fetch = async () => { certificateCalls++; throw new Error("Production must not fetch certificates"); };
+  const worker = createStagingWorker({ fetch: async () => { appCalls++; return new Response("Unexpected app IO"); } }, { now, fetch });
+  for (const email of approvedEmails) {
+    const assertion = await token({ email });
+    for (const [url, configured] of [[staging.siteUrl, { ...env, TAKEME_RELEASE_TARGET: "production" }], ["https://takeme.my/", env]] as const) {
+      for (const headers of [{}, { "Cf-Access-Jwt-Assertion": assertion }, { Cookie: `CF_Authorization=${assertion}` }] as HeadersInit[]) {
+        const request = new Request(url, { headers });
+        assert.equal(await stagingAccessAllowed(request, configured, { now, context: nativeContext({ email }), fetch }), false);
+        assert.equal((await worker.fetch(request, configured, {})).status, 403);
+      }
+    }
+  }
+  assert.equal(certificateCalls, 0);
+  assert.equal(appCalls, 0);
 });
 
 test("guarded Worker blocks all app calls without Access and marks authenticated staging output private/noindex", async () => {
