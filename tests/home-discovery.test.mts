@@ -63,7 +63,7 @@ test("Home discovery previews stay one compact row without changing inventory qu
 test("compact Home cards leave detailed seller trust and auction history on detail routes", () => {
   const content = source("src/components/listings/discovery-card-content.tsx");
   assert.doesNotMatch(content, /PublicSellerSummary|bidCount.*bids|completedSales|sellerId/);
-  assert.match(content, /"Current bid" : "Starting bid"/);
+  assert.match(content, /auctionBidLabel\(listing, now \?\? 0\)/);
   assert.match(content, /auctionTimeRemaining\(listing.auctionEndAt, now\)/);
   const card = source("src/components/listings/listing-card.tsx");
   assert.match(card, /variant === "discovery" \? <DiscoveryCardContent listing=\{listing\} \/> : <>/);

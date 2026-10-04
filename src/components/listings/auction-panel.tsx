@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { getMinimumNextBid, MAX_MONEY_SEN, ringgitToSen, senToRinggit } from "@/lib/listing-validation";
-import { auctionClock, effectiveStatus, ENDING_SOON_MS, quickBidAmounts } from "@/lib/auction-presentation";
+import { auctionBidLabel, auctionClock, effectiveStatus, ENDING_SOON_MS, quickBidAmounts } from "@/lib/auction-presentation";
 import { cancelAuctionListing, getAuctionViewerState, placeAuctionBid, type AuctionViewerState } from "@/lib/services/auctions";
 import { openListingConversation } from "@/lib/services/conversations";
 import type { PublicAuctionBid } from "@/lib/services/listings";
@@ -64,7 +64,7 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
   const highest = canBid && viewer?.isHighestBidder;
   const outbid = canBid && viewer?.isOutbid;
   const bidValue = (listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0;
-  const bidLabel = (listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid";
+  const bidLabel = auctionBidLabel(listing, now);
   const editable = owner && (listing.bidCount ?? 0) === 0 && (listing.status === "draft" || status === "scheduled" && listing.auctionStatus === "scheduled");
   const cancellable = owner && (listing.bidCount ?? 0) === 0 && (listing.status === "draft" && !["ended", "cancelled"].includes(listing.auctionStatus ?? "") || listing.status === "active" && ["scheduled", "active"].includes(status));
 
@@ -128,7 +128,7 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
       <div className={styles.resultIcon}>{viewer?.isWinner ? <Trophy size={34} aria-hidden="true" /> : <Clock3 size={30} aria-hidden="true" />}</div>
       <h2>{viewer?.isWinner ? <>You <em>won!</em></> : "Auction ended"}</h2>
       <p>{viewer?.isWinner ? "You’re the winning bidder. Arrange the exchange with the seller through your deal." : (listing.bidCount ?? 0) === 0 ? "No bids were placed." : viewer?.isOutbid ? "You weren’t the highest bidder this time." : "Bidding has closed."}</p>
-      {(listing.bidCount ?? 0) > 0 && listing.finalBid != null && <div className={styles.finalBid}><span>{viewer?.isWinner ? "Winning bid" : "Final bid"}</span><strong>{formatSen(listing.finalBid)}</strong><small>An auction result does not confirm payment or a completed sale.</small></div>}
+      {(listing.bidCount ?? 0) > 0 && listing.finalBid != null && <div className={styles.finalBid}><span>Final bid</span><strong>{formatSen(listing.finalBid)}</strong><small>An auction result does not confirm payment or a completed sale.</small></div>}
       <p className={styles.timestamp}><Clock3 size={14} aria-hidden="true" />Ended {date(listing.endedAt)}</p>
       {viewer?.transactionId && <Link className="button-primary min-h-12 w-full" href={`/transactions/${viewer.transactionId}`}>View Deal</Link>}
       {viewer?.isWinner && !viewer.transactionId && <p role="status">Your deal is being prepared. It will appear after the server confirms it.</p>}

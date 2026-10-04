@@ -11,6 +11,14 @@ export function effectiveStatus(listing: Pick<Listing, "auctionStatus" | "auctio
   return listing.auctionStartAt && listing.auctionEndAt && Number.isFinite(Date.parse(listing.auctionStartAt)) && Number.isFinite(Date.parse(listing.auctionEndAt)) ? "active" : listing.auctionStatus ?? "scheduled";
 }
 
+export function auctionBidLabel(listing: Pick<Listing, "status" | "auctionStatus" | "auctionStartAt" | "auctionEndAt" | "bidCount">, now = 0) {
+  const status = effectiveStatus(listing, now);
+  if (listing.status === "ended" || status === "ended") return "Final bid";
+  if (status === "scheduled") return "Starting bid";
+  if (status === "active") return "Current bid";
+  return (listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid";
+}
+
 export function auctionClock(target: string | undefined, now: number) {
   const timestamp = target ? Date.parse(target) : NaN;
   if (!Number.isFinite(timestamp) || now === 0) return null;

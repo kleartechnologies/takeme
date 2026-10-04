@@ -11,6 +11,8 @@ import { PublicSellerSummary } from "@/components/profile/public-seller-summary"
 import { DiscoveryCardContent } from "./discovery-card-content";
 import { trackMarketplaceIntent, type CandidateSource } from "@/lib/services/intelligence";
 import { trackPromotionIntent, type PromotionBadge } from "@/lib/services/promotions";
+import { auctionBidLabel } from "@/lib/auction-presentation";
+import { useCurrentTime } from "@/lib/use-current-time";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -23,6 +25,7 @@ function auctionLabel(listing: Listing) {
 
 export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", priority = false, initialSaved, onSavedChange, recommendationSource, recommendationSessionId, promotion, promotionContext = "explore", variant = "default" }: { listing: Listing; sizes?: string; priority?: boolean; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationSessionId?: string | null; promotion?: PromotionBadge; promotionContext?: "home" | "explore"; variant?: "default" | "discovery" }) {
   const { user } = useAuth();
+  const now = useCurrentTime(60_000);
   const card = useRef<HTMLElement>(null);
   const impression = useRef("");
   const recommendationImpression = useRef("");
@@ -71,7 +74,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
         {variant === "discovery" ? <DiscoveryCardContent listing={listing} /> : <>
         <p className="line-clamp-2 text-sm font-semibold leading-5 tracking-[-0.02em] text-[var(--takeme-charcoal)] sm:text-base">{listing.title}</p>
         <p className="mt-1 text-lg font-bold leading-6 tracking-tight text-[var(--takeme-dark-green)] sm:text-xl">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>
-        {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{(listing.bidCount ?? 0) > 0 ? "Current bid" : "Starting bid"} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
+        {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{auctionBidLabel(listing, now)} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
         <div className="mt-1 flex items-center gap-1 text-xs text-[var(--takeme-gray)]">
           <span className="flex min-w-0 items-center gap-1"><MapPin size={13} className="shrink-0" /><span className="truncate">{listing.location}</span></span>
         </div>
