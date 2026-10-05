@@ -8,6 +8,7 @@ import { marketplaceOperator } from "../src/content/operator.ts";
 import { isLegalCalendarDate, legalLaunchDatePolicy, validateLegalPublication } from "../functions/src/legal-publication.ts";
 import { canRenderBmPrivacyNotice } from "../src/lib/privacy-notice.ts";
 import { bmPrivacyApprovalRequired, privacyNotices } from "../src/content/privacy-notices.ts";
+import { bmPrivacySections } from "../src/content/privacy-bm.ts";
 import { prohibitedItemsPolicy } from "../src/content/marketplace-rules.ts";
 
 test("unfinished policy/contact drafts are restricted to the authorised demo development environment", () => {
@@ -86,10 +87,10 @@ test("final publication requires actual calendar dates and review never invents 
   assert.equal(legalLaunchDatePolicy.lastUpdated, "same-as-public-launch-date-for-v1-unless-separately-changed");
 });
 
-test("EN/BM wiring has no invented translation and the BM review placeholder cannot publish", () => {
+test("EN/BM owner drafts do not grant independent production publication approval", () => {
   assert.equal(privacyNotices.en.href, "/privacy");
   assert.equal(privacyNotices.bm.href, "/privacy/bm");
-  assert.equal(privacyNotices.bm.sections, null);
+  assert.equal(privacyNotices.bm.sections, bmPrivacySections);
   assert.equal(bmPrivacyApprovalRequired, "OWNER/LEGAL APPROVAL REQUIRED");
   assert.equal(canRenderBmPrivacyNotice({ nodeEnv: "development", useEmulators: "true", projectId: "demo-takeme" }), true);
   const readiness: LegalPublicationReadiness = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved", address: "approved", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
@@ -98,7 +99,7 @@ test("EN/BM wiring has no invented translation and the BM review placeholder can
     firebase: { NEXT_PUBLIC_FIREBASE_PROJECT_ID: "takeme-52b80", NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "takeme-52b80.firebaseapp.com", NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "takeme-52b80.firebasestorage.app" }, policy };
   const runtime = { nodeEnv: "production", useEmulators: "false", projectId: "takeme-52b80", buildProof: releaseProofPrefix + Buffer.from(JSON.stringify(proof)).toString("base64") };
   assert.equal(canPublishProductionLegal(runtime, readiness, policy), true, "Synthetic fixture only");
-  assert.equal(canRenderBmPrivacyNotice(runtime, readiness, policy), false, "Approval booleans cannot publish missing BM content");
+  assert.equal(canRenderBmPrivacyNotice(runtime, readiness, policy, null), false, "Approval booleans cannot publish missing BM content");
   assert.equal(canRenderBmPrivacyNotice(runtime, readiness, policy, []), false);
   assert.equal(canRenderBmPrivacyNotice(runtime, readiness, policy, [{ id: "synthetic", title: "Synthetic approved notice" }]), true);
   assert.equal(canRenderBmPrivacyNotice(runtime), false, "Real source is still unapproved");

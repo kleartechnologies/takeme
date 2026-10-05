@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { privacyDocument, privacySections } from "../src/content/privacy.ts";
 import { privacyNotices } from "../src/content/privacy-notices.ts";
+import { bmPrivacySections } from "../src/content/privacy-bm.ts";
 import { marketplaceOperator } from "../src/content/operator.ts";
 import { productionReleasePolicy } from "../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../functions/src/legal-publication.ts";
@@ -271,11 +272,11 @@ test("English draft retains every legal-review topic without staging or invented
   assert.doesNotMatch(allCopy(), /(?:Effective|Last updated)(?: date)?:?\s*\d{4}-\d{2}-\d{2}/i);
 });
 
-test("BM is language wiring only, with no translated content or production availability", () => {
+test("Supplied BM owner draft still requires independent legal approval and cannot publish", () => {
   assert.equal(privacyNotices.en.sections, privacySections);
   assert.equal(privacyNotices.en.href, "/privacy");
   assert.equal(privacyNotices.bm.href, "/privacy/bm");
-  assert.equal(privacyNotices.bm.sections, null);
+  assert.equal(privacyNotices.bm.sections, bmPrivacySections);
   assert.equal(legalPublicationReadiness.bmPrivacyNoticeApproved, false);
   assert.equal(hasApprovedBmPrivacyNotice(), false);
   const approvedFlag = { ...legalPublicationReadiness, bmPrivacyNoticeApproved: true };

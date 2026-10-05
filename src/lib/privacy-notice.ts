@@ -8,8 +8,8 @@ export function hasApprovedBmPrivacyNotice(readiness: LegalPublicationReadiness 
   return readiness.bmPrivacyNoticeApproved === true && Array.isArray(sections) && sections.length > 0;
 }
 
-// The review placeholder is never a publishable notice, even if a readiness
-// boolean is changed before the actual approved BM content has been supplied.
+// A supplied owner draft is not final legal approval. Production still needs
+// the complete publication gate, independent BM approval and actual content.
 export function canRenderBmPrivacyNotice(runtime: LegalRuntime, readiness: LegalPublicationReadiness = legalPublicationReadiness, policy: ReleasePolicy = productionReleasePolicy, sections: readonly InformationSection[] | null = privacyNotices.bm.sections) {
   return canPreviewLegalDraft(runtime)
     || canPublishProductionLegal(runtime, readiness, policy) && hasApprovedBmPrivacyNotice(readiness, sections);
