@@ -23,7 +23,8 @@ service firebase.storage {
     }
     function configuredStorageBucket(name) {
       return (request.auth.token.aud == "takeme-staging-822a5" && name == "takeme-staging-822a5.firebasestorage.app")
-        || (request.auth.token.aud != "takeme-staging-822a5"
+        || (request.auth.token.aud == "takeme-52b80" && name == "takeme-52b80.firebasestorage.app")
+        || (request.auth.token.aud != "takeme-staging-822a5" && request.auth.token.aud != "takeme-52b80"
           && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);
     }
     // END GENERATED RELEASE POLICY

@@ -1,4 +1,5 @@
 import { stagingFirebaseProjectId, stagingPolicyVersion, stagingStorageBucket } from "./staging-environment.ts";
+import { productionEnvironment } from "./production-environment.ts";
 
 /** Approved bootstrap, rules and frontend policy versions. Production Functions resolve the trusted runtime record separately. Test approval never grants production publication. */
 export type ReleaseTarget = "demo" | "staging" | "production";
@@ -61,15 +62,31 @@ const rulesStart = "    // BEGIN GENERATED RELEASE POLICY — functions/src/rele
 const rulesEnd = "    // END GENERATED RELEASE POLICY";
 function rulesString(value: string) { return JSON.stringify(value); }
 /** Storage has a two-document cross-service limit: generate trusted versions rather than adding a third lookup. */
-export function renderPolicyRules(): string {
+function renderPolicyRulesBlock(production: Readonly<ReleasePolicy>): string {
   const demo = demoReleasePolicy;
   const staging = stagingReleasePolicy;
-  const production = productionReleasePolicy;
   const productionClause = validateProductionPolicy(production).length ? "false" :
-    `(!request.auth.token.aud.matches('demo-.*') && request.auth.token.aud != ${rulesString(stagingFirebaseProjectId)} && acceptance.termsVersion == ${rulesString(production.termsVersion!)} && acceptance.privacyVersion == ${rulesString(production.privacyVersion!)})`;
+    `(request.auth.token.aud == ${rulesString(productionEnvironment.projectId)} && acceptance.termsVersion == ${rulesString(production.termsVersion!)} && acceptance.privacyVersion == ${rulesString(production.privacyVersion!)})`;
   const productionMirrorClause = validateProductionPolicy(production).length ? "false" :
-    `(policy.releaseTarget == 'production' && !policy.projectId.matches('demo-.*') && policy.projectId != ${rulesString(stagingFirebaseProjectId)} && policy.termsVersion == ${rulesString(production.termsVersion!)} && policy.privacyVersion == ${rulesString(production.privacyVersion!)})`;
-  return `${rulesStart}\n    function configuredAcceptance(acceptance) {\n      return acceptance.termsAcceptedAt is timestamp && acceptance.privacyAcceptedAt is timestamp\n        && acceptance.age18ConfirmedAt is timestamp && acceptance.acceptanceSource == 'web'\n        && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)\n        && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == ${rulesString(demo.termsVersion!)}\n          && acceptance.privacyVersion == ${rulesString(demo.privacyVersion!)})\n          || (request.auth.token.aud == ${rulesString(stagingFirebaseProjectId)} && acceptance.termsVersion == ${rulesString(staging.termsVersion!)}\n            && acceptance.privacyVersion == ${rulesString(staging.privacyVersion!)})\n          || ${productionClause});\n    }\n    function configuredReleasePolicy(policy) {\n      return policy.publicationApproved == true && policy.minimumAge == 18\n        && policy.projectId == request.auth.token.aud\n        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme'\n            && policy.termsVersion == ${rulesString(demo.termsVersion!)} && policy.privacyVersion == ${rulesString(demo.privacyVersion!)})\n          || (policy.releaseTarget == 'staging' && policy.projectId == ${rulesString(stagingFirebaseProjectId)}\n            && policy.termsVersion == ${rulesString(staging.termsVersion!)} && policy.privacyVersion == ${rulesString(staging.privacyVersion!)})\n          || ${productionMirrorClause});\n    }\n    function configuredStorageBucket(name) {\n      return (request.auth.token.aud == ${rulesString(stagingFirebaseProjectId)} && name == ${rulesString(stagingStorageBucket)})\n        || (request.auth.token.aud != ${rulesString(stagingFirebaseProjectId)}\n          && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);\n    }\n${rulesEnd}`;
+    `(policy.releaseTarget == 'production' && policy.projectId == ${rulesString(productionEnvironment.projectId)}\n            && policy.keys().hasAll(['releaseTarget', 'projectId', 'publicationApproved', 'termsVersion', 'privacyVersion', 'minimumAge'])\n            && policy.keys().hasOnly(['releaseTarget', 'projectId', 'publicationApproved', 'termsVersion', 'privacyVersion', 'minimumAge'])\n            && policy.termsVersion == ${rulesString(production.termsVersion!)} && policy.privacyVersion == ${rulesString(production.privacyVersion!)})`;
+  return `${rulesStart}\n    function configuredAcceptance(acceptance) {\n      return acceptance.termsAcceptedAt is timestamp && acceptance.privacyAcceptedAt is timestamp\n        && acceptance.age18ConfirmedAt is timestamp && acceptance.acceptanceSource == 'web'\n        && (!('revokedAt' in acceptance) || acceptance.revokedAt == null)\n        && ((request.auth.token.aud == 'demo-takeme' && acceptance.termsVersion == ${rulesString(demo.termsVersion!)}\n          && acceptance.privacyVersion == ${rulesString(demo.privacyVersion!)})\n          || (request.auth.token.aud == ${rulesString(stagingFirebaseProjectId)} && acceptance.termsVersion == ${rulesString(staging.termsVersion!)}\n            && acceptance.privacyVersion == ${rulesString(staging.privacyVersion!)})\n          || ${productionClause});\n    }\n    function configuredReleasePolicy(policy) {\n      return policy.publicationApproved == true && policy.minimumAge == 18\n        && policy.projectId == request.auth.token.aud\n        && ((policy.releaseTarget == 'demo' && policy.projectId == 'demo-takeme'\n            && policy.termsVersion == ${rulesString(demo.termsVersion!)} && policy.privacyVersion == ${rulesString(demo.privacyVersion!)})\n          || (policy.releaseTarget == 'staging' && policy.projectId == ${rulesString(stagingFirebaseProjectId)}\n            && policy.termsVersion == ${rulesString(staging.termsVersion!)} && policy.privacyVersion == ${rulesString(staging.privacyVersion!)})\n          || ${productionMirrorClause});\n    }\n    function configuredStorageBucket(name) {\n      return (request.auth.token.aud == ${rulesString(stagingFirebaseProjectId)} && name == ${rulesString(stagingStorageBucket)})\n        || (request.auth.token.aud == ${rulesString(productionEnvironment.projectId)} && name == ${rulesString(productionEnvironment.storageBucket)})\n        || (request.auth.token.aud != ${rulesString(stagingFirebaseProjectId)} && request.auth.token.aud != ${rulesString(productionEnvironment.projectId)}\n          && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);\n    }\n${rulesEnd}`;
+}
+
+/** Ordinary release checks always use real source approval, including its closed production branch. */
+export function renderPolicyRules(): string {
+  return renderPolicyRulesBlock(productionReleasePolicy);
+}
+
+/**
+ * Read-only preparation of intended production enforcement. No approval/date is
+ * changed, and no environment, CLI or caller can supply alternative versions.
+ * The ordinary rule assertions reject this preview while source approval is off.
+ */
+export function renderProductionPolicyRulesPreview(): string {
+  const intendedPolicy = Object.freeze({ ...productionReleasePolicy, publicationApproved: true });
+  const issues = validateProductionPolicy(intendedPolicy);
+  if (issues.length) throw new Error(`Final policy rule preparation refused: ${issues.join("; ")}`);
+  return renderPolicyRulesBlock(intendedPolicy);
 }
 function assertPolicyRules(raw: string) {
   const start = raw.indexOf(rulesStart), end = raw.indexOf(rulesEnd);
