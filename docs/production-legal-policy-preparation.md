@@ -1,5 +1,13 @@
 # Production legal and policy bootstrap preparation
 
+## Subsequent owner-approved V1 decisions — still no legal activation
+
+The preparation checkpoint below records the earlier state at `576e93f1f0f1bfbf93cf57eb9706abdc9ee165f7`; its historical null-version, forced signed-in setup and current-only acceptance descriptions are superseded by [owner-v1-policy-model.md](owner-v1-policy-model.md). The owner now intends Terms `1.0`, Privacy `1.0`, minimum age 18, public/read-only browsing for signed-out and signed-in outdated users, protected-write reacceptance with preserved context and no automatic action, and immutable acceptance history. These are owner product decisions, **not counsel approval** or permission to activate/deploy.
+
+Production publication remains false. Actual effective/last-updated dates are unresolved: the effective date is the actual public launch date and V1 last-updated date is the same unless separately changed. Current legal-review routes show intended V1 identifiers with pending dates, never the old historical proposal. English and BM wiring exists at `/privacy` and `/privacy/bm`, but BM legal text remains **OWNER/LEGAL APPROVAL REQUIRED** and its empty placeholder cannot publish. Prohibited-items wiring follows Terms `1.0`; final wording approval remains open. The legal questions, source/rule/resource alignment, six-field runtime schema, separate bootstrap/deployment approvals and rollback limits below continue to apply unless explicitly superseded.
+
+## Historical preparation checkpoint
+
 Prepared 5 October 2026 against approved compatibility checkpoint `4d3176592c2be1c68af8d956a265843694f5a631`. This document prepares a reviewed activation procedure; it does not approve legal content, policy versions, publication, production writes, deployment, deletion, payments or website cutover. Local tests use `demo-takeme` only. No production customer data is needed for this preparation.
 
 ## Current boundary

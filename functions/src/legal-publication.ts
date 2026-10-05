@@ -18,6 +18,13 @@ export const legalPublicationReadiness: Readonly<LegalPublicationReadiness> = Ob
   effectiveDate: null, lastUpdated: null,
 });
 
+// Owner-approved V1 date rule, not a known date or an activation schedule.
+// Resolve both nullable date inputs only when the actual public launch is approved.
+export const legalLaunchDatePolicy = Object.freeze({
+  effectiveDate: "actual-public-launch-date",
+  lastUpdated: "same-as-public-launch-date-for-v1-unless-separately-changed",
+});
+
 /** Exact calendar date only; draft dates cannot become final through an environment flag. */
 export function isLegalCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000-")) return false;

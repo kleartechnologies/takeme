@@ -15,10 +15,10 @@ const environment = () => ({ TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBAS
 const policy = { publicationApproved: true, termsVersion: "approved-terms-v1", privacyVersion: "approved-privacy-v2", minimumAge: 18 as const };
 const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 
-test("ordinary real-target qualification retains null source policies and disabled deletion without offline approval", async () => {
+test("ordinary real-target qualification retains inactive owner-approved V1 source versions and disabled deletion without offline approval", async () => {
   const config = validateReleaseEnvironment(environment());
   assert.equal(config.purpose, "production-build"); assert.equal(config.policy, productionReleasePolicy);
-  assert.equal(config.policy.publicationApproved, false); assert.equal(config.policy.termsVersion, null); assert.equal(config.policy.privacyVersion, null);
+  assert.equal(config.policy.publicationApproved, false); assert.equal(config.policy.termsVersion, "1.0"); assert.equal(config.policy.privacyVersion, "1.0");
   assert.equal(config.productionDeletionEnabled, false); assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.deepEqual(await checkDeletionImplementation(process.cwd()), { implementationPresent: true, runtimeActivationGranted: false });
   const client = { apiKey: config.publicFirebase.NEXT_PUBLIC_FIREBASE_API_KEY, authDomain: config.publicFirebase.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, projectId: config.projectId, storageBucket: config.publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, messagingSenderId: config.publicFirebase.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, appId: config.publicFirebase.NEXT_PUBLIC_FIREBASE_APP_ID };
@@ -42,7 +42,7 @@ test("build qualification cannot activate deletion or grant launch permission", 
 
 test("build and launch reject mixed resources and policy-shape corruption; every independent launch gate matters", () => {
   for (const patch of [{ NEXT_PUBLIC_FIREBASE_PROJECT_ID: "other-project", TAKEME_FIREBASE_PROJECT_ID: "other-project" }, { NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "takeme-52b80.appspot.com", TAKEME_STORAGE_BUCKETS: "takeme-52b80.appspot.com" }, { CF_ACCESS_ALLOWED_EMAILS: "[\"test@example.test\"]" }, { NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL: "https://takeme-web-preview.takeme-technologies.workers.dev" }, { TAKEME_ENABLE_STAGING_DELETION: "true" }, { TAKEME_OFFLINE_QUALIFICATION: "true" }]) assert.throws(() => validateReleaseEnvironment({ ...environment(), ...patch }));
-  for (const invalid of [{ ...productionReleasePolicy, termsVersion: "1.0-staging" }, { ...productionReleasePolicy, privacyVersion: " " }, { ...productionReleasePolicy, publicationApproved: true }]) assert.throws(() => validateReleaseEnvironment(environment(), invalid));
+  for (const invalid of [{ ...productionReleasePolicy, termsVersion: "1.0-staging" }, { ...productionReleasePolicy, privacyVersion: " " }, { ...productionReleasePolicy, publicationApproved: true, termsVersion: null }]) assert.throws(() => validateReleaseEnvironment(environment(), invalid));
   for (const invalid of [{ ...policy, termsVersion: null }, { ...policy, privacyVersion: null }, { ...policy, publicationApproved: false }]) assert.throws(() => validateProductionLaunchEnvironment({ ...environment(), TAKEME_ENABLE_PRODUCTION_DELETION: "true" }, invalid, legal));
   for (const key of ["publicationApproved", "finalContentApproved", "bmPrivacyNoticeApproved", "productionRoutesReviewed"] as const) assert.throws(() => validateProductionLaunchEnvironment({ ...environment(), TAKEME_ENABLE_PRODUCTION_DELETION: "true" }, policy, { ...legal, [key]: false }));
 });

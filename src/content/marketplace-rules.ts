@@ -1,3 +1,13 @@
+import { productionReleasePolicy } from "../../functions/src/release-policy.ts";
+import { legalPublicationReadiness } from "../../functions/src/legal-publication.ts";
+
+// V1 prohibited-items content is incorporated into the Terms version. This does
+// not create a separate consent or imply counsel approval of the actual text.
+export const prohibitedItemsPolicy = Object.freeze({
+  version: productionReleasePolicy.termsVersion,
+  publicationApproved: legalPublicationReadiness.publicationApproved && legalPublicationReadiness.finalContentApproved,
+});
+
 // Owner-approved V1 scope, supplied 3 October 2026; publication remains a separate review.
 export const prohibitedItems = [
   "Illegal goods or services.",

@@ -1,10 +1,10 @@
-import { demoReleasePolicy, productionReleasePolicy, validateProductionPolicy, type ReleasePolicy } from "../../functions/src/release-policy.ts";
+import { productionReleasePolicy, validateProductionPolicy, type ReleasePolicy } from "../../functions/src/release-policy.ts";
 import { legalPublicationReadiness, validateLegalPublication, type LegalPublicationReadiness } from "./legal-publication.ts";
 import { stagingEnvironment } from "../../functions/src/staging-environment.ts";
 import { productionEnvironment } from "../../functions/src/production-environment.ts";
 import { decodeReleaseProof, isStagingReleaseProof } from "./release-proof.ts";
 
-export const publicInformationPaths = ["/privacy", "/privacy-policy", "/terms", "/help", "/help/prohibited-items", "/contact", "/account-deletion"] as const;
+export const publicInformationPaths = ["/privacy", "/privacy/bm", "/privacy-policy", "/terms", "/help", "/help/prohibited-items", "/contact", "/account-deletion"] as const;
 export function isPublicInformationPath(pathname: string) { return publicInformationPaths.some(path => path === pathname); }
 export interface LegalRuntime { nodeEnv?: string; useEmulators?: string; projectId?: string; buildProof?: string }
 
@@ -34,16 +34,14 @@ export function isLocalLegalPreview() { return canPreviewLegalDraft(legalRuntime
 export function isProductionLegalPublication() { return canPublishProductionLegal(legalRuntime()); }
 export function isLegalInformationAvailable() { return isLocalLegalPreview() || isProductionLegalPublication(); }
 
-// Historical proposed dates belong only to an authorised draft preview.
-// Final dates stay unresolved until the central source receives owner/legal approval.
+// Authorised legal review displays intended V1 identifiers, not demo acceptance versions.
+// Launch/effective dates remain unresolved in every review until actually approved.
 export function resolveLegalDocumentState(kind: "terms" | "privacy", runtime: LegalRuntime, readiness: LegalPublicationReadiness = legalPublicationReadiness, finalPolicy: ReleasePolicy = productionReleasePolicy) {
   const production = canPublishProductionLegal(runtime, readiness, finalPolicy);
-  const preview = canPreviewLegalDraft(runtime);
-  const previewVersion = isStagingReleaseProof(runtime.buildProof) ? stagingEnvironment.policyVersion : demoReleasePolicy.termsVersion;
-  const policy = production ? finalPolicy : preview ? { ...demoReleasePolicy, termsVersion: previewVersion, privacyVersion: previewVersion } : finalPolicy;
+  const policy = finalPolicy;
   return { version: kind === "privacy" ? policy.privacyVersion : policy.termsVersion,
     termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,
-    lastUpdated: preview ? "2026-10-03" : readiness.lastUpdated, effectiveDate: preview ? "2026-10-05" : readiness.effectiveDate,
+    lastUpdated: readiness.lastUpdated, effectiveDate: readiness.effectiveDate,
     minimumAge: policy.minimumAge, jurisdiction: "Malaysia", publicationApproved: production, production };
 }
 export function legalDocumentState(kind: "terms" | "privacy" = "terms") {

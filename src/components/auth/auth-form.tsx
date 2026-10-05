@@ -11,7 +11,7 @@ import { auth, isFirebaseConfigured } from "@/lib/firebase/client";
 import { checkSignupPassword, loginWithEmail, loginWithGoogle, registerWithEmail, resetPassword } from "@/lib/firebase/auth";
 import { friendlyAuthError } from "@/lib/firebase/auth-errors";
 import { passwordPolicyHelp } from "@/lib/firebase/password-policy";
-import { safeAuthNext, setupDestination } from "@/lib/auth-routing";
+import { authenticationDestination, hasProtectedAuthIntent, safeAuthNext } from "@/lib/auth-routing";
 import { acceptWebPolicies, isLocalAccountSetup, accountPolicyAvailable, accountReleasePolicy } from "@/lib/services/account-setup";
 import styles from "./auth.module.css";
 
@@ -25,7 +25,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [recoverSetup, setRecoverSetup] = useState(false);
   const [policyHelp, setPolicyHelp] = useState("Password requirements are checked securely when you create your account.");
   const errorRef = useRef<HTMLDivElement>(null), submitting = useRef(false);
-  const nextPath = safeAuthNext(useSearchParams().get("next"));
+  const params = useSearchParams();
+  const nextPath = safeAuthNext(params.get("next"));
+  const protectedIntent = hasProtectedAuthIntent(params.get("intent"));
+  const freshSession = useRef(mode === "register");
   const local = isLocalAccountSetup(), available = accountPolicyAvailable(), policy = accountReleasePolicy();
   useEffect(() => {
     if (mode !== "register" || !available) return;
@@ -34,7 +37,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     return () => { active = false; };
   }, [mode, available]);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
-  const href = (path: string) => `${path}?next=${encodeURIComponent(nextPath)}`;
+  const href = (path: string) => `${path}?next=${encodeURIComponent(nextPath)}${protectedIntent ? "&intent=write" : ""}`;
   function validationError(message: string) {
     setError(message);
     // Repeated identical validation errors must still move focus back to the error.
@@ -43,7 +46,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   async function resume() {
     const setup = await refreshSetup();
     if (!setup) throw new Error("Account status could not be checked.");
-    router.replace(setupDestination(setup.step, nextPath));
+    router.replace(authenticationDestination(setup, nextPath, freshSession.current, protectedIntent));
   }
   async function retrySetup() {
     if (submitting.current) return;
@@ -65,6 +68,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     submitting.current = true; setBusy("email");
     try {
       if (mode === "forgot") { await resetPassword(email.trim()); setSent(true); return; }
+      freshSession.current = mode === "register";
       if (mode === "register") {
         const status = await checkSignupPassword(password); setPolicyHelp(passwordPolicyHelp(status.passwordPolicy));
         if (!status.isValid) { setError(passwordPolicyHelp(status.passwordPolicy)); return; }
@@ -82,7 +86,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
     if (submitting.current) return;
     const beforeUid = auth?.currentUser?.uid;
     submitting.current = true; setError(""); setBusy("google");
-    try { await loginWithGoogle(); await resume(); }
+    try {
+      freshSession.current = true; // Unknown/failed credential completion stays on the safe onboarding path.
+      const result = await loginWithGoogle();
+      freshSession.current = result.isNewUser;
+      await resume();
+    }
     catch (caught) {
       if (auth?.currentUser && auth.currentUser.uid !== beforeUid) { setRecoverSetup(true); setError("You’re signed in with Google. Continue with your signed-in account below to retry setup."); }
       else setError(friendlyAuthError(caught));

@@ -15,7 +15,7 @@ async function call<T>(name: string, data = {}) {
 export const getAccountSetupStatus = () => call<AccountSetupStatus>("getAccountSetupStatus");
 export const acceptWebPolicies = (confirmed: boolean, agreed: boolean) => {
   const policy = accountReleasePolicy();
-  if (!policyIsConfigured(policy)) throw new Error("TAKEME’s policies are awaiting launch approval. Marketplace activity is unavailable.");
+  if (!policyIsConfigured(policy)) throw new Error("TAKEME’s policies are awaiting launch approval. Protected marketplace actions are unavailable; you can still browse.");
   return call("acceptWebPolicies", {
     confirmAge18: confirmed, acceptTerms: agreed, acceptPrivacy: agreed,
     termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,

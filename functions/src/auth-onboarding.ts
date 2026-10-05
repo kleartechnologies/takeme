@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { marketplaceCall, runGuardedTransaction } from "./account-lifecycle";
 import { acceptanceRef, currentReleasePolicy, hasCurrentAcceptance, initializeDemoPolicyMirror, releasePolicyFromMirror, releasePolicyRef, runtimePolicyContext } from "./account-eligibility";
 import { demoReleasePolicy, type ReleasePolicy } from "./release-policy";
+import { assertAcceptanceHistory, assertProjectedAcceptance, historyUnavailable, legacyAcceptanceHistory, newAcceptanceHistory, policyAcceptancePath } from "./policy-acceptance-history";
 
 // Compatibility export for existing demo fixtures; the source lives in release-policy.ts.
 export const AUTH_POLICY_VERSION = demoReleasePolicy.termsVersion;
@@ -54,16 +56,41 @@ export const getAccountSetupStatus = onCall(async request => {
 export const acceptWebPolicies = marketplaceCall(async request => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
   await initializeDemoPolicyMirror();
-  const ref = setupRef(request.auth.uid);
-  await runGuardedTransaction(getFirestore(), async tx => {
+  const uid = request.auth.uid, db = getFirestore(), ref = setupRef(uid);
+  // Stable across Firestore transaction retries, never supplied by the client.
+  const newAcceptanceId = randomUUID();
+  await runGuardedTransaction(db, async tx => {
     const policy = await currentReleasePolicy(tx);
     validateAcceptance(request.data ?? {}, policy);
     const previous = (await tx.get(ref)).data();
-    if (hasCurrentAcceptance(previous, policy)) return; // Retry never changes the original acceptance time.
+    const context = runtimePolicyContext();
+    if (!context) throw new HttpsError("failed-precondition", "Account policy resources are unavailable.");
+    const legacy = legacyAcceptanceHistory(uid, previous);
+    const hasPointer = !!previous && Object.hasOwn(previous, "acceptanceHistoryId");
+    const priorId = hasPointer ? previous!.acceptanceHistoryId : legacy?.acceptanceId;
+    const priorRef = priorId !== undefined ? db.doc(policyAcceptancePath(uid, priorId)) : null;
+    const priorSnapshot = priorRef ? await tx.get(priorRef) : null;
+    if (hasPointer && (!legacy || !priorSnapshot?.exists)) throw historyUnavailable();
+    if (priorSnapshot?.exists && legacy) {
+      const evidence = priorSnapshot.data()!;
+      assertAcceptanceHistory(evidence, uid, priorId, legacy as { termsVersion: string; privacyVersion: string }, context);
+      assertProjectedAcceptance(evidence, previous!);
+    }
+    const alreadyCurrent = hasCurrentAcceptance(previous, policy);
+    const newRef = alreadyCurrent ? null : db.doc(policyAcceptancePath(uid, newAcceptanceId));
+    if (newRef && (await tx.get(newRef)).exists) throw historyUnavailable();
+    // All reads precede writes. Legacy evidence is copied exactly only during an
+    // explicit acceptance, and existing events are always create-only.
+    if (legacy && priorRef && !priorSnapshot?.exists) tx.create(priorRef, legacy);
+    if (alreadyCurrent) {
+      if (!hasPointer) tx.update(ref, { acceptanceHistoryId: priorId });
+      return; // Same logical acceptance keeps its history ID and original dates.
+    }
+    tx.create(newRef!, newAcceptanceHistory(uid, newAcceptanceId, policy, context, previous?.revokedAt ?? undefined));
     tx.set(ref, {
       termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,
       termsAcceptedAt: FieldValue.serverTimestamp(), privacyAcceptedAt: FieldValue.serverTimestamp(),
-      age18ConfirmedAt: FieldValue.serverTimestamp(), acceptanceSource: "web",
+      age18ConfirmedAt: FieldValue.serverTimestamp(), acceptanceSource: "web", acceptanceHistoryId: newAcceptanceId,
       ...(previous?.profileCompletedAt ? { profileCompletedAt: previous.profileCompletedAt } : {}),
       ...(previous?.welcomeCompletedAt ? { welcomeCompletedAt: previous.welcomeCompletedAt } : {}),
     });

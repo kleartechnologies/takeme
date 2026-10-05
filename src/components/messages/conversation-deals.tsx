@@ -12,10 +12,13 @@ import { MarketplaceEventCard } from "./marketplace-event-card";
 import { ProductContextCard, money } from "./product-context-card";
 import styles from "./messaging.module.css";
 import { OfferRequestForm, offerPaymentMethods } from "@/components/transactions/offer-request-form";
+import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 
 const methods = offerPaymentMethods;
 export function ConversationDeals({ conversation, listing, offers, transaction, reviewed, userId, now, refresh, placement, makeOffer = false }: { conversation: ConversationSummary; listing: PublicListing | null; offers: MarketplaceOffer[]; transaction: MarketplaceTransaction | null; reviewed: boolean | null; userId: string; now: number; refresh: () => Promise<void>; placement: "events" | "actions"; makeOffer?: boolean }) {
-  const [sheet, setSheet] = useState<"make" | "view" | "counter" | null>(() => makeOffer && placement === "actions" && userId !== conversation.sellerId && listing?.listingType === "buy_now" && listing.status === "active" && !transaction && !offers.some(offer => offerIsOpen(offer, now)) ? "make" : null);
+  const { setup } = useAuth();
+  const requireAction = useProtectedMarketplaceAction();
+  const [sheet, setSheet] = useState<"make" | "view" | "counter" | null>(() => setup?.step === "ready" && setup.policyAvailable === true && makeOffer && placement === "actions" && userId !== conversation.sellerId && listing?.listingType === "buy_now" && listing.status === "active" && !transaction && !offers.some(offer => offerIsOpen(offer, now)) ? "make" : null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = offers.find((offer) => offer.id === selectedId) ?? null;
   const [amount, setAmount] = useState("");
@@ -27,12 +30,20 @@ export function ConversationDeals({ conversation, listing, offers, transaction, 
   const available = listing?.listingType === "buy_now" && listing.status === "active" && !transaction;
   const openOffer = offers.some((offer) => offerIsOpen(offer, now));
   function viewOffer(offer: MarketplaceOffer) { setSelectedId(offer.id); setError(""); setSheet("view"); }
+  async function openWriteSheet(next: "make" | "counter") {
+    try {
+      if (!await requireAction()) return;
+      if (next === "counter" && selected) setAmount(String(selected.quotedAmountSen / 100));
+      setSheet(next); setError("");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Your account status could not be checked."); }
+  }
   async function act(action: "send" | "accept" | "reject" | "counter" | "withdraw") {
     if (inFlight.current || (action !== "send" && !selected)) return;
     const sen = ["send", "counter"].includes(action) ? ringgitToSen(amount) : null;
     if (["send", "counter"].includes(action) && (!listing || !sen || sen > Math.round(listing.price * 100))) { setError("Enter an amount between RM0.01 and the listed price."); return; }
     inFlight.current = true; setBusy(true); setError("");
     try {
+      if (!await requireAction()) return;
       if (action === "send") await submitOffer(conversation.listingId, "offer", method, sen!);
       else await respondToOffer(selected!.id, action, sen ?? undefined);
       await refresh(); setSheet(null); setAmount("");
@@ -41,7 +52,8 @@ export function ConversationDeals({ conversation, listing, offers, transaction, 
   }
   const title = sheet === "make" ? "Make an Offer" : sheet === "counter" ? "Counter Offer" : selected?.status === "countered" ? "Seller Counter Offer" : seller ? "Offer Received" : "Your Offer";
   return <>
-    {placement === "actions" && available && !seller && !openOffer && <button type="button" className="button-secondary min-h-11 w-full" onClick={() => { setSheet("make"); setError(""); }}>Make Offer</button>}
+    {placement === "actions" && available && !seller && !openOffer && <button type="button" className="button-secondary min-h-11 w-full" onClick={() => void openWriteSheet("make")}>Make Offer</button>}
+    {!sheet && error && <p role="alert" className={styles.error}>{error}</p>}
     {placement === "events" && <>
       {offers.filter((offer) => !(transaction && offer.status === "accepted" && offer.transactionId === transaction.id)).map((offer) => {
         const open = offerIsOpen(offer, now);
@@ -57,7 +69,7 @@ export function ConversationDeals({ conversation, listing, offers, transaction, 
         <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4"><p className="text-xs font-semibold">{seller ? "Buyer's offer" : selected.status === "countered" ? "Seller's counter" : "Your offer"}</p><p className="text-3xl font-semibold text-[var(--takeme-dark-green)] mt-2">{money(selected.quotedAmountSen / 100)}</p><p className="text-xs text-[var(--takeme-gray)] mt-2">{offerIsOpen(selected, now) ? seller && selected.status === "submitted" ? "Offer received" : offerLabels[selected.status] : ["submitted", "countered"].includes(selected.status) ? "Offer expired" : offerLabels[selected.status]}</p></div>
         <p className="mt-4 text-xs text-[var(--takeme-gray)]">{methods.find((item) => item.value === selected.paymentMethod)?.label ?? "Agreed outside TAKEME"}</p>
         <div className={styles.sheetActions}>{available && offerIsOpen(selected, now) && <>
-          {seller && selected.status === "submitted" && <><button disabled={busy} className="button-primary min-h-12" onClick={() => void act("accept")}>{busy ? "Updating…" : "Accept Offer"}</button>{selected.type === "offer" && <button disabled={busy} className="button-secondary min-h-12" onClick={() => { setAmount(String(selected.quotedAmountSen / 100)); setSheet("counter"); }}>Counter Offer</button>}<button disabled={busy} className={styles.decline} onClick={() => void act("reject")}>Decline</button></>}
+          {seller && selected.status === "submitted" && <><button disabled={busy} className="button-primary min-h-12" onClick={() => void act("accept")}>{busy ? "Updating…" : "Accept Offer"}</button>{selected.type === "offer" && <button disabled={busy} className="button-secondary min-h-12" onClick={() => void openWriteSheet("counter")}>Counter Offer</button>}<button disabled={busy} className={styles.decline} onClick={() => void act("reject")}>Decline</button></>}
           {!seller && <>{selected.status === "countered" && <button disabled={busy} className="button-primary min-h-12" onClick={() => void act("accept")}>{busy ? "Updating…" : "Accept Counter Offer"}</button>}<button disabled={busy} className={styles.decline} onClick={() => void act("withdraw")}>Withdraw Offer</button></>}
         </>}{selected.transactionId && <Link className="button-primary min-h-12" href={`/transactions/${selected.transactionId}`}>View Deal</Link>}</div>
         {error && <p role="alert" className={`${styles.error} mt-3`}>{error}</p>}

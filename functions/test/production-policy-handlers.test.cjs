@@ -81,6 +81,7 @@ const onboarding = require("../lib/auth-onboarding");
 const { requestUploadPermits } = require("../lib/upload-permits");
 const { marketplaceMutationCall, runGuardedTransaction } = require("../lib/account-lifecycle");
 const { assertMarketplaceEligibility, currentReleasePolicy } = require("../lib/account-eligibility");
+const { policyAcceptancePath, legacyAcceptanceHistory } = require("../lib/policy-acceptance-history");
 const functions = { ...onboarding, requestUploadPermits };
 const preparationNames = ["getAccountSetupStatus", "acceptWebPolicies", "completeFirstTimeProfile", "finishAccountWelcome", "requestUploadPermits"];
 
@@ -147,7 +148,7 @@ test("approved demo policy walks fresh acceptance, profile, welcome and current 
   }
   assert.equal(committedWrites.length, initialCreates);
   assert.deepEqual(await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy))), { accepted: true });
-  assert.deepEqual(documents.get(onboardingPath), accepted(demoReleasePolicy));
+  assert.deepEqual(documents.get(onboardingPath), { ...accepted(demoReleasePolicy), acceptanceHistoryId: documents.get(onboardingPath).acceptanceHistoryId });
   const acceptedWrites = committedWrites.length;
   await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
   assert.equal(committedWrites.length, acceptedWrites, "Acceptance retry must not replace original evidence.");
@@ -164,7 +165,7 @@ test("approved demo policy walks fresh acceptance, profile, welcome and current 
   await onboarding.finishAccountWelcome.run(request());
   assert.equal(committedWrites.length, completedWrites, "Completion retries preserve the original timestamps.");
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(productionReleasePolicy.termsVersion, null); assert.equal(productionReleasePolicy.privacyVersion, null);
+  assert.equal(productionReleasePolicy.termsVersion, "1.0"); assert.equal(productionReleasePolicy.privacyVersion, "1.0");
 });
 
 test("profile, welcome and uploads reject incomplete or old demo acceptance before writing", async () => {
@@ -208,6 +209,162 @@ test("runtime version changes re-gate existing users and invalidate previous acc
     await assert.rejects(functions[name].run(request(name === "requestUploadPermits" ? uploadData() : {})), { code: "failed-precondition" });
   }
   assert.deepEqual(committedWrites, []);
+});
+
+test("first explicit acceptance atomically creates immutable history and its current projection", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  const path = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId), history = documents.get(path);
+  assert.equal(history.evidenceKind, "web-acceptance"); assert.equal(history.minimumAgeConfirmed, 18);
+  assert.equal(history.source, "web"); assert.equal(history.releaseTarget, "demo"); assert.equal(history.projectId, "demo-takeme");
+  for (const field of ["termsAcceptedAt", "privacyAcceptedAt", "ageConfirmedAt", "acceptedAt"]) assert.ok(history[field] instanceof Timestamp);
+  assert.deepEqual(committedWrites.map(write => write.path), [path, onboardingPath]);
+  const saved = { ...history }, current = { ...documents.get(onboardingPath) }, writes = committedWrites.length;
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  assert.deepEqual(documents.get(path), saved); assert.deepEqual(documents.get(onboardingPath), current);
+  assert.equal(committedWrites.length, writes, "Same-policy retries must create no additional event or projection write.");
+});
+
+test("explicit future-policy acceptance preserves old history and profile/welcome state", async () => {
+  reset(); const first = syntheticProductionRecord(); documents.set(policyPath, first);
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(first)));
+  const firstPath = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId), original = { ...documents.get(firstPath) };
+  documents.set(onboardingPath, { ...documents.get(onboardingPath), profileCompletedAt: timestamp, welcomeCompletedAt: timestamp });
+  const next = { ...first, termsVersion: "synthetic-final-3", privacyVersion: "synthetic-final-4" };
+  documents.set(policyPath, next);
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(next)));
+  const nextPath = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId);
+  assert.deepEqual(documents.get(firstPath), original); assert.notEqual(nextPath, firstPath);
+  assert.equal(documents.get(nextPath).termsVersion, next.termsVersion);
+  assert.equal(documents.get(onboardingPath).termsVersion, next.termsVersion);
+  assert.ok(documents.get(onboardingPath).profileCompletedAt.isEqual(timestamp)); assert.ok(documents.get(onboardingPath).welcomeCompletedAt.isEqual(timestamp));
+});
+
+test("legacy exact evidence is copied only on an explicit acceptance, without invented provenance", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  const legacy = { ...accepted(demoReleasePolicy), termsAcceptedAt: Timestamp.fromMillis(1000), privacyAcceptedAt: Timestamp.fromMillis(2000), age18ConfirmedAt: Timestamp.fromMillis(3000) };
+  documents.set(onboardingPath, legacy);
+  await onboarding.getAccountSetupStatus.run(request());
+  assert.equal(documents.has(policyAcceptancePath(uid, legacyAcceptanceHistory(uid, legacy).acceptanceId)), false, "Status/login must not create consent history.");
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  const event = documents.get(policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId));
+  assert.equal(event.evidenceKind, "legacy-current");
+  assert.ok(event.termsAcceptedAt.isEqual(legacy.termsAcceptedAt)); assert.ok(event.privacyAcceptedAt.isEqual(legacy.privacyAcceptedAt)); assert.ok(event.ageConfirmedAt.isEqual(legacy.age18ConfirmedAt));
+  for (const field of ["acceptedAt", "releaseTarget", "projectId"]) assert.equal(Object.hasOwn(event, field), false);
+  assert.deepEqual(documents.get(onboardingPath), { ...legacy, acceptanceHistoryId: event.acceptanceId });
+});
+
+test("legacy prior versions are archived in the same transaction before current evidence changes", async () => {
+  reset(); const current = syntheticProductionRecord(); documents.set(policyPath, current);
+  const legacy = { ...accepted({ termsVersion: "historical-policy-1", privacyVersion: "historical-policy-2" }), profileCompletedAt: timestamp, welcomeCompletedAt: timestamp };
+  documents.set(onboardingPath, legacy);
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(current)));
+  const event = documents.get(policyAcceptancePath(uid, legacyAcceptanceHistory(uid, legacy).acceptanceId));
+  assert.equal(event.evidenceKind, "legacy-current"); assert.equal(event.termsVersion, legacy.termsVersion);
+  assert.equal(documents.get(policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId)).evidenceKind, "web-acceptance");
+  assert.equal(documents.get(onboardingPath).termsVersion, current.termsVersion);
+  assert.deepEqual(committedWrites.map(write => write.path), [policyAcceptancePath(uid, legacyAcceptanceHistory(uid, legacy).acceptanceId), policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId), onboardingPath]);
+});
+
+test("malformed, colliding or foreign history aborts all acceptance writes", async () => {
+  for (const patch of [{ minimumAgeConfirmed: "18" }, { termsVersion: "different-version" }, { source: "client" },
+    { acceptedAt: "client-time" }, { projectId: "other-project" }, { evidenceKind: "other" }, { extra: true }]) {
+    reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+    await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+    const path = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId);
+    documents.set(path, { ...documents.get(path), ...patch }); committedWrites = [];
+    const before = { ...documents.get(onboardingPath) };
+    await assert.rejects(onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy))), error => error.details?.reason === "policy-acceptance-history-invalid");
+    assert.deepEqual(committedWrites, []); assert.deepEqual(documents.get(onboardingPath), before);
+  }
+});
+
+test("partial legacy evidence fails closed instead of being overwritten or re-timestamped", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  const previous = { ...accepted(demoReleasePolicy), age18ConfirmedAt: "unknown-old-value" };
+  documents.set(onboardingPath, previous);
+  await assert.rejects(onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy))), error => error.details?.reason === "policy-acceptance-history-invalid");
+  assert.deepEqual(documents.get(onboardingPath), previous); assert.deepEqual(committedWrites, []);
+});
+
+test("null current revocation preserves legacy or pointed evidence and does not invent fresh revocation", async () => {
+  for (const scenario of ["legacy-current", "prior-policy", "pointed-current"]) {
+    reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+    if (scenario === "pointed-current") await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+    const previous = { ...(documents.get(onboardingPath) ?? accepted(demoReleasePolicy)), revokedAt: null,
+      ...(scenario === "prior-policy" ? { termsVersion: "historical-policy-1" } : {}) };
+    documents.set(onboardingPath, previous); committedWrites = [];
+    await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+    const current = documents.get(onboardingPath), event = documents.get(policyAcceptancePath(uid, current.acceptanceHistoryId));
+    assert.equal(Object.hasOwn(event, "revokedAt"), false); assert.equal(Object.hasOwn(event, "reacceptanceAfterRevokedAt"), false);
+    if (scenario === "pointed-current") { assert.deepEqual(current, previous); assert.deepEqual(committedWrites, []); }
+    if (scenario === "legacy-current") { assert.equal(event.evidenceKind, "legacy-current"); assert.deepEqual(current, { ...previous, acceptanceHistoryId: event.acceptanceId }); }
+    if (scenario === "prior-policy") { assert.equal(event.evidenceKind, "web-acceptance"); assert.equal(Object.hasOwn(current, "revokedAt"), false); }
+  }
+});
+
+test("revoked evidence remains blocked until explicit full acceptance and is truthfully archived", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  const revoked = { ...accepted(demoReleasePolicy), revokedAt: Timestamp.fromMillis(4000) };
+  documents.set(onboardingPath, revoked);
+  assert.equal((await onboarding.getAccountSetupStatus.run(request())).step, "acceptance");
+  assert.deepEqual(committedWrites, []); assert.deepEqual(documents.get(onboardingPath), revoked);
+  await assert.rejects(onboarding.acceptWebPolicies.run(request({ ...acceptanceRequest(demoReleasePolicy), acceptPrivacy: false })), { code: "invalid-argument" });
+  assert.deepEqual(committedWrites, []);
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  const archived = documents.get(policyAcceptancePath(uid, legacyAcceptanceHistory(uid, revoked).acceptanceId));
+  assert.ok(archived.revokedAt.isEqual(revoked.revokedAt));
+  const freshPath = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId), fresh = documents.get(freshPath);
+  assert.equal(fresh.evidenceKind, "web-acceptance"); assert.ok(fresh.reacceptanceAfterRevokedAt.isEqual(revoked.revokedAt));
+  assert.notEqual(fresh.acceptanceId, archived.acceptanceId);
+  assert.equal([...documents.keys()].filter(path => path.includes("/policyAcceptances/events/")).length, 2);
+  assert.equal(Object.hasOwn(documents.get(onboardingPath), "revokedAt"), false);
+});
+
+test("same-version revocation of an existing event creates a fresh event and subsequent retries remain idempotent", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  const oldId = documents.get(onboardingPath).acceptanceHistoryId, oldPath = policyAcceptancePath(uid, oldId), oldEvent = { ...documents.get(oldPath) };
+  const revokedAt = Timestamp.fromMillis(4000);
+  documents.set(onboardingPath, { ...documents.get(onboardingPath), revokedAt }); committedWrites = [];
+  assert.equal((await onboarding.getAccountSetupStatus.run(request())).step, "acceptance");
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  const newId = documents.get(onboardingPath).acceptanceHistoryId, fresh = documents.get(policyAcceptancePath(uid, newId));
+  assert.notEqual(newId, oldId); assert.deepEqual(documents.get(oldPath), oldEvent);
+  assert.ok(fresh.reacceptanceAfterRevokedAt.isEqual(revokedAt));
+  assert.deepEqual(committedWrites.map(write => write.path), [policyAcceptancePath(uid, newId), onboardingPath]);
+  const writes = committedWrites.length;
+  await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+  assert.equal(committedWrites.length, writes); assert.equal(documents.get(onboardingPath).acceptanceHistoryId, newId);
+});
+
+test("missing, malformed or mismatched current history pointers fail closed", async () => {
+  for (const mutation of ["missing-event", "bad-id", "missing-id", "mismatched-dates", "foreign-owner"]) {
+    reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+    await onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy)));
+    const path = policyAcceptancePath(uid, documents.get(onboardingPath).acceptanceHistoryId);
+    if (mutation === "missing-event") documents.delete(path);
+    if (mutation === "bad-id") documents.set(onboardingPath, { ...documents.get(onboardingPath), acceptanceHistoryId: "../other" });
+    if (mutation === "missing-id") documents.set(onboardingPath, { ...documents.get(onboardingPath), acceptanceHistoryId: undefined });
+    if (mutation === "mismatched-dates") documents.set(onboardingPath, { ...documents.get(onboardingPath), termsAcceptedAt: Timestamp.fromMillis(5000) });
+    if (mutation === "foreign-owner") documents.set(path, { ...documents.get(path), ownerId: "other-owner" });
+    committedWrites = []; const before = { ...documents.get(onboardingPath) };
+    await assert.rejects(onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy))), error => error.details?.reason === "policy-acceptance-history-invalid");
+    assert.deepEqual(committedWrites, []); assert.deepEqual(documents.get(onboardingPath), before);
+  }
+});
+
+test("a fresh event ID collision aborts the transaction without adopting or overwriting it", async () => {
+  reset("demo"); documents.set(policyPath, { releaseTarget: "demo", projectId: "demo-takeme", ...demoReleasePolicy });
+  let collidedPath;
+  beforeRead = path => {
+    if (path.includes("/policyAcceptances/events/")) {
+      collidedPath = path; documents.set(path, { syntheticCollision: true });
+    }
+  };
+  await assert.rejects(onboarding.acceptWebPolicies.run(request(acceptanceRequest(demoReleasePolicy))), error => error.details?.reason === "policy-acceptance-history-invalid");
+  assert.deepEqual(committedWrites, []); assert.equal(documents.has(onboardingPath), false);
+  assert.deepEqual(documents.get(collidedPath), { syntheticCollision: true });
 });
 
 test("marketplace mutations resolve the same demo policy both before and inside their write transaction", async () => {

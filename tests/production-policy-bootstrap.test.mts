@@ -12,8 +12,8 @@ const plan = () => planProductionPolicyBootstrap(runtime(), policy, legal);
 
 test("actual policies and publication remain closed; planning never invents versions or approval", () => {
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(productionReleasePolicy.termsVersion, null);
-  assert.equal(productionReleasePolicy.privacyVersion, null);
+  assert.equal(productionReleasePolicy.termsVersion, "1.0");
+  assert.equal(productionReleasePolicy.privacyVersion, "1.0");
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(policyIsConfigured(productionReleasePolicy), false);
   assert.throws(() => planProductionPolicyBootstrap(runtime()), /publication|version/);

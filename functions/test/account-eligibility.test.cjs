@@ -18,8 +18,8 @@ test("demo policy is pinned to explicit matching runtime and emulator configurat
 test("source production approval remains inactive and unconfirmed production resources are refused", () => {
   assert.ok(validateProductionPolicy().length);
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(productionReleasePolicy.termsVersion, null);
-  assert.equal(productionReleasePolicy.privacyVersion, null);
+  assert.equal(productionReleasePolicy.termsVersion, "1.0");
+  assert.equal(productionReleasePolicy.privacyVersion, "1.0");
   const production = { TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "approved-test-project", GCLOUD_PROJECT: "approved-test-project" };
   assert.equal(resolvePolicyContext(production, "approved-test-project"), null);
   for (const name of ["FIREBASE_AUTH_EMULATOR_HOST", "FIRESTORE_EMULATOR_HOST", "FIREBASE_STORAGE_EMULATOR_HOST", "PUBSUB_EMULATOR_HOST", "FIREBASE_EMULATOR_HUB", "FUNCTIONS_EMULATOR"]) {

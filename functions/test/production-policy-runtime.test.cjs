@@ -22,8 +22,8 @@ const acceptanceFor = policy => ({ termsVersion: policy.termsVersion, privacyVer
 
 test("exact production resource context can be prepared without compiled legal activation", () => {
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(productionReleasePolicy.termsVersion, null);
-  assert.equal(productionReleasePolicy.privacyVersion, null);
+  assert.equal(productionReleasePolicy.termsVersion, "1.0");
+  assert.equal(productionReleasePolicy.privacyVersion, "1.0");
   assert.ok(validateProductionPolicy().length);
   assert.deepEqual(contextFor(production()), { target: "production", projectId: productionEnvironment.projectId });
   const configured = { ...production(), NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false",

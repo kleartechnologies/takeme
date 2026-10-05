@@ -9,11 +9,13 @@ test("Google sign-in uses Firebase provider and the shared profile initializer",
   const google = auth.slice(auth.indexOf("export async function loginWithGoogle"), auth.indexOf("export async function resetPassword"));
   assert.match(google, /signInWithPopup\(requireFirebase\(\)\.auth, new GoogleAuthProvider\(\)\)/);
   assert.match(google, /await createProfile\(credential\.user\)/);
+  assert.match(google, /getAdditionalUserInfo\(credential\)\?\.isNewUser !== false/);
+  assert.match(google, /return \{ user: credential\.user, isNewUser \}/);
   assert.match(auth, /await createProfileIfMissing\(services\.db, user, displayName\)/);
 
   const form = readFileSync(new URL("../src/components/auth/auth-form.tsx", import.meta.url), "utf8");
   assert.match(form, /mode !== "forgot"[\s\S]*Continue with Google/);
-  assert.match(form, /await loginWithGoogle\(\); await resume\(\)/);
+  assert.match(form, /const result = await loginWithGoogle\(\);[\s\S]*freshSession\.current = result\.isNewUser;[\s\S]*await resume\(\)/);
 });
 
 test("new Google profiles normalize provider names", () => {

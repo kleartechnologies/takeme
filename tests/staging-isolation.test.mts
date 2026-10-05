@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stagingEnvironment } from "../functions/src/staging-environment.ts";
+import { productionReleasePolicy } from "../functions/src/release-policy.ts";
 import { releaseProofPrefix } from "../src/lib/release-proof.ts";
 import { assertFirebaseAppIdentity, firebaseAppIdentityMatches, isStagingMediaUrl, metadataEndpoint, type MetadataEnvironment } from "../src/lib/firebase/staging-isolation.ts";
 import { getPublicListingForMetadata } from "../src/lib/firebase/public-listing-server.ts";
@@ -67,7 +68,7 @@ test("staging metadata endpoint requires a matching staging proof and exact reso
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${liveProject}.firebaseapp.com`, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${liveProject}.firebasestorage.app`,
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789012", NEXT_PUBLIC_FIREBASE_APP_ID: `1:123456789012:web:${"b".repeat(22)}` };
   const liveProof = { ...proof, target: "production", purpose: "production-build", projectId: liveProject, siteUrl: "https://takeme.my", firebase: liveFirebase,
-    policy: { publicationApproved: false, termsVersion: null, privacyVersion: null, minimumAge: 18 } };
+    policy: { ...productionReleasePolicy } };
   assert.equal(metadataEndpoint({ ...env, ...liveFirebase, TAKEME_RELEASE_TARGET: "production", NEXT_PUBLIC_SITE_URL: "https://takeme.my", TAKEME_BUILD_RELEASE_PROOF: encode(liveProof) }),
     `https://asia-southeast1-${liveProject}.cloudfunctions.net/getPublicListingDetail`);
 });

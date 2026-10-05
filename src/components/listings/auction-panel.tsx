@@ -11,6 +11,7 @@ import { openListingConversation } from "@/lib/services/conversations";
 import type { PublicAuctionBid } from "@/lib/services/listings";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { ActionSheet } from "@/components/ui/action-sheet";
+import { useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import type { Listing } from "@/types/marketplace";
 import productStyles from "./standard-product.module.css";
 import styles from "./auction.module.css";
@@ -38,6 +39,7 @@ function AuctionCountdown({ listing, now }: { listing: Listing; now: number }) {
 export function AuctionPanel({ listing, userId, owner, onChange, previewMode = false }: { listing: Listing; userId?: string; owner: boolean; onChange: () => void; previewMode?: boolean }) {
   const now = useCurrentTime();
   const router = useRouter();
+  const requireAction = useProtectedMarketplaceAction();
   const version = `${listing.id}:${listing.bidCount}:${listing.currentBid}:${listing.auctionStatus}:${listing.status}:${listing.auctionEndAt}`;
   const [response, setResponse] = useState<{ uid: string; version: string; state: AuctionViewerState } | null>(null);
   const viewer = response && response.uid === userId && response.version === version ? response.state : null;
@@ -81,10 +83,12 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
     return () => { active = false; };
   }, [listing, userId, version, retry, previewMode]);
 
-  function openBid() {
+  async function openBid() {
     if (!canBid || pending.current) return;
-    if (!userId) { router.push(`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`); return; }
-    setAmount(senToRinggit(minimum)); setError(""); setSheet("bid");
+    setBusy(true); setError("");
+    try { if (!await requireAction(`/listings/${listing.id}?bid=1#bid-history`)) return; setAmount(senToRinggit(minimum)); setSheet("bid"); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Your account status could not be checked."); }
+    finally { setBusy(false); }
   }
   async function submitBid(event: React.FormEvent) {
     event.preventDefault();
@@ -111,15 +115,14 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
   }
   async function chat() {
     if (pending.current) return;
-    if (!userId) { router.push(`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`); return; }
     pending.current = true; setBusy(true); setError("");
-    try { router.push(`/messages/${await openListingConversation(listing.id)}`); }
+    try { if (!await requireAction(`/listings/${listing.id}?chat=1`)) return; router.push(`/messages/${await openListingConversation(listing.id)}`); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not open Chat."); }
     finally { pending.current = false; setBusy(false); }
   }
   if (previewMode) return <div className={styles.panel} aria-label="Auction preview"><div className={styles.summary}><div><span>Starting bid</span><strong className={styles.price}>{formatSen(listing.startingBid ?? 0)}</strong><p className={styles.helper}>Minimum increment {formatSen(increment)}</p></div><AuctionCountdown listing={listing} now={now} /></div><p className={styles.timing}>Starts {date(listing.auctionStartAt)}<br />Ends {date(listing.auctionEndAt)}</p><p className={styles.helper}>Bids open only after this auction is published and its start time is reached.</p></div>;
   const primary = highest ? "Raise your bid" : outbid ? `Bid ${formatSen(minimum)}` : userId ? "Place Bid" : "Log in to bid";
-  const action = <button type="button" disabled={busy} className="button-primary" onClick={openBid}><Gavel size={17} aria-hidden="true" />{primary}</button>;
+  const action = <button type="button" disabled={busy} className="button-primary" onClick={() => void openBid()}><Gavel size={17} aria-hidden="true" />{primary}</button>;
   return <div className={styles.panel} data-ending-soon={endingSoon || undefined}>
     {highest && <div className={`${styles.statusCard} ${styles.winning}`} role="status"><Trophy size={25} aria-hidden="true" /><div><strong>You’re the highest bidder!</strong><p className={endingSoon ? styles.urgentText : undefined}>{endingSoon ? "Final moments! Auction ends soon." : "Keep an eye on the auction."}</p></div></div>}
     {outbid && <div className={`${styles.statusCard} ${styles.outbid}`} role="status"><AlertCircle size={23} aria-hidden="true" /><div><strong>You’ve been outbid!</strong><p>Someone placed a higher bid.</p></div></div>}

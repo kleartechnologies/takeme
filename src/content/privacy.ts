@@ -1,5 +1,5 @@
 import type { InformationSection } from "@/components/public-information/public-information";
-import { marketplaceOperator } from "./operator";
+import { marketplaceOperator } from "./operator.ts";
 
 // Source audit and unresolved business facts: docs/launch-legal-help.md.
 export const privacySections: InformationSection[] = [

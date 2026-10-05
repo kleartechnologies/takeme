@@ -1,5 +1,6 @@
 import {
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -39,8 +40,11 @@ export async function loginWithEmail(email: string, password: string) {
 
 export async function loginWithGoogle() {
   const credential = await signInWithPopup(requireFirebase().auth, new GoogleAuthProvider());
+  // Firebase's credential metadata distinguishes a newly created identity; the
+  // shared profile bootstrap runs for returning identities too and cannot do so.
+  const isNewUser = getAdditionalUserInfo(credential)?.isNewUser !== false;
   await createProfile(credential.user);
-  return credential.user;
+  return { user: credential.user, isNewUser };
 }
 
 export async function resetPassword(email: string) {

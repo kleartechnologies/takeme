@@ -69,5 +69,5 @@ export async function getFeaturedPromotions() {
 }
 export function trackPromotionIntent(type: "PROMOTION_IMPRESSION" | "PROMOTION_CLICK", promotion: PromotionBadge, listingId: string, context: "home" | "explore") {
   if (!auth?.currentUser || !functions) return;
-  void marketplaceCallable(service(), "trackPromotionEngagement")({ type, promotionId: promotion.promotionId, listingId, context }).catch(() => undefined);
+  void marketplaceCallable(service(), "trackPromotionEngagement", { background: true })({ type, promotionId: promotion.promotionId, listingId, context }).catch(() => undefined);
 }

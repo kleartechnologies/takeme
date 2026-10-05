@@ -129,7 +129,7 @@ test("artifact inspection rejects unsafe image configuration and another embedde
 test("ordinary releases independently require final legal content, applicability decisions and reviewed publication", () => {
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(productionReleasePolicy.termsVersion, null);
+  assert.equal(productionReleasePolicy.termsVersion, "1.0");
   assert.throws(() => validateProductionLaunchEnvironment(productionFixture(), approvedFixture), /Independent legal publication|Final legal content|production publication/);
   for (const key of ["publicationApproved", "finalContentApproved", "bmPrivacyNoticeApproved", "productionRoutesReviewed"] as const) assert.ok(validateLegalPublication({ ...approvedLegal, [key]: false }).length);
   for (const key of ["registration", "address"] as const) assert.ok(validateLegalPublication({ ...approvedLegal, [key]: "pending" }).length);

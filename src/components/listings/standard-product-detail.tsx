@@ -11,6 +11,7 @@ import { FollowSellerButton } from "@/components/profile/follow-seller-button";
 import { ProfileAvatar, VerifiedLabel } from "@/components/profile/profile-ui";
 import { ReportAction } from "@/components/trust/report-action";
 import { ActionSheet } from "@/components/ui/action-sheet";
+import { useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { ListingDealPanel } from "@/components/transactions/listing-deal-panel";
 import { AuctionPanel, AuctionStatusBadge, BidHistory } from "./auction-panel";
 import type { PublicAuctionBid } from "@/lib/services/listings";
@@ -87,15 +88,15 @@ function ProductGallery({ listing, badge }: { listing: Listing; badge?: React.Re
 
 function ProductActionBar({ listing, userId }: { listing: Listing; userId?: string }) {
   const router = useRouter();
+  const requireAction = useProtectedMarketplaceAction();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
   const owner = userId === listing.sellerId;
   async function open(offer: boolean) {
     if (pending.current || owner || listing.status !== "active") return;
-    if (!userId) { router.push(`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`); return; }
     pending.current = true; setBusy(true); setError("");
-    try { const id = await openListingConversation(listing.id); router.push(`/messages/${id}${offer ? "?offer=1" : ""}`); }
+    try { if (!await requireAction(`/listings/${listing.id}${offer ? "?offer=1" : "?chat=1"}`)) return; const id = await openListingConversation(listing.id); router.push(`/messages/${id}${offer ? "?offer=1" : ""}`); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not open the listing conversation."); }
     finally { pending.current = false; setBusy(false); }
   }

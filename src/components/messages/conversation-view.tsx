@@ -22,11 +22,13 @@ import styles from "./messaging.module.css";
 export function ConversationView({ id, makeOffer = false }: { id: string; makeOffer?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="h-80 animate-pulse bg-gray-50" />;
-  if (!user) return <div className={styles.empty}><h2>Private conversation</h2><Link href={`/login?next=${encodeURIComponent(`/messages/${id}${makeOffer ? "?offer=1" : ""}`)}`} className="button-primary mt-5 min-h-11 px-5">Log in</Link></div>;
+  if (!user) return <div className={styles.empty}><h2>Private conversation</h2><Link href={`/login?next=${encodeURIComponent(`/messages/${id}${makeOffer ? "?offer=1" : ""}`)}${makeOffer ? "&intent=offer" : ""}`} className="button-primary mt-5 min-h-11 px-5">Log in</Link></div>;
   return <ConversationSession key={`${user.uid}:${id}`} id={id} userId={user.uid} makeOffer={makeOffer} />;
 }
 
 function ConversationSession({ id, userId, makeOffer }: { id: string; userId: string; makeOffer: boolean }) {
+  const { setup } = useAuth();
+  const mayMarkSeen = setup?.step === "ready" && setup.policyAvailable === true;
   const now = useCurrentTime(30_000);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [profile, setProfile] = useState<PublicSellerSummary | null>(null);
@@ -77,10 +79,12 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
       setOffers(deal.offers); setTransaction(deal.transaction);
       if (state.status === "rejected" && !deal.transaction) setDealError("Offer details could not be loaded. Try again.");
       else if (!next.transactionId || deal.transaction) setDealError("");
-      if (document.visibilityState === "visible" && (next.unreadBy?.[userId] ?? 0) > 0) await markConversationSeen(id);
+      // Read-only browsing by an outdated owner must not trigger a protected
+      // write (or a policy redirect) merely because unread messages were viewed.
+      if (mayMarkSeen && document.visibilityState === "visible" && (next.unreadBy?.[userId] ?? 0) > 0) await markConversationSeen(id);
     } catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Conversation could not be loaded."); }
     finally { if (alive.current) setLoading(false); }
-  }, [id, userId]);
+  }, [id, userId, mayMarkSeen]);
   const refresh = useCallback(async (quiet = false): Promise<void> => {
     // A post-action refresh must follow an older in-flight read, not be dropped.
     if (quiet && pendingRefresh.current) { await pendingRefresh.current; return; }

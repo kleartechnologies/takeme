@@ -8,6 +8,7 @@ import { useCurrentTime } from "@/lib/use-current-time";
 import { ListingContextCard } from "@/components/listings/listing-context-card";
 import { OfferRequestForm } from "./offer-request-form";
 import { ActionSheet } from "@/components/ui/action-sheet";
+import { useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import type { Listing, MarketplaceOffer, MarketplaceTransaction, PaymentMethod } from "@/types/marketplace";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" });
@@ -17,6 +18,7 @@ const methods: { value: PaymentMethod; label: string }[] = [
 ];
 
 export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { listing: Listing; userId?: string; hideMakeOffer?: boolean }) {
+  const requireAction = useProtectedMarketplaceAction();
   const now = useCurrentTime(30_000);
   const [offers, setOffers] = useState<MarketplaceOffer[]>([]);
   const [transaction, setTransaction] = useState<MarketplaceTransaction | null>(null);
@@ -47,6 +49,7 @@ export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { l
     if (type === "offer" && (!sen || sen > Math.round(listing.price * 100))) { setError("Enter an offer between RM0.01 and the listed price."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
+      if (!await requireAction(`/listings/${listing.id}?offer=1`)) return;
       await submitOffer(listing.id, type, paymentMethod, sen ?? undefined);
       await refresh();
       setNotice("Request sent. No payment was taken and no transaction is complete.");
@@ -59,6 +62,7 @@ export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { l
     if (action === "counter" && !sen) { setError("Enter a valid counter amount."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
+      if (!await requireAction(`/listings/${listing.id}?offer=1`)) return;
       await respondToOffer(offerId, action, sen ?? undefined);
       await refresh();
       setNotice(action === "accept" ? "Deal agreed. Both parties must later confirm the exchange to complete it." : `Offer ${action === "counter" ? "countered" : action === "reject" ? "rejected" : "withdrawn"}.`);
@@ -66,10 +70,16 @@ export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { l
     finally { setBusy(false); }
   }
 
+  async function openOffer() {
+    setError("");
+    try { if (await requireAction(`/listings/${listing.id}?offer=1`)) setOfferOpen(true); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Your account status could not be checked."); }
+  }
+
   return <section className="mt-6 rounded-2xl border border-gray-200 bg-stone-50 p-4" aria-label="Deal requests">
     <h2 className="text-base font-bold">{seller ? "Buyer requests" : "Agree a deal"}</h2>
     <p className="mt-1 text-xs leading-5 text-[var(--takeme-gray)]">TAKEME does not process this payment. An accepted request is an agreed deal, not a completed transaction.</p>
-    {!userId && <Link href={`/login?next=${encodeURIComponent(`/listings/${listing.id}`)}`} className="button-primary mt-4 min-h-11 px-4">Log in to request</Link>}
+    {!userId && <Link href={`/login?next=${encodeURIComponent(`/listings/${listing.id}?offer=1`)}&intent=offer`} className="button-primary mt-4 min-h-11 px-4">Log in to request</Link>}
     {loading && <p className="mt-3 text-sm text-[var(--takeme-gray)]">Loading requests…</p>}
     {transaction && <Link href={`/transactions/${transaction.id}`} className="button-primary mt-4 min-h-11 w-full px-4">View {transaction.status === "completed" ? "completed transaction" : "transaction status"}</Link>}
     {userId && !loading && !seller && !transaction && listing.status === "active" && !offers.some((offer) => ["submitted", "countered"].includes(offer.status) && (!now || new Date(offer.expiresAt).getTime() > now)) && <div className="mt-4 space-y-3">
@@ -78,7 +88,7 @@ export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { l
       </div></fieldset>
       <label className="form-field"><span>Agreed payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}>{methods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <button type="button" disabled={busy} onClick={() => void send("buy_now")} className="button-primary min-h-12 w-full px-4">Request at {money.format(listing.price)}</button>
-      {!hideMakeOffer && <button type="button" disabled={busy} onClick={() => { setError(""); setOfferOpen(true); }} className="button-secondary min-h-12 w-full px-4">Make an offer</button>}
+      {!hideMakeOffer && <button type="button" disabled={busy} onClick={() => void openOffer()} className="button-secondary min-h-12 w-full px-4">Make an offer</button>}
     </div>}
     {userId && !loading && seller && !offers.length && !transaction && <p className="mt-3 text-sm text-[var(--takeme-gray)]">No requests yet.</p>}
     <div className="mt-3 space-y-3">{offers.map((offer) => {

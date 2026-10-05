@@ -4,12 +4,13 @@ import { Heart, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { isListingSaved, removeSavedListing, saveListing } from "@/lib/services/saved";
 import type { SavedChange } from "@/lib/marketplace-state-events";
 
 export function SaveButton({ listingId, initialSaved, onChange, compact = false }: { listingId: string; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
   const { user, loading } = useAuth();
+  const requireAction = useProtectedMarketplaceAction();
   const pathname = usePathname();
   const [saved, setSaved] = useState(initialSaved ?? false);
   const [savedUid, setSavedUid] = useState(user?.uid);
@@ -32,11 +33,13 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   const className = compact
     ? "grid size-11 place-items-center rounded-full border border-gray-200 bg-white/95 text-[var(--takeme-dark-green)] shadow-sm"
     : "button-secondary mt-3 min-h-12 w-full gap-2";
-  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}`} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
+  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}&intent=save`} onClick={event => { event.preventDefault(); void requireAction(); }} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
   const displaySaved = savedUid === user?.uid && saved;
 
   async function toggle() {
     if (!user || pending) return;
+    try { if (!await requireAction()) return; }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not check your account. Please try again."); return; }
     const next = !displaySaved;
     reads.current++;
     setSaved(next); setSavedUid(user.uid); setPending(true); setError("");

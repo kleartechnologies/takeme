@@ -3,7 +3,7 @@
 import { ArrowRight, Compass, LoaderCircle, LogIn, RotateCcw, Sparkles, ThumbsDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { ListingCard } from "@/components/listings/listing-card";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { EmptyState, ErrorState, ListingSkeleton } from "@/components/ui/states";
@@ -17,6 +17,7 @@ const initialState: FeedState = { loading: true, sections: [], personalized: fal
 
 export function ForYouFeed() {
   const { user, loading: authLoading, configured } = useAuth();
+  const requireAction = useProtectedMarketplaceAction();
   const [state, setState] = useState<FeedState>(initialState);
   const [retry, setRetry] = useState(0);
   const [loadingSection, setLoadingSection] = useState<string | null>(null);
@@ -55,6 +56,8 @@ export function ForYouFeed() {
   }
 
   async function dismiss(item: Item) {
+    try { if (!await requireAction()) return; }
+    catch (caught) { setActionError(caught instanceof Error ? caught.message : "Your account status could not be checked."); return; }
     setHidden((previous) => [...previous, item.listing.id]);
     setUndo({ id: item.listing.id, title: item.listing.title });
     setActionError("");
@@ -70,6 +73,8 @@ export function ForYouFeed() {
 
   async function restore() {
     if (!undo) return;
+    try { if (!await requireAction()) return; }
+    catch (caught) { setActionError(caught instanceof Error ? caught.message : "Your account status could not be checked."); return; }
     const item = undo;
     setHidden((previous) => previous.filter((id) => id !== item.id));
     setUndo(null);
