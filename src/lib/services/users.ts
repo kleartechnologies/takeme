@@ -1,6 +1,7 @@
 import { withEligibilityHandling } from "@/lib/services/marketplace-call";
 import { Timestamp, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { photoUploadMetadata } from "@/lib/services/upload-permits";
 import { auth, db, storage } from "@/lib/firebase/client";
 import type { UserProfile } from "@/types/marketplace";
 import { formatPublicLocation, parseLegacyGeneralLocation } from "@/lib/general-location";
@@ -27,15 +28,30 @@ export async function updatePublicProfile(input: { displayName: string; location
   if (input.location.trim() && !normalizedLocation) throw new Error("Choose a district or city and Malaysian state, not a street address.");
   const location = normalizedLocation ? formatPublicLocation(normalizedLocation) : "";
   if (displayName.length < 2 || displayName.length > 80) throw new Error("Display name must be 2–80 characters.");
-  if (input.photo && (!storage || !["image/jpeg", "image/png", "image/webp"].includes(input.photo.type) || input.photo.size > 8 * 1024 * 1024)) throw new Error("Choose a JPG, PNG or WebP photo under 8 MB.");
+  if (input.photo && (!storage || !["image/jpeg", "image/png", "image/webp"].includes(input.photo.type) || input.photo.size < 1 || input.photo.size > 8 * 1024 * 1024)) throw new Error("Choose a JPG, PNG or WebP photo under 8 MB.");
   const update: { displayName: string; location: string; photoURL?: string; updatedAt: ReturnType<typeof serverTimestamp> } = { displayName, location, updatedAt: serverTimestamp() };
   const photo = input.photo;
+  let uploadedPhoto: ReturnType<typeof ref> | undefined;
+  let previousPhotoURL: string | null = null;
   if (photo) {
-    const photoRef = ref(storage!, `users/${uid}/profile/avatar`);
-    await withEligibilityHandling(() => uploadBytes(photoRef, photo, { contentType: photo.type }));
-    update.photoURL = await getDownloadURL(photoRef);
+    previousPhotoURL = (await getUserProfile(uid))?.photoURL ?? null;
+    const photoRef = ref(storage!, `users/${uid}/profile/${crypto.randomUUID()}`);
+    const metadata = await photoUploadMetadata(photoRef.fullPath, photo.type, photo.size);
+    await withEligibilityHandling(() => uploadBytes(photoRef, photo, metadata));
+    uploadedPhoto = photoRef;
+    try { update.photoURL = await getDownloadURL(photoRef); }
+    catch (error) { await deleteObject(photoRef).catch(() => undefined); throw error; }
   }
-  await withEligibilityHandling(() => updateDoc(doc(database, "users", uid), update));
+  try { await withEligibilityHandling(() => updateDoc(doc(database, "users", uid), update)); }
+  catch (error) { if (uploadedPhoto) await deleteObject(uploadedPhoto).catch(() => undefined); throw error; }
+  if (uploadedPhoto && previousPhotoURL) {
+    try {
+      const previous = ref(storage!, previousPhotoURL);
+      if (previous.bucket === uploadedPhoto.bucket && previous.fullPath.startsWith(`users/${uid}/profile/`) && previous.fullPath !== uploadedPhoto.fullPath) {
+        await deleteObject(previous).catch(() => undefined);
+      }
+    } catch { /* External provider photos are not TAKEME Storage objects. */ }
+  }
   const profile = await getUserProfile(uid);
   if (!profile) throw new Error("Profile could not be loaded after saving.");
   return profile;

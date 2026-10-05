@@ -11,7 +11,7 @@ try {
   const configuration = validateReleaseEnvironment(environment);
   if (configuration.target !== (staging ? "staging" : "production")) throw new Error("Cloudflare artifact target does not match its explicit qualification selector.");
   const checked = staging ? await validateStagingCloudflareArtifact(repository, configuration) : await validateCloudflareArtifact(repository, configuration);
-  console.log(`Cloudflare ${staging ? "staging preview" : "release"} artifact validation passed (${checked.files} files).${staging ? ` Recorded preview routing is ${checked.deploymentContext.workersDev ? "enabled" : "disabled"}; nothing was deployed. Not a production release.` : ""}`);
+  console.log(`Cloudflare ${staging ? "staging preview" : "production build-qualified"} artifact validation passed (${checked.files} files).${staging ? ` Recorded preview routing is ${checked.deploymentContext.workersDev ? "enabled" : "disabled"}; nothing was deployed. Not a production release.` : " Launch NOT approved; run the independent launch checker after actual approvals."}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Cloudflare release artifact validation failed.");
   process.exitCode = 1;

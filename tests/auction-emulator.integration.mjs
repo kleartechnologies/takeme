@@ -1,4 +1,4 @@
-import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
+import { acceptDemoPolicies, permitDemoUpload, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -19,6 +19,7 @@ const { _test } = functionsRequire("./lib/index.js");
 const config = { apiKey: "demo-api-key", authDomain: `${projectId}.firebaseapp.com`, projectId, storageBucket: `${projectId}.firebasestorage.app`, appId: "1:123456789:web:demo" };
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const adminDb = getAdminFirestore();
+const uploadDenied = error => ["functions/permission-denied", "storage/unauthorized"].includes(error.code);
 
 async function client(label, authenticated = true) {
   const app = initializeApp(config, `${label}-${suffix}`);
@@ -36,7 +37,8 @@ async function client(label, authenticated = true) {
 
 async function uploadFixture(owner, listingId, filename) {
   const object = ref(owner.storage, `users/${owner.auth.currentUser.uid}/listings/${listingId}/${filename}`);
-  await uploadBytes(object, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" });
+  const bytes = readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url));
+  await uploadBytes(object, bytes, await permitDemoUpload(owner.app, object.fullPath, "image/png", bytes.length, owner.functions));
   return getDownloadURL(object);
 }
 
@@ -66,7 +68,7 @@ await assert.rejects(() => getDownloadURL(ref(guest.storage, buyNowMedia.fullPat
 await assert.rejects(() => getDownloadURL(ref(bidderOne.storage, buyNowMedia.fullPath)), /unauthorized|permission/i, "another user cannot read private draft media");
 assert.ok(await getDownloadURL(buyNowMedia), "owner can read draft media");
 const foreignImage = ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/foreign.png`);
-await assert.rejects(() => uploadBytes(foreignImage, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), /unauthorized|permission/i);
+await assert.rejects(() => uploadBytes(foreignImage, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), uploadDenied);
 await assert.rejects(() => deleteObject(ref(bidderOne.storage, `users/${owner.auth.currentUser.uid}/listings/${buyNowRef.id}/buy-now.png`)), /unauthorized|permission/i);
 await assert.rejects(() => call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: ["https://example.com/fake.png"] }), /storage|image/i);
 await call(owner, "publishFixedListing", { listingId: buyNowRef.id, imageUrls: [buyNowImage] });
@@ -89,7 +91,7 @@ assert.ok(securedFixed.facetKeys.includes("electronics|*|*|*"));
 await adminDb.doc(`listings/${buyNowRef.id}`).update({ status: "sold" });
 assert.ok(await getDownloadURL(ref(guest.storage, buyNowMedia.fullPath)), "sold fixed-price media remains public");
 const wrongSellerMedia = ref(owner.storage, `users/${bidderOne.auth.currentUser.uid}/listings/${buyNowRef.id}/private.png`);
-await assert.rejects(() => uploadBytes(wrongSellerMedia, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), /unauthorized|permission/i, "unrelated account cannot write listing media");
+await assert.rejects(() => uploadBytes(wrongSellerMedia, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" }), uploadDenied, "unrelated account cannot write listing media");
 await assert.rejects(() => getDownloadURL(ref(bidderOne.storage, wrongSellerMedia.fullPath)), /unauthorized|permission|not-found/i, "unrelated account has no listing-media read path");
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", buyNowRef.id), { title: "Cross seller edit" }), /permission/i);
 await assert.rejects(() => updateDoc(buyNowRef, { sellerId: bidderOne.auth.currentUser.uid }), /permission/i);
@@ -201,7 +203,7 @@ assert.equal(viewerTwo.isHighestBidder, auction.currentBidderId === bidderTwo.au
 assert.equal(viewerOne.isOutbid, !viewerOne.isHighestBidder);
 assert.equal(viewerTwo.isOutbid, !viewerTwo.isHighestBidder);
 assert.ok(!/(currentBidderId|winnerId|bidderId|outbidUserId|buyerId)/.test(JSON.stringify(viewerOne)));
-await assert.rejects(() => uploadFixture(owner, created.listingId, "late-change.png"), /unauthorized|permission/i);
+await assert.rejects(() => uploadFixture(owner, created.listingId, "late-change.png"), uploadDenied);
 
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", created.listingId), { currentBid: 999_999 }), /permission/i);
 await assert.rejects(() => updateDoc(doc(bidderOne.firestore, "listings", created.listingId), { currentBidderId: bidderOne.auth.currentUser.uid }), /permission/i);

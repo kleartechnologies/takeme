@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES } from "./listing-validation.ts";
+import { cadenceErrorMessage } from "./cadence-error.ts";
 
 export type ListingImageStage = "processing" | "upload" | "download";
 
@@ -162,7 +163,7 @@ export async function uploadListingImagesWith<TReference extends { fullPath: str
       try {
         await adapter.upload(reference, prepared.blob, "image/webp");
       } catch (cause) {
-        throw new ListingImagePipelineError("upload", "The prepared photo could not be uploaded. Check your connection and try again.", { cause });
+        throw new ListingImagePipelineError("upload", cadenceErrorMessage(cause) ?? "The prepared photo could not be uploaded. Check your connection and try again.", { cause });
       }
       const entry = { url: "", fullPath: reference.fullPath, reference };
       uploaded.push(entry);

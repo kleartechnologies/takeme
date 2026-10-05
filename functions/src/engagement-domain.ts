@@ -13,6 +13,17 @@ export type SearchCriteria = {
 
 const categories = new Set(["electronics", "fashion", "home-living", "games", "toys-hobbies", "sports", "automotive", "books", "collectibles", "tools", "baby-kids", "tv-home-appliances", "health-nutrition", "others"]);
 
+/** Legacy records cannot invent a category through coercion or a default. */
+export function listingCategoryId(value: unknown): string | null {
+  return typeof value === "string" && categories.has(value) ? value : null;
+}
+
+export function newListingSearchCategories(listing: Record<string, unknown> | undefined): string[] {
+  if (listing?.status !== "active") return [];
+  const category = listingCategoryId(listing.categoryId);
+  return category ? [category, "*"] : ["*"];
+}
+
 export function stableId(...parts: string[]) {
   return createHash("sha256").update(parts.join("|")) .digest("hex");
 }

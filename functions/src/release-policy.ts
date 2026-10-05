@@ -32,15 +32,29 @@ export function validateProductionPolicy(policy: ReleasePolicy = productionRelea
   if (policy.publicationApproved !== true) issues.push("Final Terms and Privacy publication approval is required.");
   for (const [name, version] of [["Terms", policy.termsVersion], ["Privacy", policy.privacyVersion]] as const) {
     if (typeof version !== "string" || !version.trim()) issues.push(`${name} policy version is required.`);
+    else if (version !== version.trim() || /\s/.test(version)) issues.push(`${name} policy version must be an exact version identifier.`);
     else if (/draft|demo|test|staging/i.test(version)) issues.push(`${name} policy version must be a final published version.`);
   }
   if (policy.minimumAge !== 18) issues.push("The approved V1 age requirement is 18.");
   return issues;
 }
 
+/** Build qualification can retain an honest unpublished/null policy; it grants no acceptance. */
+export function validateProductionPolicyConfiguration(policy: ReleasePolicy): string[] {
+  if (policy.publicationApproved === true) return validateProductionPolicy(policy);
+  const issues: string[] = [];
+  if (policy.publicationApproved !== false) issues.push("Production policy publication intent must be explicit.");
+  if (policy.minimumAge !== 18) issues.push("The approved V1 age requirement is 18.");
+  for (const [name, version] of [["Terms", policy.termsVersion], ["Privacy", policy.privacyVersion]] as const) {
+    if (version !== null && (typeof version !== "string" || !version || version !== version.trim() || /\s|draft|demo|test|staging/i.test(version))) issues.push(`${name} policy version must be null or an exact final version awaiting publication.`);
+  }
+  return issues;
+}
+
 export function policyIsConfigured(policy: ReleasePolicy): policy is ReleasePolicy & { termsVersion: string; privacyVersion: string } {
   return policy.publicationApproved === true && typeof policy.termsVersion === "string" && !!policy.termsVersion.trim()
-    && typeof policy.privacyVersion === "string" && !!policy.privacyVersion.trim() && policy.minimumAge === 18;
+    && policy.termsVersion === policy.termsVersion.trim() && typeof policy.privacyVersion === "string" && !!policy.privacyVersion.trim()
+    && policy.privacyVersion === policy.privacyVersion.trim() && policy.minimumAge === 18;
 }
 
 const rulesStart = "    // BEGIN GENERATED RELEASE POLICY — functions/src/release-policy.ts";

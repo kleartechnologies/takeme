@@ -37,8 +37,18 @@ service firebase.storage {
     }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function validImage() {
-      return request.resource.size <= 8 * 1024 * 1024
+      return request.resource.size > 0 && request.resource.size <= 8 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+    // The existing acceptance lookup is reused, preserving the two-document limit.
+    function validUploadPermit(uid, path) {
+      let acceptance = firestore.get(/databases/(default)/documents/users/$(uid)/private/onboarding).data;
+      let permitId = request.resource.metadata.takemeUploadPermit;
+      let permit = acceptance.uploadPermits[permitId];
+      return permitId is string && permit.path == path
+        && permit.contentType == request.resource.contentType
+        && permit.sizeBytes == request.resource.size
+        && permit.expiresAt is timestamp && request.time < permit.expiresAt;
     }
     function listing(listingId) {
       return firestore.get(/databases/(default)/documents/listings/$(listingId)).data;
@@ -57,7 +67,10 @@ service firebase.storage {
 
     match /users/{uid}/profile/{fileName} {
       allow read: if true;
-      allow create, update: if eligibleOwner(uid) && validImage();
+      allow create: if resource == null && eligibleOwner(uid) && validImage()
+        && validUploadPermit(uid, "users/" + uid + "/profile/" + fileName);
+      // An upload permit cannot be replayed to overwrite an existing object.
+      allow update: if false;
       allow delete: if eligibleOwner(uid);
     }
 
@@ -68,7 +81,9 @@ service firebase.storage {
             && listing(listingId).listingType == 'buy_now'
             && listing(listingId).privacyVersion == 2)
           || isOwner(uid));
-      allow create, update: if canManageListingMedia(uid, listingId) && validImage();
+      allow create: if resource == null && canManageListingMedia(uid, listingId) && validImage()
+        && validUploadPermit(uid, "users/" + uid + "/listings/" + listingId + "/" + fileName);
+      allow update: if false;
       allow delete: if canManageListingMedia(uid, listingId);
     }
   }

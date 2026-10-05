@@ -2,6 +2,8 @@ import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransacti
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { messageRequestIdentity, messageRetryDecision, normalizeMessageBody, MESSAGE_REQUEST_RETENTION_MS } from "./message-request";
+import { consumeActionCadence } from "./action-cadence";
 
 const db = getFirestore();
 function uid(value: string | undefined) { if (!value) throw new HttpsError("unauthenticated", "Sign in to use messages."); return value; }
@@ -101,18 +103,28 @@ export const getConversationMessages = onCall(async (request) => {
 export const sendConversationMessage = marketplaceMutationCall(async (request) => {
   const senderId = uid(request.auth?.uid);
   const conversationId = id(request.data?.conversationId);
-  if (typeof request.data?.body !== "string") throw new HttpsError("invalid-argument", "Enter a message.");
-  const body = request.data.body.trim().replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n");
-  if (!body || body.length > 2000) throw new HttpsError("invalid-argument", "Message must be 1–2000 characters.");
+  let body: string, identity: ReturnType<typeof messageRequestIdentity>;
+  try {
+    body = normalizeMessageBody(request.data?.body);
+    identity = messageRequestIdentity(senderId, conversationId, request.data?.idempotencyKey, body);
+  } catch (error) { throw new HttpsError("invalid-argument", (error as Error).message); }
   const ref = db.collection("conversations").doc(conversationId);
-  const messageRef = ref.collection("messages").doc();
+  const messageRef = ref.collection("messages").doc(identity.messageId);
+  const receiptRef = db.doc(`users/${senderId}/private/messageRequests/messageSendReceipts/${identity.requestId}`);
   await runGuardedTransaction(db, async (tx) => {
-    const conversation = await tx.get(ref); const data = conversation.data(); participant(data, senderId);
+    const [conversation, message, receipt] = await Promise.all([tx.get(ref), tx.get(messageRef), tx.get(receiptRef)]);
+    const data = conversation.data(); participant(data, senderId);
+    try { if (messageRetryDecision(message.data(), receipt.data(), senderId, body, identity) === "retry") return; }
+    catch (error) { throw new HttpsError("failed-precondition", (error as Error).message, { reason: "message-request-conflict" }); }
     if (data?.status === "closed") throw new HttpsError("failed-precondition", "This conversation is closed.");
     const otherId = data!.buyerId === senderId ? data!.sellerId : data!.buyerId;
     if (!(await accountIsActive(otherId, tx))) throw new HttpsError("failed-precondition", "This account is unavailable.");
     const now = Timestamp.now();
+    // The quota helper performs the final read before staging any writes. A
+    // receipt retry above consumes neither quota nor downstream side effects.
+    await consumeActionCadence(tx, senderId, "message", now);
     tx.create(messageRef, { id: messageRef.id, senderId, body, createdAt: now });
+    tx.create(receiptRef, { bodyHash: identity.bodyHash, messageId: messageRef.id, createdAt: now, expiresAt: Timestamp.fromMillis(now.toMillis() + MESSAGE_REQUEST_RETENTION_MS) });
     tx.update(ref, { latestMessage: body.slice(0, 120), lastMessageAt: now, updatedAt: now, [`unreadBy.${otherId}`]: Math.max(0, Number(data!.unreadBy?.[otherId] ?? 0)) + 1 });
   });
   return { messageId: messageRef.id };

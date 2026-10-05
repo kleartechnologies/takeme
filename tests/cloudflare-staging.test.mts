@@ -121,7 +121,7 @@ test("staging artifacts cannot qualify as production, demo or offline output", a
     await assert.rejects(validateCloudflareArtifact(f.repository, f.configuration), /nondeployable/);
     await assert.rejects(validateStagingArtifact(f.next, { ...f.configuration, purpose: "release" }), /isolated/);
     await assert.rejects(validateStagingCloudflareArtifact(f.repository, offlineQualificationConfiguration()), /isolated/);
-    const promoted = { ...f.configuration, target: "production" as const, purpose: "release" as const, productionDeletionEnabled: true };
+    const promoted = { ...f.configuration, target: "production" as const, purpose: "production-build" as const, productionDeletionEnabled: true };
     await assert.rejects(validateReleaseArtifact(f.next, promoted), /purpose/);
     await assert.rejects(validateCloudflareArtifact(f.repository, promoted), /purpose or target/);
   } finally { await cleanup(f.repository); }

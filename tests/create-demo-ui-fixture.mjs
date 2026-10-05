@@ -11,7 +11,7 @@ import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from "fi
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { acceptDemoPolicies } from "./helpers/demo-eligibility.mjs";
+import { acceptDemoPolicies, permitDemoUpload } from "./helpers/demo-eligibility.mjs";
 
 const projectId = "demo-takeme";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
@@ -48,11 +48,12 @@ async function person(role) {
 const call = async (user, name, data = {}) => (await httpsCallable(user.functions, name)(data)).data;
 try {
   const seller = await person("seller"), buyer = await person("buyer"), secondBidder = await person("bidder");
+  const fixtureImageBytes = readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url));
   const input = { title: "Synthetic camera for local UI verification", description: "Synthetic local test product. No real sale or personal information.", categoryId: "electronics", condition: "Good", price: 25, listingType: "buy_now", publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" } };
   async function listing(title) {
     const id = (await call(seller, "createFixedListingDraft", { ...input, title })).listingId;
     const image = ref(seller.storage, `users/${seller.uid}/listings/${id}/synthetic.png`);
-    await uploadBytes(image, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" });
+    await uploadBytes(image, fixtureImageBytes, await permitDemoUpload(seller.app, image.fullPath, "image/png", fixtureImageBytes.length, seller.functions));
     await call(seller, "publishFixedListing", { listingId: id, imageUrls: [await getDownloadURL(image)] });
     return id;
   }
@@ -65,7 +66,7 @@ try {
   assert.ok(accepted.transactionId);
   await setDoc(doc(buyer.db, "users", buyer.uid, "saved", listingId), { listingId, savedAt: serverTimestamp() });
   const conversation = await call(buyer, "openListingConversation", { listingId });
-  await call(buyer, "sendConversationMessage", { conversationId: conversation.conversationId, body: "Synthetic local UI test message. No real exchange." });
+  await call(buyer, "sendConversationMessage", { conversationId: conversation.conversationId, body: "Synthetic local UI test message. No real exchange.", idempotencyKey: randomUUID() });
   const draft = await call(seller, "createFixedListingDraft", { ...input, title: "Local unpublished draft" });
   const criteria = { query: "synthetic", category: "electronics", condition: "Good", type: "buy_now", auction: "", price: 100, location: "Jitra", sort: "newest" };
   await call(buyer, "saveSearch", { criteria, frequency: "instant", requestId: `active-${suffix}` });
@@ -73,17 +74,19 @@ try {
   const start = Date.now() + 60_000;
   const auction = await call(seller, "createAuctionListing", { title: "Synthetic local auction-sheet fixture", description: input.description, categoryId: input.categoryId, condition: input.condition, publicLocation: input.publicLocation, listingType: "auction", startingBid: 1000, minimumBidIncrement: 100, auctionStartAt: new Date(start).toISOString(), auctionEndAt: new Date(start + 600_000).toISOString() });
   const auctionImage = ref(seller.storage, `users/${seller.uid}/listings/${auction.listingId}/synthetic.png`);
-  await uploadBytes(auctionImage, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" });
+  await uploadBytes(auctionImage, fixtureImageBytes, await permitDemoUpload(seller.app, auctionImage.fullPath, "image/png", fixtureImageBytes.length, seller.functions));
   await call(seller, "publishAuctionListing", { listingId: auction.listingId, imageUrls: [await getDownloadURL(auctionImage)] });
   // Deterministic emulator clock fixtures, following the auction integration suite.
   // Creation, bids and finalization still use the authoritative handlers.
+  // This bounded visual matrix exceeds normal manual cadence; demo-only fixture setup resets its private counter.
+  await adminDb.doc(`users/${seller.uid}/private/cadence-listing`).delete();
   const matrix = {};
   for (const state of ["scheduled", "active", "highest", "outbid", "endingSoon", "ended", "winner", "lost", "draft"]) {
     const future = Date.now() + 4 * 3600_000;
     const created = await call(seller, "createAuctionListing", { title: `Local matrix ${state}`, description: input.description, categoryId: input.categoryId, condition: input.condition, publicLocation: input.publicLocation, listingType: "auction", startingBid: 1000, minimumBidIncrement: 100, auctionStartAt: new Date(future).toISOString(), auctionEndAt: new Date(future + 4 * 3600_000).toISOString() });
     matrix[state] = created.listingId;
     const object = ref(seller.storage, `users/${seller.uid}/listings/${created.listingId}/synthetic.png`);
-    await uploadBytes(object, readFileSync(new URL("../public/brand/takeme-app-icon.png", import.meta.url)), { contentType: "image/png" });
+    await uploadBytes(object, fixtureImageBytes, await permitDemoUpload(seller.app, object.fullPath, "image/png", fixtureImageBytes.length, seller.functions));
     if (state === "draft") continue;
     await call(seller, "publishAuctionListing", { listingId: created.listingId, imageUrls: [await getDownloadURL(object)] });
     if (state === "scheduled") continue;

@@ -1,3 +1,4 @@
+import { consumeActionCadence } from "./action-cadence";
 import { marketplaceCall as onCall, marketplaceMutationCall, resolutionCall, resolutionMutationCall, runGuardedTransaction, accountIsActive, visibleParticipantId } from "./account-lifecycle";
 import { monthsAfter } from "./account-deletion-retention";
 import { createHash } from "node:crypto";
@@ -75,6 +76,7 @@ export const submitOffer = marketplaceMutationCall(async (request) => {
     const amountSen = type === "buy_now" ? fixedAmount : request.data?.amountSen;
     if (!validSen(amountSen) || (type === "offer" && amountSen > fixedAmount)) throw new HttpsError("invalid-argument", "Offer amount must be positive integer sen and no higher than the listed price.");
     const expiresAt = Timestamp.fromMillis(timestamp.toMillis() + OFFER_WINDOW_DAYS * 86_400_000);
+    await consumeActionCadence(tx, buyerId, "offer", timestamp, { resourceId: listingId });
     tx.create(newRef, { listingId, buyerId, sellerId: data!.sellerId, type, status: "submitted", proposedAmountSen: amountSen, quotedAmountSen: amountSen, currency: "MYR", paymentMethod,
       createdAt: timestamp, updatedAt: timestamp, expiresAt, transactionId: null });
     tx.set(previousRef, { offerId: newRef.id, status: "submitted", expiresAt, updatedAt: timestamp });
@@ -110,6 +112,7 @@ export const respondToOffer = marketplaceMutationCall(async (request) => {
       if (dealLock?.exists && dealLock.data()?.status === "in_progress") throw new HttpsError("failed-precondition", "This listing already has an agreed transaction.");
       if (existingDeal?.exists) throw new HttpsError("already-exists", "This offer already has a transaction.");
       if (!validSen(data.quotedAmountSen)) throw new HttpsError("failed-precondition", "The agreed amount is invalid.");
+      await consumeActionCadence(tx, userId, "offer", now, { resourceId: data.listingId });
       tx.create(txRef, { listingId: data.listingId, listingTitle: listing!.data()!.title, categoryId: listing!.data()!.categoryId,
         buyerId: data.buyerId, sellerId: data.sellerId, type: data.type, sourceId: offerId, status: "in_progress", amountSen: data.quotedAmountSen, currency: "MYR", paymentMethod: data.paymentMethod,
         ...standardPaymentFields(),
@@ -125,6 +128,7 @@ export const respondToOffer = marketplaceMutationCall(async (request) => {
       requireLiveBuyNow(listing?.data(), data.sellerId);
       const ceiling = ringgitToSen(listing!.data()!.price);
       if (ceiling === null || request.data.amountSen > ceiling) throw new HttpsError("invalid-argument", "Counter amount cannot exceed the listed price.");
+      await consumeActionCadence(tx, userId, "offer", now, { resourceId: data.listingId });
       tx.update(ref, { status: "countered", quotedAmountSen: request.data.amountSen, updatedAt: now });
       tx.set(offerLockRef(data.listingId, data.buyerId), { offerId, status: "countered", expiresAt: data.expiresAt, updatedAt: now });
       return { status: "countered" };
@@ -424,6 +428,7 @@ export const reportPublicReview = marketplaceMutationCall(async (request) => {
     const existing = await tx.get(ref);
     if (existing.exists) return;
     const now = Timestamp.now();
+    await consumeActionCadence(tx, reporterId, "report", now);
     tx.create(ref, { id: ref.id, reporterId, targetType: "review", targetId: reviewId, reason, details: detail, status: "submitted", createdAt: now, updatedAt: now });
   });
   return { submitted: true };

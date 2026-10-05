@@ -1,5 +1,7 @@
 import type { ReleaseConfiguration } from "./release-config.ts";
 import { stagingEnvironment } from "../../functions/src/staging-environment.ts";
+import { productionEnvironment } from "../../functions/src/production-environment.ts";
+import { productionReleasePolicy, validateProductionPolicyConfiguration } from "../../functions/src/release-policy.ts";
 
 export const releaseProofPrefix = "TAKEME_RELEASE_PROOF_V1:";
 type PublicFirebase = ReleaseConfiguration["publicFirebase"];
@@ -38,19 +40,23 @@ export function clientReleaseProofMatches(config: { apiKey?: string; authDomain?
   if (!proofValue) return false;
   const proof = decodeReleaseProof(proofValue);
   if (!proof || proof.projectId !== config.projectId || proof.useEmulators !== useEmulators) return false;
-  if (proof.target === "staging" ? !isStagingReleaseProof(proofValue) : proof.purpose !== "release") return false;
+  if (proof.target === "staging" ? !isStagingReleaseProof(proofValue) : proof.purpose !== (proof.target === "production" ? "production-build" : "release")) return false;
   const expected = { NEXT_PUBLIC_FIREBASE_API_KEY: config.apiKey, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: config.authDomain,
     NEXT_PUBLIC_FIREBASE_PROJECT_ID: config.projectId, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: config.storageBucket,
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: config.messagingSenderId, NEXT_PUBLIC_FIREBASE_APP_ID: config.appId };
   if (Object.entries(expected).some(([key, value]) => !value || proof.firebase?.[key as keyof PublicFirebase] !== value)) return false;
   if (proof.target === "demo") return useEmulators && config.projectId === "demo-takeme";
   if (proof.target === "staging") return !useEmulators;
-  return proof.target === "production" && !useEmulators && !config.projectId?.startsWith("demo-")
-    && config.projectId !== stagingEnvironment.projectId && config.messagingSenderId !== stagingEnvironment.projectNumber
-    && proof.siteUrl === "https://takeme.my" && proof.policy?.publicationApproved === true
-    && !!proof.policy.termsVersion && !!proof.policy.privacyVersion
-    && !/draft/i.test(proof.policy.termsVersion) && !/draft/i.test(proof.policy.privacyVersion)
-    && proof.policy.minimumAge === 18;
+  // This permits SDK reads from an honestly unpublished production build.
+  // Acceptance, marketplace writes, deletion and Admin remain separately gated.
+  return proof.target === "production" && !useEmulators && config.projectId === productionEnvironment.projectId
+    && config.messagingSenderId !== stagingEnvironment.projectNumber
+    && config.storageBucket === productionEnvironment.storageBucket && proof.siteUrl === productionEnvironment.siteUrl
+    && !!proof.policy && !validateProductionPolicyConfiguration(proof.policy).length
+    && proof.policy.publicationApproved === productionReleasePolicy.publicationApproved
+    && proof.policy.termsVersion === productionReleasePolicy.termsVersion
+    && proof.policy.privacyVersion === productionReleasePolicy.privacyVersion
+    && proof.policy.minimumAge === productionReleasePolicy.minimumAge;
 }
 
 /** Browser-visible proof permits only the reviewed staging identity, never production promotion. */

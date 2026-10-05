@@ -10,7 +10,7 @@ import { recordReleaseArtifact } from "../scripts/release-artifact.mjs";
 import { recordCloudflareArtifact, validateCloudflareArtifact, validateOfflineCloudflareArtifact } from "../scripts/cloudflare-artifact.mjs";
 
 function publicEnvironment() {
-  const project = "marketplace-release";
+  const project = "takeme-52b80";
   return { TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: project,
     TAKEME_STORAGE_BUCKETS: `${project}.firebasestorage.app`, TAKEME_DELETION_ENVIRONMENT: "production", TAKEME_ENABLE_PRODUCTION_DELETION: "true",
     NEXT_PUBLIC_FIREBASE_API_KEY: "AIza" + "a".repeat(35), NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`,
@@ -112,17 +112,17 @@ test("Cloudflare inspection rejects wrong or missing first-party proofs on eithe
 test("Cloudflare qualification is configuration-bound and cannot promote an offline artifact", async () => {
   const f = await fixture();
   try {
-    await assert.rejects(validateCloudflareArtifact(f.repository, { ...f.configuration, storageBuckets: [...f.configuration.storageBuckets, "marketplace-release.appspot.com"] }), /different configuration/);
+    await assert.rejects(validateCloudflareArtifact(f.repository, { ...f.configuration, storageBuckets: [...f.configuration.storageBuckets, "takeme-52b80.appspot.com"] }), /different configuration/);
     await assert.rejects(recordCloudflareArtifact(f.repository, { ...f.configuration, useEmulators: true }), /emulators disabled/);
   } finally { await cleanup(f.repository); }
   const offline = await fixture(offlineQualificationConfiguration());
   try {
     assert.equal((await validateOfflineCloudflareArtifact(offline.repository, offline.configuration)).purpose, "offline-qualification");
     await assert.rejects(validateCloudflareArtifact(offline.repository, offline.configuration), /nondeployable/);
-    const futureRelease = { ...offline.configuration, purpose: "release" as const, productionDeletionEnabled: true };
+    const futureRelease = { ...offline.configuration, purpose: "production-build" as const, productionDeletionEnabled: true };
     await assert.rejects(validateCloudflareArtifact(offline.repository, futureRelease), /purpose/);
     const manifestFile = path.join(offline.output, "takeme-cloudflare-artifact.json");
-    const manifest = JSON.parse(await readFile(manifestFile, "utf8")); manifest.purpose = "release";
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8")); manifest.purpose = "production-build";
     await writeFile(manifestFile, JSON.stringify(manifest));
     await assert.rejects(validateCloudflareArtifact(offline.repository, futureRelease), /different configuration/);
   } finally { await cleanup(offline.repository); }
@@ -136,8 +136,11 @@ test("Cloudflare qualification rejects emulator hosts in effective Next config e
       const next = JSON.parse(await readFile(file, "utf8"));
       Object.assign(next.config.env, injected);
       await writeFile(file, JSON.stringify(next));
-      await recordReleaseArtifact(f.next, f.configuration);
-      await assert.rejects(recordCloudflareArtifact(f.repository, f.configuration), /emulator host or hub|invalid emulator flag|Offline Next output/);
+      if (injected.TAKEME_OFFLINE_QUALIFICATION) await assert.rejects(recordReleaseArtifact(f.next, f.configuration), /Offline Next output/);
+      else {
+        await recordReleaseArtifact(f.next, f.configuration);
+        await assert.rejects(recordCloudflareArtifact(f.repository, f.configuration), /emulator host or hub|invalid emulator flag/);
+      }
     } finally { await cleanup(f.repository); }
   }
 });
@@ -167,7 +170,7 @@ test("ordinary Cloudflare CLI uses actual inactive policy and accepts no qualifi
     const result = spawnSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--experimental-strip-types", "scripts/check-cloudflare-artifact.mjs", ...args],
       { encoding: "utf8", env: { NODE_ENV: "production", ...publicEnvironment() } });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, args.length ? /no environment, approval or qualification overrides/ : /publication approval|policy version/);
+    assert.match(result.stderr, args.length ? /no environment, approval or qualification overrides/ : /provenance|configuration/);
     for (const value of [publicEnvironment().NEXT_PUBLIC_FIREBASE_API_KEY, publicEnvironment().NEXT_PUBLIC_FIREBASE_APP_ID]) assert.equal(result.stderr.includes(value), false);
   }
 });

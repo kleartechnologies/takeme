@@ -22,6 +22,7 @@ async function inspectFirstPartyBuild(directory, config) {
   const expectedProof = encodeReleaseProof(config);
   const required = JSON.parse(await readFile(path.join(directory, "required-server-files.json"), "utf8"));
   if (required.config?.env?.TAKEME_BUILD_RELEASE_PROOF !== expectedProof) throw new Error("Artifact does not contain the expected first-party release configuration proof.");
+  if (config.purpose !== "offline-qualification" && Object.hasOwn(required.config?.env || {}, "TAKEME_OFFLINE_QUALIFICATION")) throw new Error("Offline Next output cannot qualify as an ordinary build artifact.");
   if (config.target === "production" || config.target === "staging") {
     if (required.config?.images?.dangerouslyAllowLocalIP !== false) throw new Error("Remote artifact permits local image IPs.");
     if (required.config?.images?.remotePatterns?.some(pattern => /localhost|127\\?\.0\\?\.0\\?\.1|::1/.test(pattern.hostname || ""))) throw new Error("Remote artifact contains a loopback image host.");
@@ -54,8 +55,9 @@ export async function recordReleaseArtifact(directory, config) {
 }
 
 export async function validateReleaseArtifact(directory, config, requiredTarget = "production") {
-  if (config.purpose !== "release") throw new Error("Offline/staging output is nondeployable as production and cannot qualify as a release artifact.");
-  return validateArtifact(directory, config, requiredTarget, "release");
+  const purpose = requiredTarget === "production" ? "production-build" : "release";
+  if (config.purpose !== purpose) throw new Error("Offline/staging output is nondeployable as production and cannot qualify as a production build artifact.");
+  return validateArtifact(directory, config, requiredTarget, purpose);
 }
 
 export async function validateStagingArtifact(directory, config) {

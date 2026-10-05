@@ -89,7 +89,17 @@ try {
     assert.equal((await request(u)).state, "completed"); await deleted(u);
   });
   await check("clean account Auth removal", async () => { const u = await user("clean"); assert.equal((await request(u)).state, "completed"); await deleted(u); });
-  await check("recursive nested subcollections including unknown profile children", async () => { const u = await user("nested"); await put(`users/${u.uid}/extra/one/deep/two`, { ownerId: u.uid }); await request(u); assert.equal(await exists(`users/${u.uid}/extra/one/deep/two`), false); await deleted(u); });
+  await check("recursive nested subcollections including private message receipts", async () => {
+    const u = await user("nested");
+    const nestedPath = `users/${u.uid}/extra/one/deep/two`;
+    const receiptPath = `users/${u.uid}/private/messageRequests/messageSendReceipts/${hash("synthetic-request-scope")}`;
+    await put(nestedPath, { ownerId: u.uid });
+    await put(receiptPath, { bodyHash: hash("synthetic message"), messageId: `m_${hash("synthetic-request-scope")}`, createdAt: now(), expiresAt: Timestamp.fromMillis(Date.now() + 86_400_000) });
+    await request(u);
+    assert.equal(await exists(nestedPath), false);
+    assert.equal(await exists(receiptPath), false);
+    await deleted(u);
+  });
   await check("Storage profile, listing and orphan object removal", async () => { const u = await user("storage"); for (const path of [`users/${u.uid}/profile/a.png`, `users/${u.uid}/listings/orphan/a.png`, `users/${u.uid}/uploads/orphan.png`]) await upload(path); await request(u); assert.equal((await bucket.getFiles({ prefix: `users/${u.uid}/` }))[0].length, 0); await deleted(u); });
   await check("draft withdrawal and removal", async () => { const u = await user("draft"); const id = `draft-${suffix}`; await put(`listings/${id}`, listing(u, { status: "draft" })); await request(u); assert.equal(await exists(`listings/${id}`), false); });
   await check("ordinary unsold listing and media removal", async () => { const u = await user("unsold"); const id = `unsold-${suffix}`; await put(`listings/${id}`, listing(u)); await upload(`users/${u.uid}/listings/${id}/one.png`); await request(u); assert.equal(await exists(`listings/${id}`), false); });

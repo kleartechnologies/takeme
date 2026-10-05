@@ -8,6 +8,8 @@
     "build:demo": "TAKEME_RELEASE_TARGET=demo NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-takeme npm run build",
     "release:validate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/validate-release.mjs",
     "release:check": "npm run release:validate -- --artifact",
+    "release:launch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/validate-production-launch.mjs",
+    "policy:production:plan": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/bootstrap-production-policy.mjs",
     "release:check:demo": "npm run release:validate -- --demo --artifact",
     "qualify:offline": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/qualify-production-offline.mjs",
     "cloudflare:build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/build-cloudflare.mjs",

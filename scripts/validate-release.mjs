@@ -21,8 +21,8 @@ try {
   if (configuration.target !== requiredTarget) throw new Error("Release target does not match this qualification command.");
   if (artifact) {
     const checked = staging ? await validateStagingArtifact(path.join(repository, ".next"), configuration) : await validateReleaseArtifact(path.join(repository, ".next"), configuration, requiredTarget);
-    console.log(`${checked.target} artifact validation passed (${checked.files} files).${demo || staging ? " Not qualified for production." : ""}`);
-  } else console.log(`${requiredTarget} configuration validation passed.${demo || staging ? " Not qualified for production." : ""}`);
+    console.log(`${checked.target} ${demo || staging ? "artifact validation" : "build qualification"} passed (${checked.files} files).${demo || staging ? " Not qualified for production." : " Launch NOT approved; run the independent launch checker after actual approvals."}`);
+  } else console.log(`${requiredTarget} configuration validation passed.${demo || staging ? " Not qualified for production." : " Build-qualified; launch NOT approved."}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Release qualification failed.");
   process.exitCode = 1;

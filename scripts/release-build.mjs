@@ -17,7 +17,7 @@ try {
   const result = spawnSync(process.execPath, [path.join(repository, "node_modules/next/dist/bin/next"), "build", ...process.argv.slice(2)], { cwd: repository, env: environment, stdio: "inherit" });
   if (result.error || result.status !== 0) process.exit(result.status || 1);
   const recorded = await recordReleaseArtifact(path.join(repository, ".next"), configuration);
-  console.log(`Validated ${recorded.target} build provenance (${recorded.files} files). Demo/staging builds are not production release artifacts.`);
+  console.log(`Validated ${recorded.target} build provenance (${recorded.files} files).${configuration.target === "production" ? " Production build-qualified; launch NOT approved." : " Demo/staging builds are not production release artifacts."}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Release build validation failed.");
   process.exitCode = 1;

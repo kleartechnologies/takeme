@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { validateReleaseEnvironment, publicFirebaseKeys, type ReleasePolicy, type ReleaseEnvironment, offlineQualificationConfiguration, ownerOfflineQualificationConfiguration } from "../src/lib/release-config.ts";
+import { validateReleaseEnvironment, validateProductionLaunchEnvironment, publicFirebaseKeys, type ReleasePolicy, type ReleaseEnvironment, offlineQualificationConfiguration, ownerOfflineQualificationConfiguration } from "../src/lib/release-config.ts";
 import { clientReleaseProofMatches, encodeReleaseProof } from "../src/lib/release-proof.ts";
 import { recordReleaseArtifact, validateReleaseArtifact, validateOfflineQualificationArtifact } from "../scripts/release-artifact.mjs";
 import { validateLegalPublication, legalPublicationReadiness } from "../src/lib/legal-publication.ts";
@@ -16,7 +16,7 @@ const approvedFixture: ReleasePolicy = { publicationApproved: true, termsVersion
 const demo = { TAKEME_RELEASE_TARGET: "demo", NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "true", NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-takeme" };
 function productionFixture() {
   // Synthetic public configuration only. No SDK initializes and no network runs.
-  const project = "marketplace-release";
+  const project = "takeme-52b80";
   return { TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: project,
     TAKEME_STORAGE_BUCKETS: `${project}.firebasestorage.app`, TAKEME_DELETION_ENVIRONMENT: "production", TAKEME_ENABLE_PRODUCTION_DELETION: "true",
     NEXT_PUBLIC_FIREBASE_API_KEY: "AIza" + "a".repeat(35), NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`,
@@ -26,14 +26,14 @@ function productionFixture() {
 }
 const approvedLegal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required" as const, address: "not-required" as const, productionRoutesReviewed: true };
 const acceptRelease = (env: ReleaseEnvironment, policy: ReleasePolicy = approvedFixture) => validateReleaseEnvironment(env, policy, approvedLegal);
-const acceptedFixture = () => acceptRelease(productionFixture());
+const acceptedFixture = () => validateReleaseEnvironment({ ...productionFixture(), TAKEME_ENABLE_PRODUCTION_DELETION: "false" });
 
 test("optimized demo and synthetic production configuration require explicit target and correct policy", () => {
   assert.equal(validateReleaseEnvironment(demo).target, "demo");
   assert.equal(acceptedFixture().target, "production");
   assert.throws(() => validateReleaseEnvironment({ NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false" }), /TAKEME_RELEASE_TARGET/);
-  assert.throws(() => validateReleaseEnvironment(productionFixture()), /publication approval|policy version/);
-  for (const policy of [{ ...approvedFixture, termsVersion: "1.0-draft" }, { ...approvedFixture, privacyVersion: null }, { ...approvedFixture, publicationApproved: false }]) assert.throws(() => acceptRelease(productionFixture(), policy));
+  assert.equal(validateReleaseEnvironment(productionFixture()).policy, productionReleasePolicy);
+  for (const policy of [{ ...approvedFixture, termsVersion: "1.0-draft" }, { ...approvedFixture, privacyVersion: null }, { ...approvedFixture, publicationApproved: false }]) assert.throws(() => validateProductionLaunchEnvironment(productionFixture(), policy, approvedLegal));
 });
 
 test("production refuses each absent Web App field, ambiguous project and mismatched resources", () => {
@@ -103,7 +103,7 @@ test("artifact provenance refuses demo promotion, changed environment, missing p
   try {
     assert.equal((await validateReleaseArtifact(directory, config)).target, "production");
     assert.equal((await validateReleaseArtifact(demoDirectory, demoConfig, "demo")).target, "demo");
-    await assert.rejects(validateReleaseArtifact(demoDirectory, config), /target/);
+    await assert.rejects(validateReleaseArtifact(demoDirectory, config), /target|purpose/);
     await assert.rejects(validateReleaseArtifact(directory, { ...config, publicFirebase: { ...config.publicFirebase, NEXT_PUBLIC_FIREBASE_API_KEY: "AIza" + "b".repeat(35) } }), /different configuration/);
     const client = path.join(directory, "static", "chunks", "client.js");
     await writeFile(client, (await readFile(client, "utf8")) + "tampered");
@@ -130,7 +130,7 @@ test("ordinary releases independently require final legal content, applicability
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(productionReleasePolicy.termsVersion, null);
-  assert.throws(() => validateReleaseEnvironment(productionFixture(), approvedFixture), /Independent legal publication|Final legal content|production publication/);
+  assert.throws(() => validateProductionLaunchEnvironment(productionFixture(), approvedFixture), /Independent legal publication|Final legal content|production publication/);
   for (const key of ["publicationApproved", "finalContentApproved", "bmPrivacyNoticeApproved", "productionRoutesReviewed"] as const) assert.ok(validateLegalPublication({ ...approvedLegal, [key]: false }).length);
   for (const key of ["registration", "address"] as const) assert.ok(validateLegalPublication({ ...approvedLegal, [key]: "pending" }).length);
   assert.deepEqual(validateLegalPublication({ ...approvedLegal, registration: "approved", address: "approved" }), []);
@@ -155,7 +155,7 @@ test("offline production-mode output has complete synthetic structure, disabled 
     await assert.rejects(validateReleaseArtifact(directory, acceptedFixture()), /purpose/);
     const manifestFile = path.join(directory, "takeme-release.json");
     const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
-    manifest.purpose = "release"; await writeFile(manifestFile, JSON.stringify(manifest));
+    manifest.purpose = "production-build"; await writeFile(manifestFile, JSON.stringify(manifest));
     await assert.rejects(validateReleaseArtifact(directory, acceptedFixture()), /different configuration/);
     const requiredFile = path.join(directory, "required-server-files.json");
     const required = JSON.parse(await readFile(requiredFile, "utf8"));
@@ -190,7 +190,7 @@ test("raw artifact inspection exposes vendor/helper and trace strings while iden
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-const ownerIdentity = { projectId: "marketplace-release", projectNumber: "123456789012" };
+const ownerIdentity = { projectId: "takeme-52b80", projectNumber: "123456789012" };
 const ownerFixture = () => ({ ...productionFixture(), TAKEME_ENABLE_PRODUCTION_DELETION: "false" });
 
 test("owner public configuration is explicitly bound offline while actual approval and SDK execution stay inactive", () => {
@@ -202,7 +202,8 @@ test("owner public configuration is explicitly bound offline while actual approv
   assert.equal(config.productionDeletionEnabled, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(legalPublicationReadiness.publicationApproved, false);
-  assert.throws(() => validateReleaseEnvironment(ownerFixture()), /publication approval|policy version|legal publication/);
+  assert.equal(validateReleaseEnvironment(ownerFixture()).purpose, "production-build");
+  assert.throws(() => validateProductionLaunchEnvironment(ownerFixture()), /publication approval|policy version|legal publication|activated deletion/);
   const client = { apiKey: config.publicFirebase.NEXT_PUBLIC_FIREBASE_API_KEY, authDomain: config.publicFirebase.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
     projectId: config.projectId, storageBucket: config.publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: config.publicFirebase.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, appId: config.publicFirebase.NEXT_PUBLIC_FIREBASE_APP_ID };
@@ -249,7 +250,7 @@ test("owner-config output cannot be promoted by a future approved release config
     const futureRelease = acceptRelease({ ...ownerFixture(), TAKEME_ENABLE_PRODUCTION_DELETION: "true" });
     await assert.rejects(validateReleaseArtifact(directory, futureRelease), /purpose/);
     const file = path.join(directory, "takeme-release.json");
-    const manifest = JSON.parse(await readFile(file, "utf8")); manifest.purpose = "release";
+    const manifest = JSON.parse(await readFile(file, "utf8")); manifest.purpose = "production-build";
     await writeFile(file, JSON.stringify(manifest));
     await assert.rejects(validateReleaseArtifact(directory, futureRelease), /different configuration/);
   } finally { await rm(directory, { recursive: true, force: true }); }

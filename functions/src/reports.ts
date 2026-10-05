@@ -1,3 +1,4 @@
+import { consumeActionCadence } from "./action-cadence";
 import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -46,6 +47,7 @@ export const submitMarketplaceReport = marketplaceMutationCall(async (request) =
   await runGuardedTransaction(db, async (tx) => {
     if ((await tx.get(ref)).exists) return;
     const now = Timestamp.now();
+    await consumeActionCadence(tx, reporterId, "report", now);
     tx.create(ref, { id: ref.id, reporterId, targetType, targetId, conversationId, listingId, userId, reason, details, status: "submitted", resolution: "", internalNotes: "", createdAt: now, updatedAt: now });
   });
   return { reportId: ref.id, submitted: true };

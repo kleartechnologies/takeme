@@ -7,7 +7,7 @@ import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, GoogleAut
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import { getStorage, connectStorageEmulator, ref, uploadBytes, deleteObject } from "firebase/storage";
-import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
+import { acceptDemoPolicies, permitDemoUpload, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 
 process.env.GCLOUD_PROJECT = "demo-takeme";
 process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
@@ -49,7 +49,7 @@ async function client(label, provider = "password") {
 function listing(seller, overrides = {}) {
   return { sellerId: seller.uid, title: "Synthetic eligibility demo", description: "No real goods or exchange", categoryId: "electronics", price: 100, condition: "Good", listingType: "buy_now", status: "active", imageUrls: [], privacyVersion: 2, publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" }, location: "Jitra, Kedah", createdAt: Timestamp.now(), updatedAt: Timestamp.now(), ...overrides };
 }
-const mutations = ["createFixedListingDraft", "publishFixedListing", "updateFixedListing", "removeFixedListing", "createAuctionListing", "publishAuctionListing", "updateAuctionListing", "placeBid", "cancelAuction", "submitOffer", "respondToOffer", "submitTransactionReview", "reportPublicReview", "confirmTransactionCompletion", "requestTransactionCancellation", "declineTransactionCancellation", "disputeTransaction", "openListingConversation", "openTransactionConversation", "sendConversationMessage", "markConversationSeen", "markNotificationRead", "openNotification", "markAllNotificationsRead", "setNotificationPreference", "setSellerFollow", "saveSearch", "deleteSavedSearch", "createPromotionRequest", "cancelPromotionRequest", "trackPromotionEngagement", "submitMarketplaceReport", "trackMarketplaceEvent", "createProtectedPayment", "respondToProtectedDispute", "addProtectedDisputeEvidence", "updateAdminReport"];
+const mutations = ["requestUploadPermits", "createFixedListingDraft", "publishFixedListing", "updateFixedListing", "removeFixedListing", "createAuctionListing", "publishAuctionListing", "updateAuctionListing", "placeBid", "cancelAuction", "submitOffer", "respondToOffer", "submitTransactionReview", "reportPublicReview", "confirmTransactionCompletion", "requestTransactionCancellation", "declineTransactionCancellation", "disputeTransaction", "openListingConversation", "openTransactionConversation", "sendConversationMessage", "markConversationSeen", "markNotificationRead", "openNotification", "markAllNotificationsRead", "setNotificationPreference", "setSellerFollow", "saveSearch", "deleteSavedSearch", "createPromotionRequest", "cancelPromotionRequest", "trackPromotionEngagement", "submitMarketplaceReport", "trackMarketplaceEvent", "createProtectedPayment", "respondToProtectedDispute", "addProtectedDisputeEvidence", "updateAdminReport"];
 try {
   const buyer = await client("buyer"), seller = await client("seller"), google = await client("google", "google");
   await acceptDemoPolicies(seller.app);
@@ -91,9 +91,9 @@ try {
     await updateDoc(doc(buyer.firestore, "users", buyer.uid), { displayName: "Accepted demo" });
     await setDoc(doc(buyer.firestore, "users", buyer.uid, "saved", lid), { listingId: lid, savedAt: serverTimestamp() });
     const path = `users/${buyer.uid}/profile/accepted.png`; media.add(path);
-    await uploadBytes(ref(buyer.storage, path), new Uint8Array([1]), { contentType: "image/png" });
+    await uploadBytes(ref(buyer.storage, path), new Uint8Array([1]), await permitDemoUpload(buyer.app, path, "image/png", 1));
     const listingPath = `users/${buyer.uid}/listings/${draft.listingId}/accepted.png`; media.add(listingPath);
-    await uploadBytes(ref(buyer.storage, listingPath), new Uint8Array([1]), { contentType: "image/png" });
+    await uploadBytes(ref(buyer.storage, listingPath), new Uint8Array([1]), await permitDemoUpload(buyer.app, listingPath, "image/png", 1));
   });
   await check("wrong versions and per-account revocation deny callable and direct writes immediately", async () => {
     const accepted = (await setup(buyer).get()).data();

@@ -118,12 +118,12 @@ await assert.rejects(() => getDoc(doc(stranger.db, conversationPath)), /permissi
 await assert.rejects(() => setDoc(doc(stranger.db, `conversations/${extraId}_${stranger.uid}`), { ...conversation, id: `${extraId}_${stranger.uid}`, buyerId: stranger.uid, participants: [stranger.uid, sellerId], sellerId: stranger.uid }), /permission/i);
 const message = doc(collection(buyer.db, conversationPath, "messages"));
 await assert.rejects(() => setDoc(message, { id: message.id, senderId: buyerId, body: "Is this available?", createdAt: serverTimestamp() }), /permission/i);
-const sent = await call(buyer, "sendConversationMessage", { conversationId, body: "  Is this available?  " });
+const sent = await call(buyer, "sendConversationMessage", { conversationId, body: "  Is this available?  ", idempotencyKey: `trust-message-${suffix}` });
 assert.equal((await call(seller, "getConversationMessages", { conversationId })).items[0].body, "Is this available?");
 assert.equal((await admin.doc(`${conversationPath}/messages/${sent.messageId}`).get()).data().senderId, buyerId);
-await assert.rejects(() => call(stranger, "sendConversationMessage", { conversationId, body: "Hello" }), /private|permission/i);
-await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body: "  " }), /invalid|message/i);
-await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body: "x".repeat(2001) }), /invalid|message/i);
+await assert.rejects(() => call(stranger, "sendConversationMessage", { conversationId, body: "Hello", idempotencyKey: `trust-stranger-${suffix}` }), /private|permission/i);
+await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body: "  ", idempotencyKey: `trust-empty-${suffix}` }), /invalid|message/i);
+await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body: "x".repeat(2001), idempotencyKey: `trust-large-${suffix}` }), /invalid|message/i);
 await assert.rejects(() => getDoc(doc(seller.db, conversationPath, "messages", sent.messageId)), /permission/i);
 await assert.rejects(() => getDoc(doc(stranger.db, conversationPath, "messages", message.id)), /permission/i);
 await assert.rejects(() => setDoc(doc(stranger.db, conversationPath, "messages", "fake"), { id: "fake", senderId: buyerId, body: "Hello", createdAt: serverTimestamp() }), /permission/i);

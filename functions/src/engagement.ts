@@ -5,7 +5,7 @@ import { getFirestore, FieldPath, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { matchesSearch, parseSearch, priceSen, stableId, type SearchCriteria } from "./engagement-domain";
+import { listingCategoryId, matchesSearch, newListingSearchCategories, parseSearch, priceSen, stableId, type SearchCriteria } from "./engagement-domain";
 
 const db = getFirestore();
 const PAGE = 40;
@@ -283,11 +283,10 @@ export const onListingEngagementChanged = onDocumentWritten("listings/{listingId
   const eventKey = event.id;
   const eventAt = event.data!.after.updateTime ?? Timestamp.now();
   if (before?.status !== "active" && after.status === "active") {
-    const listingSnapshot = Object.fromEntries(["status", "title", "searchTokens", "categoryId", "condition", "listingType", "auctionStatus", "price", "location"].filter((key) => after[key] !== undefined).map((key) => [key, after[key]]));
+    const listingSnapshot = Object.fromEntries(["status", "title", "searchTokens", "categoryId", "condition", "listingType", "auctionStatus", "price", "location"].filter((key) => after[key] !== undefined && (key !== "categoryId" || listingCategoryId(after[key]) !== null)).map((key) => [key, after[key]]));
     await Promise.all([
       queueJob(eventKey, { kind: "followers", listingId, eventType: "followed_seller_listing", eventAt }),
-      queueJob(eventKey, { kind: "searches", listingId, eventType: "new_matching_listing", categoryKey: after.categoryId, eventAt, listingSnapshot }),
-      queueJob(eventKey, { kind: "searches", listingId, eventType: "new_matching_listing", categoryKey: "*", eventAt, listingSnapshot }),
+      ...newListingSearchCategories(after).map(categoryKey => queueJob(eventKey, { kind: "searches", listingId, eventType: "new_matching_listing", categoryKey, eventAt, listingSnapshot })),
     ]);
   }
   const oldSen = priceSen(before?.price);

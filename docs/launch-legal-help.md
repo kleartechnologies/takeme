@@ -1,5 +1,19 @@
 # Launch Legal + Help / Support — local working review
 
+## Current readiness update (5 October 2026)
+
+The remaining historical sections record the earlier checkpoint and its verification, not current production approval. The current operator is TAKEME TECHNOLOGIES, SSM **KT0622373-U**; support and privacy/legal email are **support.takeme@gmail.com**. Registration is owner-confirmed in source. Address applicability, final Terms, final Privacy, approved BM privacy notice, final content/routes and publication remain unresolved. No legal policy was activated or published.
+
+Current onboarding requires separate Terms, Privacy and 18+ confirmations, with server-owned versions and timestamps. Production acceptance remains closed because `functions/src/release-policy.ts` has publication approval false and both versions null. A build cannot supply policy versions or approve acceptance through environment variables.
+
+Current legal routes have a final production branch in addition to protected staging and local demo review. Production publication requires all actual source decisions in `functions/src/legal-publication.ts`, final central policy versions, and a matching production build proof. Closed legal routes return 404 before rendering; draft captions and preview links remain conditional. Existing public Help and account-deletion information retain their operational roles. The draft dates remain proposed and must be reviewed with final content before publication.
+
+The real production build now qualifies as `production-build` using actual SDK resource identity, actual false/null policies and explicit deletion execution off. This does not qualify launch, publish routes, activate deletion or write a policy mirror. The independent `npm run release:launch` checker remains closed until actual final policy/legal decisions and explicit deletion activation are present. See `docs/production-policy-bootstrap.md` for create-only planning and the remaining approval sequence.
+
+Focused release/proof/bootstrap/artifact/staging/legal tests: 63 passed; TypeScript, targeted lint and diff checks passed. Full artifact/integration qualification is reported separately by the sprint.
+
+## Historical checkpoint (3 October 2026)
+
 Baseline: `ac17c5130718b9c8c631191be7e0a2e028761c45`. Public information work only. Approved marketplace screens, Settings functionality and account-deletion backend/flow remain frozen; Settings receives link/copy integration only. The owner approved a local draft checkpoint commit on 3 October 2026. Production access, deployment, policy publication and store submission remain unauthorised.
 
 ## Source audit

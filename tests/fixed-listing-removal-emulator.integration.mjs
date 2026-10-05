@@ -1,4 +1,4 @@
-import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
+import { acceptDemoPolicies, permitDemoUpload, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -39,7 +39,7 @@ const fixture = readFileSync(new URL("../public/brand/takeme-app-icon.png", impo
 async function upload(user, listingId, name) {
   const path = `users/${user.uid}/listings/${listingId}/${name}`;
   const object = ref(user.storage, path);
-  await uploadBytes(object, fixture, { contentType: "image/png" });
+  await uploadBytes(object, fixture, await permitDemoUpload(user.app, path, "image/png", fixture.length, user.functions));
   return { path, url: await getDownloadURL(object) };
 }
 

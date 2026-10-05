@@ -20,5 +20,5 @@ export const openTransactionConversation = (transactionId: string) => invoke<{ c
 export const getConversation = (conversationId: string) => invoke<{ conversation: ConversationSummary }>("getConversation", { conversationId }).then((value) => value.conversation);
 export const getConversations = (cursor?: string | null) => invoke<Page<ConversationSummary>>("getConversations", { cursor });
 export const getConversationMessages = (conversationId: string, cursor?: string | null) => invoke<Page<ConversationMessage>>("getConversationMessages", { conversationId, cursor });
-export const sendConversationMessage = (conversationId: string, body: string) => invoke<{ messageId: string }>("sendConversationMessage", { conversationId, body });
+export const sendConversationMessage = (conversationId: string, body: string, idempotencyKey: string) => invoke<{ messageId: string }>("sendConversationMessage", { conversationId, body, idempotencyKey });
 export const markConversationSeen = (conversationId: string) => invoke<{ seen: boolean }>("markConversationSeen", { conversationId });

@@ -1,6 +1,7 @@
 import { httpsCallable, type Functions } from "firebase/functions";
 import { auth } from "@/lib/firebase/client";
 import { ACCOUNT_ELIGIBILITY_EVENT, eligibilityMessage } from "@/lib/account-eligibility";
+import { cadenceErrorMessage } from "@/lib/cadence-error";
 
 // Recheck server-owned eligibility after a stale-session rejection. Routing preserves
 // the current URL; it never retries the rejected marketplace action automatically.
@@ -8,6 +9,12 @@ export async function withEligibilityHandling<T>(action: () => Promise<T>): Prom
   const uid = auth?.currentUser?.uid;
   try { return await action(); }
   catch (error) {
+    const cadenceMessage = cadenceErrorMessage(error);
+    if (cadenceMessage) {
+      const retryAfterMs = (error as { details?: { retryAfterMs?: unknown } }).details?.retryAfterMs;
+      throw Object.assign(new Error(cadenceMessage), { code: "functions/resource-exhausted", details: { reason: "cadence-limit",
+        ...(typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs) ? { retryAfterMs: Math.max(1, Math.min(120_000, Math.ceil(retryAfterMs))) } : {}) } });
+    }
     const message = eligibilityMessage(error);
     const ruleDenied = !!error && typeof error === "object" && "code" in error && ["permission-denied", "storage/unauthorized"].includes(String(error.code));
     if ((message || ruleDenied) && uid && auth?.currentUser?.uid === uid && typeof window !== "undefined") {

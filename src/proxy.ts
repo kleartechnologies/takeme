@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isLocalLegalPreview } from "@/lib/public-information";
+import { isLegalInformationAvailable } from "@/lib/public-information";
 
 // Render-time notFound() can stream with HTTP 200. Block unpublished drafts
 // before rendering so their publication boundary also has the correct status.
 export function proxy(request: NextRequest) {
-  if (isLocalLegalPreview()) {
+  if (isLegalInformationAvailable()) {
     if (request.nextUrl.pathname === "/privacy-policy") return NextResponse.redirect(new URL("/privacy", request.url));
     return NextResponse.next();
   }

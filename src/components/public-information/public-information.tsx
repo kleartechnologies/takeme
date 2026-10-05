@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/layout/logo";
-import { isLocalLegalPreview, legalDraft } from "@/lib/public-information";
+import { isLegalInformationAvailable, isProductionLegalPublication, legalDocumentState } from "@/lib/public-information";
 import styles from "./public-information.module.css";
 
 export interface InformationSection { id: string; title: string; paragraphs?: string[]; bullets?: string[]; links?: { href: string; label: string }[] }
@@ -11,8 +11,8 @@ export function PublicInformationHeader() {
 }
 
 export function PublicInformationLinks({ className }: { className?: string }) {
-  const preview = isLocalLegalPreview();
-  return <nav className={className ?? styles.footerLinks} aria-label="Help and legal"><Link href="/help">Help Centre</Link>{preview && <><Link href="/contact">Contact</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></>}<Link href="/account-deletion">Account deletion</Link></nav>;
+  const available = isLegalInformationAvailable();
+  return <nav className={className ?? styles.footerLinks} aria-label="Help and legal"><Link href="/help">Help Centre</Link>{available && <><Link href="/contact">Contact</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></>}<Link href="/account-deletion">Account deletion</Link></nav>;
 }
 
 export function PublicInformationFooter() {
@@ -23,14 +23,19 @@ function Contents({ sections }: { sections: Pick<InformationSection, "id" | "tit
   return <div className={styles.tocLinks}>{sections.map(section => <a key={section.id} href={`#${section.id}`}>{section.title}</a>)}</div>;
 }
 
-export function PublicInformationPage({ title, intro, draft = false, sections, children }: { title: string; intro?: string; draft?: boolean; sections?: Pick<InformationSection, "id" | "title">[]; children: ReactNode }) {
+export function PublicInformationPage({ title, intro, draft = false, policy, sections, children }: { title: string; intro?: string; draft?: boolean; policy?: "terms" | "privacy"; sections?: Pick<InformationSection, "id" | "title">[]; children: ReactNode }) {
+  const document = legalDocumentState(policy);
+  const policyPage = draft || !!policy;
+  const review = policyPage && !document.production;
+  const date = (value: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
   return <main id="public-content" tabIndex={-1} className={styles.page}>
-    <div className={styles.heading}><p className={styles.eyebrow}>TAKEME · {draft ? "Owner review" : "Help & information"}</p><h1>{title}</h1>{intro && <p className={styles.intro}>{intro}</p>}{draft && <><p className={styles.meta}>Version {legalDraft.version} · Last updated <time dateTime={legalDraft.lastUpdated}>3 October 2026</time><br />Proposed effective date <time dateTime={legalDraft.effectiveDate}>5 October 2026</time></p><p className={styles.review}>Working draft for business and legal review. This document is not in effect and has not been published.</p></>}</div>
+    <div className={styles.heading}><p className={styles.eyebrow}>TAKEME · {review ? "Owner review" : "Help & information"}</p><h1>{title}</h1>{intro && <p className={styles.intro}>{intro}</p>}{policyPage && <><p className={styles.meta}>Version {document.version} · Last updated <time dateTime={document.lastUpdated}>{date(document.lastUpdated)}</time><br />{review ? "Proposed effective date" : "Effective date"} <time dateTime={document.effectiveDate}>{date(document.effectiveDate)}</time></p>{review && <p className={styles.review}>Working draft for business and legal review. This document is not in effect and has not been published.</p>}</>}</div>
     {sections && <details className={styles.mobileToc}><summary>On this page</summary><nav aria-label="Page sections"><Contents sections={sections} /></nav></details>}
     <div className={sections ? styles.layout : styles.withoutToc}>{sections && <aside className={styles.desktopToc}><p className={styles.tocTitle}>On this page</p><nav aria-label="Page sections"><Contents sections={sections} /></nav></aside>}<div className={styles.article}>{children}</div></div>
   </main>;
 }
 
 export function PolicySections({ sections }: { sections: InformationSection[] }) {
-  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{section.paragraphs?.map(text => <p key={text}>{text}</p>)}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{link.label}</Link>)}</div>}</section>)}</>;
+  const published = isProductionLegalPublication();
+  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{section.paragraphs?.map(text => <p key={text}>{text}</p>)}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{published ? link.label.replace(/\s+draft\b/gi, "") : link.label}</Link>)}</div>}</section>)}</>;
 }

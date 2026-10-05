@@ -1,9 +1,20 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { matchesSearch, normalizeSearch, parseSearch, priceSen, stableId } = require("../lib/engagement-domain.js");
+const { listingCategoryId, newListingSearchCategories, matchesSearch, normalizeSearch, parseSearch, priceSen, stableId } = require("../lib/engagement-domain.js");
 
 const criteria = { query: "camera", category: "electronics", condition: "Good", type: "buy_now", auction: "", price: 1500, location: "Kuala Lumpur", sort: "newest" };
 const listing = { title: "Working vintage camera", searchTokens: ["camera", "working"], categoryId: "electronics", condition: "Good", listingType: "buy_now", status: "active", price: 1200, location: "Kuala Lumpur" };
+
+test("legacy category search jobs omit invalid categories without inventing analytics", () => {
+  assert.equal(listingCategoryId("electronics"), "electronics");
+  assert.deepEqual(newListingSearchCategories(listing), ["electronics", "*"]);
+  for (const categoryId of [undefined, null, 123, {}, [], "", " electronics ", "imaginary", "*"]) {
+    assert.equal(listingCategoryId(categoryId), null);
+    assert.deepEqual(newListingSearchCategories({ ...listing, categoryId }), ["*"]);
+  }
+  assert.deepEqual(newListingSearchCategories(undefined), []);
+  assert.deepEqual(newListingSearchCategories({ ...listing, status: "removed" }), []);
+});
 
 test("price history only accepts canonical two-decimal MYR amounts", () => {
   assert.equal(priceSen(1500), 150000);

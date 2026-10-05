@@ -10,6 +10,7 @@ import { getPublicListingDetail, type PublicListing } from "@/lib/services/listi
 import { getPublicSellerSummary } from "@/lib/services/public-sellers";
 import { getListingDealState, getTransactionDetail } from "@/lib/services/transactions";
 import { conversationDealState, messageTime } from "@/lib/messaging-presentation";
+import { pendingMessageSend, type PendingMessageSend } from "@/lib/message-send-request";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { ReportAction } from "@/components/trust/report-action";
 import { ActionSheet } from "@/components/ui/action-sheet";
@@ -44,6 +45,7 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
   const [dealError, setDealError] = useState("");
   const [menu, setMenu] = useState(false);
   const alive = useRef(true), sendRequest = useRef(false), olderRequest = useRef(false);
+  const pendingSend = useRef<PendingMessageSend | null>(null);
   const pendingRefresh = useRef<Promise<void> | null>(null);
   const history = useRef<HTMLElement>(null);
   const composer = useRef<HTMLFormElement>(null);
@@ -116,7 +118,14 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
     if (!body.trim() || sendRequest.current || conversation?.status === "closed") return;
     restoreComposerFocus.current = Boolean(composer.current?.contains(document.activeElement));
     sendRequest.current = true; setSending(true); setError("");
-    try { await sendConversationMessage(id, body); if (!alive.current) return; setBody(""); followBottom.current = true; await refresh(); }
+    try {
+      const request = pendingMessageSend(pendingSend.current, userId, id, body);
+      pendingSend.current = request;
+      await sendConversationMessage(id, request.body, request.idempotencyKey);
+      pendingSend.current = null;
+      if (!alive.current) return;
+      setBody(""); followBottom.current = true; await refresh();
+    }
     catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Message could not be sent."); }
     finally { sendRequest.current = false; if (alive.current) setSending(false); }
   }

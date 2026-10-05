@@ -1,3 +1,4 @@
+import { consumeActionCadence } from "./action-cadence";
 import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { getApp, initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
@@ -185,7 +186,7 @@ export const createFixedListingDraft = marketplaceMutationCall(async (request) =
   const meetup = await selectedMeetup(uid, content.meetupLocationId);
   const ref = db.collection(LISTINGS).doc();
   const now = Timestamp.now();
-  await runGuardedTransaction(db, async (tx) => { tx.create(ref, { id: ref.id, sellerId: uid, ...content, ...meetup, imageUrls: [], status: "draft", createdAt: now, updatedAt: now }); });
+  await runGuardedTransaction(db, async (tx) => { await consumeActionCadence(tx, uid, "listing", now); tx.create(ref, { id: ref.id, sellerId: uid, ...content, ...meetup, imageUrls: [], status: "draft", createdAt: now, updatedAt: now }); });
   return { listingId: ref.id };
 });
 
@@ -309,7 +310,7 @@ export const createAuctionListing = marketplaceMutationCall(async (request) => {
   const listingRef = db.collection(LISTINGS).doc();
   const timestamp = Timestamp.fromDate(now);
   const auctionStatus = input.auctionStartAt.getTime() <= now.getTime() ? "active" : "scheduled";
-  await runGuardedTransaction(db, async (tx) => { tx.create(listingRef, {
+  await runGuardedTransaction(db, async (tx) => { await consumeActionCadence(tx, uid, "listing", timestamp); tx.create(listingRef, {
     id: listingRef.id,
     sellerId: uid,
     ...listingContent(input),
@@ -405,6 +406,7 @@ export const placeBid = marketplaceMutationCall(async (request) => {
     const amountError = validateBidAmount(input.amount, minimum);
     if (amountError) throw new HttpsError("invalid-argument", amountError);
     const amount = Number(input.amount);
+    await consumeActionCadence(transaction, uid, "bid", now);
     transaction.create(bidRef, { bidderId: uid, amount, outbidUserId: typeof data.currentBidderId === "string" && data.currentBidderId !== uid ? data.currentBidderId : null, createdAt: now });
     transaction.update(listingRef, {
       currentBid: amount,
@@ -553,3 +555,5 @@ export {
 
 export { getAccountDeletionAvailability, getAccountDeletionStatus, requestAccountDeletion, retryAccountDeletion, processAccountDeletions } from "./account-deletion";
 export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome } from "./auth-onboarding";
+
+export { requestUploadPermits } from "./upload-permits";

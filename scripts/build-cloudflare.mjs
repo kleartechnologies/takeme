@@ -19,7 +19,7 @@ try {
   if (!staging) nextEnv.loadEnvConfig(repository, false, { info() {}, error() {} });
   const environment = staging ? await loadStagingBuildEnvironment(process.env) : process.env;
   const configuration = validateReleaseEnvironment(environment);
-  if (configuration.target !== (staging ? "staging" : "production") || configuration.purpose !== (staging ? "staging-preview" : "release")) throw new Error("Cloudflare build target does not match its explicit selector; demo/offline or mixed output is refused.");
+  if (configuration.target !== (staging ? "staging" : "production") || configuration.purpose !== (staging ? "staging-preview" : "production-build")) throw new Error("Cloudflare build target does not match its explicit selector; demo/offline or mixed output is refused.");
   if (staging) await readPreviewWrangler(repository, configuration);
   const sourceContext = staging ? await readStagingSourceContext(repository) : undefined;
   const version = require("next/package.json").version;
@@ -46,7 +46,7 @@ try {
   if (staging) await validateStagingArtifact(path.join(repository, ".next"), configuration);
   else await validateReleaseArtifact(path.join(repository, ".next"), configuration);
   const recorded = await recordCloudflareArtifact(repository, configuration, path.join(repository, ".open-next"), sourceContext);
-  console.log(`Cloudflare ${staging ? "staging preview" : "release"} artifact recorded (${recorded.files} files). Build only; deployment requires separate owner approval.`);
+  console.log(`Cloudflare ${staging ? "staging preview" : "production build-qualified"} artifact recorded (${recorded.files} files). Launch NOT approved; deployment requires separate owner approval.`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Cloudflare build qualification failed.");
   process.exitCode = 1;

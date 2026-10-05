@@ -19,6 +19,7 @@ import { prepareListingImage, uploadListingImagesWith } from "@/lib/listing-imag
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
 import { createFixedDraft, publishFixed, removeFixed, updateFixed } from "@/lib/services/fixed-listings";
 import { withEligibilityHandling } from "@/lib/services/marketplace-call";
+import { photoUploadMetadata } from "@/lib/services/upload-permits";
 
 export type ListingSort = "newest" | "price_low" | "price_high";
 
@@ -168,7 +169,10 @@ async function uploadListingImages(uid: string, listingId: string, files: File[]
   return uploadListingImagesWith(uid, listingId, files, {
     prepare: prepareListingImage,
     reference: (path) => ref(services.storage, path),
-    upload: (objectRef, blob, contentType) => withEligibilityHandling(() => uploadBytes(objectRef, blob, { contentType, cacheControl: "public,max-age=31536000,immutable" })),
+    upload: async (objectRef, blob, contentType) => {
+      const metadata = await photoUploadMetadata(objectRef.fullPath, contentType, blob.size);
+      return withEligibilityHandling(() => uploadBytes(objectRef, blob, { ...metadata, cacheControl: "public,max-age=31536000,immutable" }));
+    },
     downloadUrl: getDownloadURL,
     remove: deleteObject,
     uniqueId: () => crypto.randomUUID(),

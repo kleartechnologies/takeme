@@ -6,6 +6,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { createDiscoverySession, verifyDiscoverySession } from "./discovery-session";
 import { displayPublicLocation, isPublicListingSafe, publishableLocation } from "./general-location";
+import { listingCategoryId } from "./engagement-domain";
 import {
   applyInterestSignal,
   decayedTrend,
@@ -43,6 +44,9 @@ function eventWindowMs(type: MarketplaceEventType) {
 interface EventEnvelope { source: "client" | "saved" | "bid" | "conversation" | "message"; sellerId?: string; context?: string; candidateSource?: CandidateSource; sectionId?: string; reasonId?: string; promotionId?: string }
 
 export async function recordMarketplaceSignal(uid: string, signal: Signal, dedupeKey: string, envelope: EventEnvelope, now = new Date()) {
+  // Legacy listing/deal metadata may have no real category. Generic activity
+  // still counts, but invalid values cannot become interest-map keys.
+  signal = { ...signal, categoryId: listingCategoryId(signal.categoryId) ?? undefined };
   const db = getFirestore();
   const eventId = hash(`${uid}|${signal.type}|${dedupeKey}`);
   const eventRef = db.collection("marketplaceEvents").doc(eventId);
@@ -74,11 +78,12 @@ export async function recordMarketplaceSignal(uid: string, signal: Signal, dedup
       }
     }
     const profile = applyInterestSignal((interest.data() as InterestProfile | undefined) ?? null, signal, now);
+    const categoryId = signal.categoryId ?? listingCategoryId(promotionListing?.data()?.categoryId);
     const timestamp = Timestamp.fromDate(now);
     transaction.create(eventRef, {
       userId: uid, eventType: signal.type, source: envelope.source,
       ...(signal.listingId ? { listingId: signal.listingId } : {}),
-      ...(signal.categoryId || promotionListing?.data()?.categoryId ? { categoryId: signal.categoryId ?? promotionListing?.data()?.categoryId } : {}),
+      ...(categoryId ? { categoryId } : {}),
       ...(envelope.sellerId || promotion?.data()?.sellerId ? { sellerId: envelope.sellerId ?? promotion?.data()?.sellerId } : {}),
       ...(signal.query ? { query: signal.query } : {}),
       ...(signal.price !== undefined ? { price: signal.price } : {}),
@@ -123,7 +128,8 @@ async function listingSignal(listingId: string, type: MarketplaceEventType, extr
   const data = snapshot.data();
   if (!data || !["active", "ended"].includes(data.status) || !isPublicListingSafe(data)) return null;
   const amount = data.listingType === "buy_now" ? Number(data.price) : Number(data.currentBid || data.startingBid || 0) / 100;
-  return { signal: { type, listingId, categoryId: String(data.categoryId ?? ""), price: amount, location: displayPublicLocation(publishableLocation(data)!), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
+  const categoryId = listingCategoryId(data.categoryId);
+  return { signal: { type, listingId, ...(categoryId ? { categoryId } : {}), price: amount, location: displayPublicLocation(publishableLocation(data)!), listingType: String(data.listingType ?? ""), condition: String(data.condition ?? ""), ...extra } as Signal, sellerId: String(data.sellerId ?? "") };
 }
 
 export const trackMarketplaceEvent = marketplaceMutationCall(async (request) => {

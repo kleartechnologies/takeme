@@ -79,6 +79,26 @@ function uploadAdapter(calls: string[], prepare = (file: File) => prepareListing
   };
 }
 
+test("server cadence denial keeps safe copy and cleans an earlier uploaded photo", async () => {
+  const calls: string[] = [];
+  const adapter = uploadAdapter(calls);
+  const originalUpload = adapter.upload;
+  let uploads = 0;
+  adapter.upload = async (reference, blob, contentType) => {
+    if (++uploads === 2) throw { code: "functions/resource-exhausted", details: { reason: "cadence-limit", retryAfterMs: 10_000, privateCounter: 64 } };
+    return originalUpload(reference, blob, contentType);
+  };
+  await assert.rejects(uploadListingImagesWith("seller", "listing", [original, original], adapter), error => {
+    assert.ok(error instanceof ListingImagePipelineError);
+    assert.equal(error.stage, "upload");
+    assert.equal(error.message, "Too many attempts. Please try again shortly.");
+    assert.doesNotMatch(error.message, /64|privateCounter/);
+    return true;
+  });
+  assert.equal(calls.filter(value => value === "download").length, 1);
+  assert.equal(calls.filter(value => value === "remove").length, 1);
+});
+
 test("valid JPEG is decoded, resized, and encoded as a separate WebP payload", async () => {
   const calls: string[] = [];
   const prepared = await prepareListingImage(original, imageAdapter(webp(), calls));

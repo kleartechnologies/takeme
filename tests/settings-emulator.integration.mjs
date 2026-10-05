@@ -1,4 +1,4 @@
-import { acceptDemoPolicies } from "./helpers/demo-eligibility.mjs";
+import { acceptDemoPolicies, permitDemoUpload } from "./helpers/demo-eligibility.mjs";
 // Demo-only integration checks. Test credentials remain in memory and are never logged.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -80,7 +80,7 @@ try {
   await check("existing avatar path permits supported files and denies other owners", async () => {
     const bytes = await readFile(new URL("../public/brand/mascot-2d-happy.png", import.meta.url));
     const path = `users/${owner.uid}/profile/avatar`;
-    await uploadBytes(ref(owner.storage, path), bytes, { contentType: "image/png" });
+    await uploadBytes(ref(owner.storage, path), bytes, await permitDemoUpload(owner.app, path, "image/png", bytes.length));
     const photoURL = await getDownloadURL(ref(owner.storage, path));
     assert.equal(new URL(photoURL).hostname, "127.0.0.1");
     await updateDoc(doc(owner.firestore, "users", owner.uid), { photoURL, updatedAt: serverTimestamp() });

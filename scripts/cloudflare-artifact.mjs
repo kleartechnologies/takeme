@@ -36,7 +36,7 @@ async function jsonFile(file) {
 async function nextPrecondition(repository, configuration) {
   if (!["production", "staging"].includes(configuration.target) || configuration.useEmulators !== false) throw new Error("Cloudflare artifact qualification requires remote structure with emulators disabled.");
   if (configuration.purpose === "staging-preview") await validateStagingArtifact(path.join(repository, ".next"), configuration);
-  else if (configuration.purpose === "release") await validateReleaseArtifact(path.join(repository, ".next"), configuration);
+  else if (configuration.purpose === "production-build") await validateReleaseArtifact(path.join(repository, ".next"), configuration);
   else if (configuration.purpose === "offline-qualification" && configuration.productionDeletionEnabled === false) await validateOfflineQualificationArtifact(path.join(repository, ".next"), configuration);
   else throw new Error("Cloudflare artifact purpose or deletion configuration is invalid.");
   const next = await jsonFile(path.join(repository, ".next", "required-server-files.json"));
@@ -97,8 +97,8 @@ export async function recordCloudflareArtifact(repository, configuration, direct
 }
 
 export async function validateCloudflareArtifact(repository, configuration, directory = path.join(repository, ".open-next")) {
-  if (configuration.purpose !== "release" || configuration.target !== "production") throw new Error("Offline/staging Cloudflare output is nondeployable as production and cannot qualify as a release.");
-  return validate(repository, configuration, directory, "release");
+  if (configuration.purpose !== "production-build" || configuration.target !== "production") throw new Error("Offline/staging Cloudflare output is nondeployable as production and cannot qualify as a production build.");
+  return validate(repository, configuration, directory, "production-build");
 }
 
 export async function validateStagingCloudflareArtifact(repository, configuration, directory = path.join(repository, ".open-next")) {

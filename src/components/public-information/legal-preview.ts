@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { isLocalLegalPreview } from "@/lib/public-information";
+import { isLegalInformationAvailable } from "@/lib/public-information";
 
-// Drafts require demo development or a staging build behind the guarded Worker.
-// Production publication stays closed; URL parameters cannot select a preview.
-export function requireLocalLegalPreview() {
-  if (!isLocalLegalPreview()) notFound();
+// Production additionally requires the real source approvals and matching proof.
+// URL parameters and runtime flags cannot grant publication permission.
+export function requireLegalInformation() {
+  if (!isLegalInformationAvailable()) notFound();
 }
