@@ -98,7 +98,9 @@ test("exact captured overlay accounts for all 95/6 clauses without changing read
   for (let i = 0; i < oldFire.length; i++) {
     const trace = manifest.trace.firestore[i], current = newFire[i + 1];
     assert.deepEqual(current.operations, oldFire[i].operations);
-    if (trace.behavior === "guarded-write") assert.equal(current.condition, `maintenanceBridgeWritesAllowed() && (${oldFire[i].condition})`);
+    if (trace.behavior === "guarded-write") assert.equal(current.condition, (trace as typeof trace & { additionalGuard?: string }).additionalGuard === "auction-admission"
+      ? `(maintenanceBridgeWritesAllowed() && (${oldFire[i].condition})) && auctionAdmissionAllowed()`
+      : `maintenanceBridgeWritesAllowed() && (${oldFire[i].condition})`);
     else assert.equal(current.original, oldFire[i].original);
     assert.equal(trace.originalConditionSha256, digest(oldFire[i].condition));
     assert.equal(trace.reviewConditionSha256, digest(current.condition));

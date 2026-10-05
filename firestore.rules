@@ -1,6 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function auctionCreationControlAllows() {
+      return request.auth != null
+        && request.auth.token.aud in ['demo-takeme', 'takeme-staging-822a5', 'takeme-52b80']
+        && (!exists(/databases/$(database)/documents/releaseControls/auctionCreation)
+          || validAuctionCreationControl(get(/databases/$(database)/documents/releaseControls/auctionCreation).data));
+    }
+    function validAuctionCreationControl(control) {
+      return control is map
+        && control.keys().hasAll(['releaseTarget', 'projectId', 'auctionCreationPaused'])
+        && control.keys().hasOnly(['releaseTarget', 'projectId', 'auctionCreationPaused'])
+        && control.auctionCreationPaused is bool && control.auctionCreationPaused == false
+        && control.projectId == request.auth.token.aud
+        && ((control.releaseTarget == 'demo' && control.projectId == 'demo-takeme')
+          || (control.releaseTarget == 'staging' && control.projectId == 'takeme-staging-822a5')
+          || (control.releaseTarget == 'production' && control.projectId == 'takeme-52b80'));
+    }
+    function auctionRecord(data) {
+      return data.get('listingType', '') in ['auction', 'buy_now_and_auction'];
+    }
+    function publishedUnfinishedAuction(data) {
+      return auctionRecord(data) && data.get('status', '') == 'active'
+        && data.get('auctionStatus', '') in ['active', 'scheduled'];
+    }
+    function auctionAdmissionAllowed() {
+      return request.method == 'delete'
+        || !auctionRecord(request.resource.data)
+        || (request.method == 'update' && auctionRecord(resource.data)
+          && (!publishedUnfinishedAuction(request.resource.data) || publishedUnfinishedAuction(resource.data)))
+        || auctionCreationControlAllows();
+    }
     function authenticated() { return request.auth != null; }
     function signedIn() { return authenticated() && !exists(/databases/$(database)/documents/accountLifecycles/$(request.auth.uid)); }
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
@@ -191,7 +221,7 @@ service cloud.firestore {
         || isAdmin();
       // Owner history and public browsing use server-owned field projections.
       allow list: if isAdmin();
-      allow create, update, delete: if isAdmin() && marketplaceEligible();
+      allow create, update, delete: if (isAdmin() && marketplaceEligible()) && auctionAdmissionAllowed();
 
       match /bids/{bidId} {
         allow read: if isAdmin();

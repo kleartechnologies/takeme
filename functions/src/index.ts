@@ -1,5 +1,6 @@
 import { consumeActionCadence } from "./action-cadence";
 import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
+import { assertAuctionCreationAvailable } from "./auction-creation-runtime.ts";
 import { getApp, initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -304,13 +305,14 @@ function serializeAuction(data: DocumentData) {
 
 export const createAuctionListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
+  await assertAuctionCreationAvailable();
   const now = new Date();
   const input = parseListingPayload(request.data, now);
   const meetup = await selectedMeetup(uid, input.meetupLocationId);
   const listingRef = db.collection(LISTINGS).doc();
   const timestamp = Timestamp.fromDate(now);
   const auctionStatus = input.auctionStartAt.getTime() <= now.getTime() ? "active" : "scheduled";
-  await runGuardedTransaction(db, async (tx) => { await consumeActionCadence(tx, uid, "listing", timestamp); tx.create(listingRef, {
+  await runGuardedTransaction(db, async (tx) => { await assertAuctionCreationAvailable(tx); await consumeActionCadence(tx, uid, "listing", timestamp); tx.create(listingRef, {
     id: listingRef.id,
     sellerId: uid,
     ...listingContent(input),
@@ -333,11 +335,13 @@ export const createAuctionListing = marketplaceMutationCall(async (request) => {
 
 export const publishAuctionListing = marketplaceMutationCall(async (request) => {
   const uid = requireUser(request);
+  await assertAuctionCreationAvailable();
   const input = request.data as { listingId?: unknown; imageUrls?: unknown };
   const listingId = requireId(input?.listingId, "Listing ID");
   const imageUrls = await verifyListingImages(uid, listingId, input?.imageUrls);
   const listingRef = db.collection(LISTINGS).doc(listingId);
   const result = await runGuardedTransaction(db, async (transaction) => {
+    await assertAuctionCreationAvailable(transaction);
     const snapshot = await transaction.get(listingRef);
     const data = snapshot.data();
     requireAuctionOwner(data, uid);

@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { productionEnvironment } from "../functions/src/production-environment.ts";
+import { prepareAuctionCreationRuleGuard } from "./auction-creation-rule-preparation.mjs";
 import { stagingFirebaseProjectId } from "../functions/src/staging-environment.ts";
 
 // These are previously reviewed local captures, not a claim about today's live
@@ -100,8 +101,14 @@ export function prepareMaintenanceRuleBridge(firestoreBytes, storageBytes) {
   const anchor = "  match /databases/{database}/documents {\n";
   if (fire.rules.split(anchor).length !== 2) throw new Error("Reviewed Firestore scope differs; preparation refused.");
   const header = "// REVIEW ONLY: output-only maintenance preparation. Not approved for deployment.\n";
+  const auction = prepareAuctionCreationRuleGuard(fire.rules);
+  const guardedClause = scanRuleAllows(fire.rules).find(clause => clause.start === auction.clauseStart);
+  const guardedTrace = guardedClause && fire.traces[guardedClause.ordinal];
+  if (!guardedTrace) throw new Error("Auction admission clause trace missing.");
+  guardedTrace.additionalGuard = "auction-admission";
+  guardedTrace.reviewConditionSha256 = digest(auction.condition);
   const outputs = {
-    "firestore.maintenance-bridge.review.rules": header + fire.rules.replace(anchor, anchor + firestoreControlBlock()),
+    "firestore.maintenance-bridge.review.rules": header + auction.rules.replace(anchor, anchor + firestoreControlBlock()),
     "storage.maintenance-freeze.review.rules": header
       + "// Static create/update freeze. Read and owner cleanup delete conditions are unchanged.\n"
       + "// Turning releaseControls OFF does not remove this freeze; separately reviewed replacement rules are required.\n" + storage.rules,

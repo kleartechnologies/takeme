@@ -1,6 +1,8 @@
 import { productionEnvironment } from "./production-environment.ts";
 import { stagingFirebaseProjectId } from "./staging-environment.ts";
-import type { ReleaseTarget } from "./release-policy.ts";
+// Maintenance can be installed over historical handlers before legal policy
+// exists. Keep this pure model independent of policy code/type dependencies.
+type ReleaseTarget = "demo" | "staging" | "production";
 
 export const PROTECTED_WRITE_MAINTENANCE_MESSAGE = "TAKEME is completing a short system update. Browsing is still available, but this action is temporarily unavailable. Please try again shortly.";
 export const PROTECTED_WRITE_MAINTENANCE_REASON = "protected-writes-paused";
