@@ -15,7 +15,7 @@ test("demo policy is pinned to explicit matching runtime and emulator configurat
   }
   assert.equal(resolvePolicyContext(demo, "other"), null);
 });
-test("production stays fail-closed without approval and final versions; stale emulator context is refused", () => {
+test("source production approval remains inactive and unconfirmed production resources are refused", () => {
   assert.ok(validateProductionPolicy().length);
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(productionReleasePolicy.termsVersion, null);

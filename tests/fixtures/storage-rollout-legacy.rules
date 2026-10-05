@@ -1,0 +1,42 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function validImage() {
+      return request.resource.size <= 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+    function listing(listingId) {
+      return firestore.get(/databases/(default)/documents/listings/$(listingId)).data;
+    }
+    function canManageListingMedia(uid, listingId) {
+      return isOwner(uid)
+        && listing(listingId).sellerId == uid
+        && (
+          (listing(listingId).listingType == 'buy_now' && listing(listingId).status in ['draft', 'active'])
+          || (listing(listingId).listingType in ['auction', 'buy_now_and_auction']
+            && listing(listingId).bidCount == 0
+            && (listing(listingId).status == 'draft'
+              || (listing(listingId).auctionStatus == 'scheduled' && request.time < listing(listingId).auctionStartAt)))
+        );
+    }
+
+    match /users/{uid}/profile/{fileName} {
+      allow read: if true;
+      allow create, update: if isOwner(uid) && validImage();
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/listings/{listingId}/{fileName} {
+      allow read: if listing(listingId).sellerId == uid
+        && (listing(listingId).status in ['active', 'ended']
+          || (listing(listingId).status == 'sold'
+            && listing(listingId).listingType == 'buy_now'
+            && listing(listingId).privacyVersion == 2)
+          || isOwner(uid));
+      allow create, update: if canManageListingMedia(uid, listingId) && validImage();
+      allow delete: if canManageListingMedia(uid, listingId);
+    }
+  }
+}

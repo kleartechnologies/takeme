@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator, getDoc, doc } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import { acceptDemoPolicies, createDemoPassword } from "./helpers/demo-eligibility.mjs";
 
 const projectId = "demo-takeme";
+// This assertion selector does not enable the server path. The private emulator
+// launcher must independently provide its explicit demo target/window settings.
+const legacyWindowEnabled = process.env.TAKEME_TEST_LEGACY_MESSAGE_WINDOW === "enabled";
 process.env.GCLOUD_PROJECT = projectId;
 process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
@@ -121,8 +124,9 @@ try {
     await assert.rejects(() => send(buyer, conversationId, body, randomUUID()), error => error.code === "functions/resource-exhausted" && error.details?.reason === "cadence-limit" && error.details?.retryAfterMs > 0);
     assert.equal((await messages(conversationId).get()).size, 4); assert.equal(await unread(conversationId), 3);
   });
-  await check("missing keys, cross-user access and private receipt reads fail closed", async () => {
-    await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body }), error => error.code === "functions/invalid-argument");
+  await check("invalid explicit keys, cross-user access and private receipt reads fail closed", async () => {
+    if (!legacyWindowEnabled) await assert.rejects(() => call(buyer, "sendConversationMessage", { conversationId, body }), error => error.code === "functions/invalid-argument");
+    for (const idempotencyKey of [null, "", "short"]) await assert.rejects(() => send(buyer, conversationId, body, idempotencyKey), error => error.code === "functions/invalid-argument");
     await assert.rejects(() => send(outsider, conversationId, body, key), error => error.code === "functions/permission-denied");
     const identity = messageRequestIdentity(buyer.uid, conversationId, "another-private-key-0001", body);
     await put(`users/${buyer.uid}/private/messageRequests/messageSendReceipts/${identity.requestId}`, { messageId: identity.messageId, bodyHash: identity.bodyHash, expiresAt: Timestamp.now() });
@@ -133,6 +137,53 @@ try {
     await db.doc(`users/${buyer.uid}/private/onboarding`).delete();
     await assert.rejects(() => send(buyer, conversationId, body, key), error => error.code === "functions/failed-precondition");
     assert.equal((await messages(conversationId).get()).size, 4);
+  });
+  await check("old-client missing-key sends are bounded by server configuration and retain all owner guards", async () => {
+    const legacyBuyer = await client("legacy-buyer");
+    const { conversationId: legacyConversation } = await call(legacyBuyer, "openListingConversation", { listingId: `message-idempotency-${prefix}-0` });
+    paths.add(`conversations/${legacyConversation}`);
+    const oldPayload = { conversationId: legacyConversation, body };
+    if (!legacyWindowEnabled) {
+      // Request data cannot opt into a server-only transition, even when it
+      // copies configuration names or supplies a client-chosen deadline.
+      await assert.rejects(() => call(legacyBuyer, "sendConversationMessage", { ...oldPayload,
+        TAKEME_ENABLE_LEGACY_MESSAGE_SEND: "true", TAKEME_LEGACY_MESSAGE_SEND_UNTIL: new Date(Date.now() + 24 * 60 * 60_000).toISOString() }), error => error.code === "functions/invalid-argument");
+      assert.equal((await messages(legacyConversation).get()).size, 0);
+      return;
+    }
+    const firstLegacy = await call(legacyBuyer, "sendConversationMessage", oldPayload);
+    const secondLegacy = await call(legacyBuyer, "sendConversationMessage", oldPayload);
+    assert.notEqual(firstLegacy.messageId, secondLegacy.messageId); // Identical intentional sends are not collapsed.
+    for (const legacy of [firstLegacy, secondLegacy]) {
+      assert.match(legacy.messageId, /^m_[a-f0-9]{64}$/);
+      const receipt = (await db.doc(`users/${legacyBuyer.uid}/private/messageRequests/messageSendReceipts/${legacy.messageId.slice(2)}`).get()).data();
+      assert.equal(receipt.messageId, legacy.messageId);
+      assert.equal(receipt.expiresAt.toMillis() - receipt.createdAt.toMillis(), MESSAGE_REQUEST_RETENTION_MS);
+      assert.equal(JSON.stringify(receipt).includes(body), false);
+    }
+    const newKey = randomUUID();
+    const newResults = await Promise.all(Array.from({ length: 3 }, () => send(legacyBuyer, legacyConversation, body, newKey)));
+    assert.equal(new Set(newResults.map(value => value.messageId)).size, 1);
+    assert.equal((await messages(legacyConversation).get()).size, 3);
+    assert.equal(await unread(legacyConversation), 3);
+    assert.equal((await db.doc(`users/${legacyBuyer.uid}/private/cadence-message`).get()).data().events.length, 3);
+    for (const message of [firstLegacy, secondLegacy, newResults[0]]) {
+      const event = hash(`${legacyBuyer.uid}|MESSAGE_SENT|message|${message.messageId}`);
+      await eventually(async () => (await notice(seller.uid, legacyConversation, message.messageId).get()).exists
+        && (await db.doc(`marketplaceEvents/${event}`).get()).exists, "legacy and keyed message side effects");
+      paths.add(`marketplaceEvents/${event}`);
+    }
+    assert.equal((await db.collection(`users/${seller.uid}/notifications`).get()).docs.filter(snapshot => snapshot.data().href === `/messages/${legacyConversation}`).length, 3);
+    for (const idempotencyKey of [null, "", "short"]) await assert.rejects(() => send(legacyBuyer, legacyConversation, body, idempotencyKey), error => error.code === "functions/invalid-argument");
+    await assert.rejects(() => call(outsider, "sendConversationMessage", oldPayload), error => error.code === "functions/permission-denied");
+    await db.doc(`users/${legacyBuyer.uid}/private/onboarding`).delete();
+    await assert.rejects(() => call(legacyBuyer, "sendConversationMessage", oldPayload), error => error.code === "functions/failed-precondition");
+    await put(`accountLifecycles/${legacyBuyer.uid}`, { state: "deletion_pending", alias: "deleted-synthetic-legacy" });
+    await assert.rejects(() => call(legacyBuyer, "sendConversationMessage", oldPayload), error => error.code === "functions/failed-precondition");
+    await signOut(legacyBuyer.auth);
+    await assert.rejects(() => call(legacyBuyer, "sendConversationMessage", oldPayload), error => error.code === "functions/unauthenticated");
+    assert.equal((await messages(legacyConversation).get()).size, 3);
+    assert.equal(await unread(legacyConversation), 3);
   });
   console.log(`Messaging idempotency emulator validation: ${passed} groups passed; demo only.`);
 } finally {

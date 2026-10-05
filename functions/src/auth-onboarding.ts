@@ -2,7 +2,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { marketplaceCall, runGuardedTransaction } from "./account-lifecycle";
-import { acceptanceRef, currentReleasePolicy, hasCurrentAcceptance, initializeDemoPolicyMirror, policyMirrorMatches, releasePolicyRef, runtimePolicyContext } from "./account-eligibility";
+import { acceptanceRef, currentReleasePolicy, hasCurrentAcceptance, initializeDemoPolicyMirror, releasePolicyFromMirror, releasePolicyRef, runtimePolicyContext } from "./account-eligibility";
 import { demoReleasePolicy, type ReleasePolicy } from "./release-policy";
 
 // Compatibility export for existing demo fixtures; the source lives in release-policy.ts.
@@ -35,16 +35,16 @@ export const getAccountSetupStatus = onCall(async request => {
     if (lifecycle.exists) return { step: "deletion" };
     const context = runtimePolicyContext();
     const mirror = await tx.get(releasePolicyRef());
-    const policyAvailable = policyMirrorMatches(mirror.data(), context);
+    const policy = releasePolicyFromMirror(mirror.data(), context);
     const metadata = {
-      policyAvailable,
-      termsVersion: policyAvailable ? context!.policy.termsVersion : null,
-      privacyVersion: policyAvailable ? context!.policy.privacyVersion : null,
+      policyAvailable: policy !== null,
+      termsVersion: policy?.termsVersion ?? null,
+      privacyVersion: policy?.privacyVersion ?? null,
       minimumAge: 18,
     };
-    if (!policyAvailable) return { step: "acceptance", ...metadata };
+    if (!policy) return { step: "acceptance", ...metadata };
     const setup = (await tx.get(setupRef(uid))).data();
-    if (!hasCurrentAcceptance(setup, context!.policy)) return { step: "acceptance", ...metadata };
+    if (!hasCurrentAcceptance(setup, policy)) return { step: "acceptance", ...metadata };
     const profile = (await tx.get(getFirestore().doc(`users/${uid}`))).data();
     if (!setup?.profileCompletedAt || !profile || typeof profile.displayName !== "string" || Array.from(profile.displayName.trim()).length < 2) return { step: "profile", ...metadata };
     return { step: setup.welcomeCompletedAt ? "ready" : "welcome", ...metadata };

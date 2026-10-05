@@ -1,6 +1,6 @@
 import { stagingFirebaseProjectId, stagingPolicyVersion, stagingStorageBucket } from "./staging-environment.ts";
 
-/** The sole policy-version source. Test approval never grants production publication. */
+/** Approved bootstrap, rules and frontend policy versions. Production Functions resolve the trusted runtime record separately. Test approval never grants production publication. */
 export type ReleaseTarget = "demo" | "staging" | "production";
 export interface ReleasePolicy {
   readonly publicationApproved: boolean;

@@ -1,8 +1,9 @@
 import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
+import { getApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { messageRequestIdentity, messageRetryDecision, normalizeMessageBody, MESSAGE_REQUEST_RETENTION_MS } from "./message-request";
+import { messageRequestIdentityForSend, assertMessageTransitionStillActive, messageRetryDecision, normalizeMessageBody, MESSAGE_REQUEST_RETENTION_MS } from "./message-request";
 import { consumeActionCadence } from "./action-cadence";
 
 const db = getFirestore();
@@ -103,10 +104,11 @@ export const getConversationMessages = onCall(async (request) => {
 export const sendConversationMessage = marketplaceMutationCall(async (request) => {
   const senderId = uid(request.auth?.uid);
   const conversationId = id(request.data?.conversationId);
-  let body: string, identity: ReturnType<typeof messageRequestIdentity>;
+  let body: string, identity: ReturnType<typeof messageRequestIdentityForSend>;
   try {
     body = normalizeMessageBody(request.data?.body);
-    identity = messageRequestIdentity(senderId, conversationId, request.data?.idempotencyKey, body);
+    identity = messageRequestIdentityForSend(senderId, conversationId, request.data ?? {}, body,
+      { env: process.env, appProjectId: getApp().options.projectId });
   } catch (error) { throw new HttpsError("invalid-argument", (error as Error).message); }
   const ref = db.collection("conversations").doc(conversationId);
   const messageRef = ref.collection("messages").doc(identity.messageId);
@@ -123,6 +125,10 @@ export const sendConversationMessage = marketplaceMutationCall(async (request) =
     // The quota helper performs the final read before staging any writes. A
     // receipt retry above consumes neither quota nor downstream side effects.
     await consumeActionCadence(tx, senderId, "message", now);
+    // Recheck after the final asynchronous read. Refusal aborts the entire
+    // transaction, including its staged cadence update.
+    try { assertMessageTransitionStillActive(identity, Timestamp.now().toMillis()); }
+    catch (error) { throw new HttpsError("failed-precondition", (error as Error).message, { reason: "message-client-update-required" }); }
     tx.create(messageRef, { id: messageRef.id, senderId, body, createdAt: now });
     tx.create(receiptRef, { bodyHash: identity.bodyHash, messageId: messageRef.id, createdAt: now, expiresAt: Timestamp.fromMillis(now.toMillis() + MESSAGE_REQUEST_RETENTION_MS) });
     tx.update(ref, { latestMessage: body.slice(0, 120), lastMessageAt: now, updatedAt: now, [`unreadBy.${otherId}`]: Math.max(0, Number(data!.unreadBy?.[otherId] ?? 0)) + 1 });

@@ -4,7 +4,7 @@ This sprint prepares local code only. Nothing here approves a policy, launches p
 
 ## Central source and present state
 
-- `functions/src/release-policy.ts` is the sole Terms/Privacy version source. Production remains `publicationApproved: false`, `termsVersion: null`, `privacyVersion: null`, `minimumAge: 18`.
+- `functions/src/release-policy.ts` is the approved source for bootstrap, generated rules, frontend proof/versions and legal pages. Prepared production serving Functions separately resolve runtime versions from the trusted server-owned policy record; activation need not rebuild unrelated handlers. Production remains `publicationApproved: false`, `termsVersion: null`, `privacyVersion: null`, `minimumAge: 18`.
 - `functions/src/legal-publication.ts` supplies the shared legal route/bootstrap/launch decisions. Registration alone is approved from the owner-confirmed SSM KT0622373-U. Final content, BM notice, publication and production route review remain false; address applicability remains pending.
 - `functions/src/production-environment.ts` binds takeme-52b80, takeme-52b80.firebasestorage.app, https://takeme.my and asia-southeast1.
 - The frontend public SDK proof is a resource/purpose consistency guard, not permission to perform a marketplace action. Source policy, mirror, acceptance timestamps/versions, account lifecycle and authoritative backend/rules still guard writes. Runtime deletion qualification is unchanged and refuses execution while its activation flag is false or production policies are unapproved.
@@ -26,7 +26,7 @@ They produce/verify purpose `production-build` with real source policies, allow 
 
 ## Required policy mirror
 
-The private bootstrap prepares exactly `releasePolicies/current`. Its six fields must match the approved central source:
+The controlled bootstrap prepares exactly `releasePolicies/current`. Its six fields must match the approved central source:
 
 | Field | Requirement |
 | --- | --- |
@@ -37,7 +37,7 @@ The private bootstrap prepares exactly `releasePolicies/current`. Its six fields
 | privacyVersion | Exact owner/legal-approved final Privacy identifier |
 | minimumAge | 18 |
 
-Terms and Privacy identifiers can differ; each must match its respective central version. No final identifier is proposed or activated here. Missing, stale, revoked, mismatched or incomplete mirrors cannot grant acceptance or marketplace eligibility. Generated Firestore/Storage policy regions and backend policy source must be deployed consistently with those exact approved versions.
+Terms and Privacy identifiers can differ; each must match its respective central version. No final identifier is proposed or activated here. Missing, inactive, null, malformed, extra-field, draft or wrong-resource records cannot grant acceptance or marketplace eligibility. Production runtime requires exact managed/Admin project and bucket, six server-owned fields and final version identifiers. Demo/staging remain pinned to source versions. Clients/environment flags cannot grant approval. Generated Firestore/Storage policy regions and frontend approved source must still align with the record. Serving policy revocation is checked on each guarded transaction; existing short Storage permits have the documented two-lookup/lease limitation. Source-compiled deletion qualification is unchanged and may need its related rebuild after separate activation approval. See production-rollout-compatibility.md for the legal-before-guarded-writes order.
 
 ## Default planning and separately approved future apply
 
