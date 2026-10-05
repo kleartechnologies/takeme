@@ -56,7 +56,10 @@ test("auth return parameters do not replay a write, and outdated conversation vi
   // request submission remains in a guarded, explicit event handler.
   assert.match(deals, /setup\?\.step === "ready" && setup\.policyAvailable === true && makeOffer/);
   assert.match(deals, /if \(!await requireAction\(\)\) return;[\s\S]*if \(action === "send"\) await submitOffer/);
-  assert.match(conversation, /if \(mayMarkSeen && document\.visibilityState/);
+  assert.match(conversation, /if \(mayMarkSeen && !autoSeenPaused\.current && document\.visibilityState === "visible"/);
   assert.match(conversation, /const mayMarkSeen = setup\?\.step === "ready" && setup\.policyAvailable === true/);
+  assert.match(conversation, /autoSeenPaused\.current = true/);
+  const conversationService = source("lib/services/conversations.ts");
+  assert.match(conversationService, /"markConversationSeen", \{ conversationId \}, true/);
   for (const value of [product, auction]) assert.doesNotMatch(value, /searchParams|get\("(?:offer|bid|chat)"\)/);
 });

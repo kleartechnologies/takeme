@@ -21,6 +21,9 @@ export function ActionSheet({ title, description, children, onClose, busy = fals
       const controls = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') ?? [])].filter((element) => element.getClientRects().length > 0);
       const first = controls[0], last = controls.at(-1);
       if (!first) { event.preventDefault(); dialog.current?.focus(); }
+      // A pending submit can temporarily disable the focused button, leaving
+      // focus on the document. Keep the next keyboard step within this modal.
+      else if (!dialog.current?.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); }
       else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }

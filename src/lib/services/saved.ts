@@ -19,6 +19,7 @@ import { auth, db } from "@/lib/firebase/client";
 import { getPublicListingDetail } from "@/lib/services/listings";
 import type { SavedListing } from "@/types/marketplace";
 import { announceSavedChange } from "@/lib/marketplace-state-events";
+import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
 export interface SavedPage {
   items: SavedListing[];
@@ -48,6 +49,7 @@ export async function saveListing(listingId: string) {
     announceSavedChange({ uid, listingId, saved: true });
     return true;
   } catch (error) {
+    if (protectedWriteMaintenanceMessage(error)) throw error;
     // Existing documents are immutable. A repeated tap is therefore a no-op,
     // while a missing/removed listing or genuine rules error still surfaces.
     if ((await getDoc(reference)).exists()) { announceSavedChange({ uid, listingId, saved: true }); return false; }

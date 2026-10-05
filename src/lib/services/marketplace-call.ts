@@ -4,8 +4,10 @@ import { ACCOUNT_ELIGIBILITY_EVENT, currentPolicyAllowsWrite, eligibilityMessage
 import { cadenceErrorMessage } from "@/lib/cadence-error";
 import { getAccountSetupStatus } from "@/lib/services/account-setup";
 import { safeAuthNext } from "@/lib/auth-routing";
+import { announceProtectedWriteMaintenance, ProtectedWriteMaintenanceError, protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
+import { assertProtectedWritesAvailable } from "@/lib/services/protected-write-status";
 
-interface EligibilityHandlingOptions { checkPolicy?: boolean; notifyEligibility?: boolean; allowPendingResolution?: boolean }
+interface EligibilityHandlingOptions { checkPolicy?: boolean; notifyEligibility?: boolean; allowPendingResolution?: boolean; checkMaintenance?: boolean; notifyMaintenance?: boolean }
 
 async function assertCurrentPolicy(uid: string | undefined, allowPendingResolution: boolean) {
   if (!uid) throw new Error("Sign in to continue.");
@@ -23,10 +25,23 @@ export async function withEligibilityHandling<T>(action: () => Promise<T>, optio
   const uid = auth?.currentUser?.uid;
   const intended = typeof window !== "undefined" ? safeAuthNext(`${window.location.pathname}${window.location.search}${window.location.hash}`) : undefined;
   try {
+    if (options.checkMaintenance !== false) await assertProtectedWritesAvailable();
     if (options.checkPolicy !== false) await assertCurrentPolicy(uid, options.allowPendingResolution === true);
     return await action();
   }
   catch (error) {
+    let maintenance = protectedWriteMaintenanceMessage(error);
+    const ruleDenied = !!error && typeof error === "object" && "code" in error && ["permission-denied", "storage/unauthorized"].includes(String(error.code));
+    // A direct write may race with the pause after its precheck. Distinguish it
+    // from an account-policy rejection without redirecting or replaying anything.
+    if (!maintenance && ruleDenied && options.checkMaintenance !== false) {
+      try { await assertProtectedWritesAvailable(); }
+      catch (statusError) { maintenance = protectedWriteMaintenanceMessage(statusError); }
+    }
+    if (maintenance) {
+      if (options.notifyMaintenance !== false) announceProtectedWriteMaintenance();
+      throw new ProtectedWriteMaintenanceError({ cause: error });
+    }
     const cadenceMessage = cadenceErrorMessage(error);
     if (cadenceMessage) {
       const retryAfterMs = (error as { details?: { retryAfterMs?: unknown } }).details?.retryAfterMs;
@@ -34,7 +49,6 @@ export async function withEligibilityHandling<T>(action: () => Promise<T>, optio
         ...(typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs) ? { retryAfterMs: Math.max(1, Math.min(120_000, Math.ceil(retryAfterMs))) } : {}) } });
     }
     const message = eligibilityMessage(error);
-    const ruleDenied = !!error && typeof error === "object" && "code" in error && ["permission-denied", "storage/unauthorized"].includes(String(error.code));
     if (options.notifyEligibility !== false && (message || ruleDenied) && uid && auth?.currentUser?.uid === uid && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(ACCOUNT_ELIGIBILITY_EVENT, { detail: { uid, intended } }));
     }
@@ -47,7 +61,9 @@ export function marketplaceCallable<Request, Response>(service: Functions, name:
   const invoke = httpsCallable<Request, Response>(service, name);
   return (data: Request) => withEligibilityHandling(() => invoke(data), {
     checkPolicy: options.background !== true && isProtectedMarketplaceCallable(name),
+    checkMaintenance: options.background !== true && isProtectedMarketplaceCallable(name),
     notifyEligibility: options.background !== true,
+    notifyMaintenance: options.background !== true,
     allowPendingResolution: isPendingResolutionMutation(name),
   });
 }

@@ -1,0 +1,7 @@
+.notice { position: fixed; z-index: 100; top: max(1rem, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: flex-start; gap: .75rem; width: min(36rem, calc(100% - 1.5rem)); padding: 1rem; border: 1px solid #b5dcc9; border-radius: var(--takeme-radius-md); background: #f3faf6; box-shadow: var(--takeme-shadow-md); color: var(--takeme-charcoal); }
+.icon { flex-shrink: 0; margin-top: .3rem; color: var(--takeme-dark-green); }
+.content { min-width: 0; flex: 1; }
+.content strong { display: block; font-size: .9rem; }
+.content p { margin-top: .4rem; font-size: .8rem; line-height: 1.65; overflow-wrap: anywhere; }
+.browse { display: inline-flex; align-items: center; min-height: 2.75rem; margin-top: .35rem; color: var(--takeme-dark-green); font-size: .8rem; font-weight: 600; text-decoration: underline; text-underline-offset: .2em; }
+@media (min-width: 768px) { .notice { top: 1.25rem; padding: 1.25rem; } .content p { font-size: .875rem; } }

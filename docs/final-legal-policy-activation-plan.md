@@ -2,6 +2,8 @@
 
 Preparation only, 5 October 2026, based on detached qualification checkpoint `544d47e756bc7bfcc868b40f87d3f1fbc5c7ef9b`. Nothing in this document authorizes publication, bootstrap, deployment, policy activation, TTL, deletion, schedules, payment activation or domain cutover. Main, Netlify and production have not been changed. No production API or customer-data access was performed for this preparation.
 
+The owner subsequently selected a controlled protected-write maintenance window. [protected-write-maintenance.md](protected-write-maintenance.md) records its local control/UX/rule qualification and gated activation sequence. This supersedes the unselected strategy choice below; it does not claim old deployed handlers/rules already enforce the new control or authorize production use.
+
 This document supersedes earlier historical null-version, unavailable-BM, current-only acceptance and incomplete Storage-emulator statements in the preparation documentation. The approved drafts now exist; final counsel approval and publication remain separate. The 49 READY composites, 12 field overrides, 91 ACTIVE Functions, six schedules, zero TTL policies, old live rules and absent/inactive runtime policy are **owner-confirmed baseline facts**, not a newly inspected live inventory. ACTIVE names do not prove deployed code/configuration parity.
 
 ## A–D. Legal state, external decisions, dates and runtime record
@@ -64,7 +66,7 @@ Review outputs are outside Git. Their review-only header/manifest is not an acti
 
 ## G. Exact Function groups
 
-Current source exports 101 Functions: 40 backward compatible (29 reads +11 derived-event handlers), 40 coordinated (34 mutation callables +6 policy-gated intelligence handlers), five preparation, six ordinary schedules, five deletion-only and five payment stubs. A–G below are dependency groupings and overlap; they are not seven disjoint deployment selectors. No Function was deployed in this preparation. Resource names alone cannot establish live code parity.
+The approved activation-preparation checkpoint exported 101 Functions: 40 backward compatible (29 reads +11 derived-event handlers), 40 coordinated (34 mutation callables +6 policy-gated intelligence handlers), five preparation, six ordinary schedules, five deletion-only and five payment stubs. Maintenance preparation adds the public status endpoint `getProtectedWriteStatus`; the current 102-export maintenance classification and additional installation prerequisites are in `protected-write-maintenance.md`. A–G below describe the earlier checkpoint, overlap, and are not seven disjoint deployment selectors. No Function was deployed in this preparation. Resource names alone cannot establish live code parity.
 
 | Group | Exact treatment |
 | --- | --- |

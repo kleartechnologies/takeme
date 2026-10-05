@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Firestore, type Transaction, type DocumentData } from "firebase-admin/firestore";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { assertMarketplaceEligibility } from "./account-eligibility";
+import { assertProtectedWritesAvailable } from "./protected-write-maintenance-runtime.ts";
 
 const context = new AsyncLocalStorage<{ uid: string; alias?: string; resolution: boolean; mutation: boolean }>();
 export const lifecycleRef = (uid: string) => getFirestore().doc(`accountLifecycles/${uid}`);
@@ -30,6 +31,9 @@ async function assertAccount(uid: string, resolution: boolean, tx?: Transaction)
 function call(resolution: boolean, mutation: boolean, handler: (request: CallableRequest<DocumentData>) => unknown | Promise<unknown>) {
   return onCall(async (request: CallableRequest<DocumentData>) => {
     if (!request.auth) return handler(request);
+    // A protected action is temporarily unavailable even when its policy or
+    // lifecycle checks would otherwise redirect/reject it for another reason.
+    if (mutation) await assertProtectedWritesAvailable();
     const state = await assertAccount(request.auth.uid, resolution);
     // Pending users may only resolve already-existing obligations through the four
     // designated transaction actions and protected-dispute evidence actions.
@@ -48,6 +52,10 @@ export function runGuardedTransaction<T>(db: Firestore, handler: (tx: Transactio
   return db.runTransaction(async (tx) => {
     const owner = context.getStore();
     if (owner) {
+      // Read first in the same transaction: enabling maintenance invalidates a
+      // racing protected write before commit. Read-only/onboarding contexts and
+      // unscoped derived work retain their existing lifecycle/policy behavior.
+      if (owner.mutation) await assertProtectedWritesAvailable(tx);
       const state = await assertAccount(owner.uid, owner.resolution, tx);
       if (owner.mutation && !(owner.resolution && state?.state === "deletion_pending")) await assertMarketplaceEligibility(owner.uid, tx);
     }

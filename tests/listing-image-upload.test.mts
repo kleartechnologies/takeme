@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PROTECTED_WRITE_MAINTENANCE_MESSAGE, ProtectedWriteMaintenanceError, protectedWriteMaintenanceMessage } from "../src/lib/protected-write-maintenance.ts";
 import {
   ListingImagePipelineError,
   prepareListingImage,
@@ -97,6 +98,28 @@ test("server cadence denial keeps safe copy and cleans an earlier uploaded photo
   });
   assert.equal(calls.filter(value => value === "download").length, 1);
   assert.equal(calls.filter(value => value === "remove").length, 1);
+});
+
+test("maintenance rejection preserves safe copy and does not retry or publish an upload", async () => {
+  const calls: string[] = [];
+  const adapter = uploadAdapter(calls);
+  const upload = adapter.upload;
+  let uploads = 0;
+  adapter.upload = async (reference, blob, contentType) => {
+    if (++uploads === 2) throw new ProtectedWriteMaintenanceError();
+    return upload(reference, blob, contentType);
+  };
+  await assert.rejects(uploadListingImagesWith("seller", "listing", [original, original], adapter), error => {
+    assert.ok(error instanceof ListingImagePipelineError);
+    assert.equal(error.stage, "upload");
+    assert.equal(error.message, PROTECTED_WRITE_MAINTENANCE_MESSAGE);
+    assert.equal(protectedWriteMaintenanceMessage(error), PROTECTED_WRITE_MAINTENANCE_MESSAGE);
+    return true;
+  });
+  assert.equal(uploads, 2);
+  assert.equal(calls.filter(value => value === "download").length, 1);
+  assert.equal(calls.filter(value => value === "remove").length, 1);
+  assert.ok(!calls.includes("publish"));
 });
 
 test("valid JPEG is decoded, resized, and encoded as a separate WebP payload", async () => {

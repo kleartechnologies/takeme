@@ -31,6 +31,10 @@ service firebase.storage {
     function signedIn() { return request.auth != null && !firestore.exists(/databases/(default)/documents/accountLifecycles/$(request.auth.uid)); }
     // Acceptance is removed atomically when deletion starts, so writes need only
     // this owner document and (for listing media) the existing listing document.
+    // Maintenance blocks new permits in Functions. Listing uploads already use
+    // both cross-service document accesses, so no third global-control lookup
+    // is added here. Existing permit leases can remain usable for 120 seconds;
+    // eligible owner cleanup/deletes remain allowed and are not permit-bound.
     function eligibleOwner(uid) {
       let acceptance = firestore.get(/databases/(default)/documents/users/$(uid)/private/onboarding).data;
       return request.auth != null && request.auth.uid == uid && configuredAcceptance(acceptance)

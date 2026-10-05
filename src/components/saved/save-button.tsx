@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { isListingSaved, removeSavedListing, saveListing } from "@/lib/services/saved";
 import type { SavedChange } from "@/lib/marketplace-state-events";
+import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
 export function SaveButton({ listingId, initialSaved, onChange, compact = false }: { listingId: string; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
   const { user, loading } = useAuth();
@@ -33,7 +34,7 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   const className = compact
     ? "grid size-11 place-items-center rounded-full border border-gray-200 bg-white/95 text-[var(--takeme-dark-green)] shadow-sm"
     : "button-secondary mt-3 min-h-12 w-full gap-2";
-  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}&intent=save`} onClick={event => { event.preventDefault(); void requireAction(); }} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
+  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}&intent=save`} onClick={event => { event.preventDefault(); void requireAction().catch(() => undefined); }} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
   const displaySaved = savedUid === user?.uid && saved;
 
   async function toggle() {
@@ -47,9 +48,9 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
       if (next) await saveListing(listingId);
       else await removeSavedListing(listingId);
       onChange?.(next);
-    } catch {
+    } catch (caught) {
       setSaved(!next);
-      setError("Could not update saved listings. Please try again.");
+      setError(protectedWriteMaintenanceMessage(caught) ?? "Could not update saved listings. Please try again.");
     } finally { setPending(false); }
   }
 

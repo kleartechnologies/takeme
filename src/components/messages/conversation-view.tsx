@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Ellipsis, Send, ShieldCheck, Star, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 import { getConversation, getConversationMessages, markConversationSeen, sendConversationMessage, type ConversationMessage, type ConversationSummary } from "@/lib/services/conversations";
 import { getPublicListingDetail, type PublicListing } from "@/lib/services/listings";
 import { getPublicSellerSummary } from "@/lib/services/public-sellers";
@@ -54,6 +55,7 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
   const restoreComposerFocus = useRef(false);
   const followBottom = useRef(true);
   const loadedOlder = useRef(false);
+  const autoSeenPaused = useRef(false);
   const fetchCurrent = useCallback(async () => {
     if (!alive.current) return;
     try {
@@ -81,7 +83,15 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
       else if (!next.transactionId || deal.transaction) setDealError("");
       // Read-only browsing by an outdated owner must not trigger a protected
       // write (or a policy redirect) merely because unread messages were viewed.
-      if (mayMarkSeen && document.visibilityState === "visible" && (next.unreadBy?.[userId] ?? 0) > 0) await markConversationSeen(id);
+      if (mayMarkSeen && !autoSeenPaused.current && document.visibilityState === "visible" && (next.unreadBy?.[userId] ?? 0) > 0) {
+        try { await markConversationSeen(id); }
+        catch (error) {
+          if (!protectedWriteMaintenanceMessage(error)) throw error;
+          // Do not poll or queue this background write while the user keeps reading.
+          // Explicit marketplace attempts still obtain their own fresh status.
+          autoSeenPaused.current = true;
+        }
+      }
     } catch (caught) { if (alive.current) setError(caught instanceof Error ? caught.message : "Conversation could not be loaded."); }
     finally { if (alive.current) setLoading(false); }
   }, [id, userId, mayMarkSeen]);

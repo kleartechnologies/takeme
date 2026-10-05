@@ -11,6 +11,9 @@ import { accountRouteRequiresSetup, isAuthPath, protectedActionDestination, safe
 import { isPublicInformationPath } from "@/lib/public-information";
 import { ACCOUNT_ELIGIBILITY_EVENT, type AccountEligibilityEventDetail } from "@/lib/account-eligibility";
 import { logout } from "@/lib/firebase/auth";
+import { assertProtectedWritesAvailable } from "@/lib/services/protected-write-status";
+import { announceProtectedWriteMaintenance, protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
+import { ProtectedWriteNotice } from "@/components/layout/protected-write-notice";
 
 interface AuthContextValue {
   user: User | null;
@@ -109,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const ownSetup = setupState?.uid === user?.uid ? setupState : null;
   const value = useMemo(() => ({ user, loading: isFirebaseConfigured ? loading : false, configured: isFirebaseConfigured, setup: ownSetup?.status ?? null, setupError: ownSetup?.error ?? false, refreshSetup }), [user, loading, ownSetup, refreshSetup]);
-  return <AuthContext.Provider value={value}>{user && pendingAccount === user.uid && <div role="status" className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm">TAKEME account deletion is pending. Normal marketplace activity is blocked. <Link className="font-semibold underline" href="/account-deletion">View deletion progress</Link></div>}<AccountSetupGate>{children}</AccountSetupGate></AuthContext.Provider>;
+  return <AuthContext.Provider value={value}><ProtectedWriteNotice />{user && pendingAccount === user.uid && <div role="status" className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm">TAKEME account deletion is pending. Normal marketplace activity is blocked. <Link className="font-semibold underline" href="/account-deletion">View deletion progress</Link></div>}<AccountSetupGate>{children}</AccountSetupGate></AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -125,16 +128,20 @@ export function useProtectedMarketplaceAction() {
     if (checking.current) return false;
     const next = safeAuthNext(intended ?? `${window.location.pathname}${window.location.search}${window.location.hash}`);
     const uid = auth?.currentUser?.uid;
-    if (!uid) { router.push(protectedActionDestination(false, null, next)!); return false; }
-    if (user?.uid !== uid) return false;
     checking.current = true;
     try {
+      await assertProtectedWritesAvailable();
+      if (!uid) { router.push(protectedActionDestination(false, null, next)!); return false; }
+      if (user?.uid !== uid) return false;
       const status = await refreshSetup();
       if (auth?.currentUser?.uid !== uid) return false;
       if (!status) throw new Error("Your account status could not be checked. Please try again.");
       const destination = protectedActionDestination(true, status, next);
       if (destination) { router.push(destination); return false; }
       return true;
+    } catch (error) {
+      if (protectedWriteMaintenanceMessage(error)) announceProtectedWriteMaintenance();
+      throw error;
     } finally { checking.current = false; }
   }, [user, refreshSetup, router]);
 }

@@ -557,3 +557,4 @@ export { getAccountDeletionAvailability, getAccountDeletionStatus, requestAccoun
 export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, finishAccountWelcome } from "./auth-onboarding";
 
 export { requestUploadPermits } from "./upload-permits";
+export { getProtectedWriteStatus } from "./protected-write-maintenance-runtime.ts";

@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import type { Listing } from "@/types/marketplace";
+import { marketplaceCallable } from "@/lib/services/marketplace-call";
 
 export type CandidateSource = "personalized" | "trending" | "recent" | "similar" | "nearby" | "auction" | "viewed";
 export type ClientMarketplaceEvent =
@@ -33,15 +34,15 @@ export interface DiscoveryResponse {
   metadata: { personalized: boolean; generatedAt: string; version: string };
 }
 
-export async function trackMarketplaceEvent(event: ClientMarketplaceEvent) {
+export async function trackMarketplaceEvent(event: ClientMarketplaceEvent, options: { background?: boolean } = {}) {
   if (!functions || !auth?.currentUser) return { accepted: false, reason: "not_signed_in" };
-  const callable = httpsCallable<ClientMarketplaceEvent, { accepted: boolean; reason: string }>(functions, "trackMarketplaceEvent");
+  const callable = marketplaceCallable<ClientMarketplaceEvent, { accepted: boolean; reason: string }>(functions, "trackMarketplaceEvent", options);
   return (await callable(event)).data;
 }
 
 /** Analytics must never block navigation or marketplace actions. */
 export function trackMarketplaceIntent(event: ClientMarketplaceEvent) {
-  void trackMarketplaceEvent(event).catch(() => undefined);
+  void trackMarketplaceEvent(event, { background: true }).catch(() => undefined);
 }
 
 export async function getHomeRecommendations(): Promise<RecommendationPage> {

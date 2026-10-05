@@ -1,12 +1,14 @@
 import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { functions } from "@/lib/firebase/client";
 import type { BuyNowListingInput } from "@/types/marketplace";
+import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
 async function call<Request, Response>(name: string, data: Request): Promise<Response> {
   if (!functions) throw new Error("Firebase Functions is not configured.");
   try {
     return (await marketplaceCallable<Request, Response>(functions, name)(data)).data;
   } catch (error) {
+    if (protectedWriteMaintenanceMessage(error)) throw error;
     if (error instanceof Error) throw new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""));
     throw new Error("The listing request could not be completed. Please try again.");
   }

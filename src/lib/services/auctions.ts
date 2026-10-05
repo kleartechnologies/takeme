@@ -1,6 +1,7 @@
 import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { functions } from "@/lib/firebase/client";
 import type { AuctionListingInput, AuctionStatus } from "@/types/marketplace";
+import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
 interface AuctionStateResponse {
   currentBid: number;
@@ -18,6 +19,7 @@ function requireFunctions() {
 }
 
 function callableError(error: unknown) {
+  if (protectedWriteMaintenanceMessage(error)) return error;
   if (typeof error === "object" && error && "message" in error && typeof error.message === "string") {
     return new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""));
   }

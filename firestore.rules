@@ -31,12 +31,33 @@ service cloud.firestore {
           && name in [request.auth.token.aud + '.appspot.com', request.auth.token.aud + '.firebasestorage.app']);
     }
     // END GENERATED RELEASE POLICY
+    // Missing control is the explicit normal/OFF compatibility default. An
+    // existing control must be exact and unpaused; malformed data fails closed.
+    function protectedWritesAllowed() {
+      return request.auth != null
+        && request.auth.token.aud in ['demo-takeme', 'takeme-staging-822a5', 'takeme-52b80']
+        && (!exists(/databases/$(database)/documents/releaseControls/current)
+          || validUnpausedReleaseControl(get(/databases/$(database)/documents/releaseControls/current).data));
+    }
+    function validUnpausedReleaseControl(control) {
+      return request.auth != null && control is map
+        && control.keys().hasAll(['releaseTarget', 'projectId', 'protectedWritesPaused'])
+        && control.keys().hasOnly(['releaseTarget', 'projectId', 'protectedWritesPaused'])
+        && control.protectedWritesPaused is bool && control.protectedWritesPaused == false
+        && control.projectId == request.auth.token.aud
+        && ((control.releaseTarget == 'demo' && control.projectId == 'demo-takeme')
+          || (control.releaseTarget == 'staging' && control.projectId == 'takeme-staging-822a5')
+          || (control.releaseTarget == 'production' && control.projectId == 'takeme-52b80'));
+    }
     function marketplaceEligible() {
-      let policy = get(/databases/$(database)/documents/releasePolicies/current).data;
-      let acceptance = get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data;
-      return signedIn() && configuredReleasePolicy(policy)
-        && acceptance.termsVersion == policy.termsVersion && acceptance.privacyVersion == policy.privacyVersion
-        && configuredAcceptance(acceptance);
+      // Short-circuit maintenance before policy/acceptance document access.
+      return protectedWritesAllowed() && signedIn()
+        && configuredReleasePolicy(get(/databases/$(database)/documents/releasePolicies/current).data)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data.termsVersion
+          == get(/databases/$(database)/documents/releasePolicies/current).data.termsVersion
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data.privacyVersion
+          == get(/databases/$(database)/documents/releasePolicies/current).data.privacyVersion
+        && configuredAcceptance(get(/databases/$(database)/documents/users/$(request.auth.uid)/private/onboarding).data);
     }
     function eligibleOwner(uid) { return owns(uid) && marketplaceEligible(); }
     function isAdmin() { return signedIn() && 'admin' in request.auth.token && request.auth.token.admin == true; }
@@ -94,6 +115,9 @@ service cloud.firestore {
 
     match /accountLifecycles/{uid} { allow get: if authenticated() && request.auth.uid == uid; allow list, write: if false; }
     match /releasePolicies/{id} { allow get: if id == 'current'; allow list, write: if false; }
+    // The status callable exposes only a safe boolean; never expose malformed
+    // control documents (which might contain accidental private fields).
+    match /releaseControls/{id} { allow read, write: if false; }
     match /accountDeletionOperations/{uid} { allow read, write: if false; }
     match /accountDeletionEvidence/{path=**} { allow read, write: if false; }
     match /accountDeletionSecurityHolds/{path=**} { allow read, write: if false; }
