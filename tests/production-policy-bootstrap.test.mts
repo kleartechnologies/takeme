@@ -6,7 +6,7 @@ import { legalPublicationReadiness } from "../functions/src/legal-publication.ts
 
 // Future approvals are pure fixtures only; real source decisions stay false/null.
 const policy = { publicationApproved: true, termsVersion: "approved-terms-v1", privacyVersion: "approved-privacy-v2", minimumAge: 18 as const };
-const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true };
+const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 const runtime = () => ({ env: { GCLOUD_PROJECT: "takeme-52b80", TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "takeme-52b80", TAKEME_STORAGE_BUCKETS: "takeme-52b80.firebasestorage.app", TAKEME_ENABLE_PRODUCTION_DELETION: "false" }, appProjectId: "takeme-52b80", appStorageBucket: "takeme-52b80.firebasestorage.app" });
 const plan = () => planProductionPolicyBootstrap(runtime(), policy, legal);
 
@@ -38,6 +38,28 @@ test("create-only bootstrap is idempotent under repeated and concurrent operatio
   assert.equal(await createProductionPolicyMirror(store, plan(), policy, legal), "already-current");
   assert.equal(writes, 1);
   assert.deepEqual(stored, plan().record);
+});
+
+test("new policy creation must read back exactly; failure never repairs or overwrites", async () => {
+  let writes = 0, reads = 0;
+  const store = {
+    create: async () => { writes++; },
+    read: async () => { reads++; return { ...plan().record, publicationApproved: false }; },
+  };
+  await assert.rejects(createProductionPolicyMirror(store, plan(), policy, legal), /created but read-back verification failed/);
+  assert.equal(writes, 1);
+  assert.equal(reads, 1);
+  await assert.rejects(createProductionPolicyMirror({ create: async () => {}, read: async () => { throw new Error("read unavailable"); } }, plan(), policy, legal), /read unavailable/);
+});
+
+test("final publication dates must be explicit valid calendar dates; historical proposal grants no approval", () => {
+  assert.equal(legalPublicationReadiness.effectiveDate, null);
+  assert.equal(legalPublicationReadiness.lastUpdated, null);
+  for (const field of ["effectiveDate", "lastUpdated"] as const) {
+    for (const value of [null, "", "2026-02-30", " 2026-10-05", "2026-10-05T00:00:00Z"]) {
+      assert.throws(() => planProductionPolicyBootstrap(runtime(), policy, { ...legal, [field]: value }));
+    }
+  }
 });
 
 test("missing/mismatched/revoked/extraneous mirror fields are never repaired or overwritten", async () => {

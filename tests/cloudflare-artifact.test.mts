@@ -20,7 +20,7 @@ function publicEnvironment() {
 }
 const approvedFixture = () => validateReleaseEnvironment(publicEnvironment(),
   { publicationApproved: true, termsVersion: "2026-10-05-v1", privacyVersion: "2026-10-05-v1", minimumAge: 18 },
-  { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true });
+  { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" });
 
 async function fixture(configuration: ReleaseConfiguration = approvedFixture()) {
   const repository = await mkdtemp(path.join(tmpdir(), "takeme-cloudflare-test-"));

@@ -24,7 +24,7 @@ function productionFixture() {
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789012", NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789012:web:" + "a".repeat(22),
     NEXT_PUBLIC_SITE_URL: "https://takeme.my", NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false" };
 }
-const approvedLegal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required" as const, address: "not-required" as const, productionRoutesReviewed: true };
+const approvedLegal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 const acceptRelease = (env: ReleaseEnvironment, policy: ReleasePolicy = approvedFixture) => validateReleaseEnvironment(env, policy, approvedLegal);
 const acceptedFixture = () => validateReleaseEnvironment({ ...productionFixture(), TAKEME_ENABLE_PRODUCTION_DELETION: "false" });
 

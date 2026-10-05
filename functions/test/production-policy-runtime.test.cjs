@@ -62,6 +62,8 @@ test("missing, revoked, incomplete or malformed production records fail closed",
   for (const record of [undefined, null, [], "published", {}, { ...finalRecord(), publicationApproved: false },
     { ...finalRecord(), publicationApproved: "true" }, { ...finalRecord(), termsVersion: null },
     { ...finalRecord(), privacyVersion: null }, { ...finalRecord(), minimumAge: 17 },
+    { ...finalRecord(), minimumAge: "18" }, { ...finalRecord(), minimumAge: null },
+    { ...finalRecord(), minimumAge: NaN }, { ...finalRecord(), minimumAge: Infinity },
     { ...finalRecord(), revokedAt: timestamp }, { ...finalRecord(), extraApproval: true }]) {
     assert.equal(releasePolicyFromMirror(record, context), null);
   }
@@ -69,6 +71,14 @@ test("missing, revoked, incomplete or malformed production records fail closed",
     const record = finalRecord(); delete record[field]; assert.equal(releasePolicyFromMirror(record, context), null);
   }
   assert.equal(releasePolicyFromMirror(finalRecord(), null), null);
+});
+
+test("the supported six-field policy mirror refuses unapproved timestamp and operator schema extensions", () => {
+  const context = contextFor(production());
+  for (const extra of [{ effectiveAt: timestamp }, { updatedAt: timestamp }, { operatorName: "Synthetic operator" },
+    { sourceRevision: "synthetic-local-revision" }]) {
+    assert.equal(releasePolicyFromMirror({ ...finalRecord(), ...extra }, context), null);
+  }
 });
 
 test("only the exact production six-field server-owned release record resolves a final policy", () => {

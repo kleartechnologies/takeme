@@ -52,7 +52,7 @@ test("staging rejects missing registered SDK fields, production/local resources 
 
 test("staging cannot borrow production policy approval or be relabeled as production", () => {
   const finalPolicy = { publicationApproved: true, termsVersion: "2026-10-05-v1", privacyVersion: "2026-10-05-v1", minimumAge: 18 as const };
-  const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required" as const, address: "not-required" as const, productionRoutesReviewed: true };
+  const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
   assert.throws(() => validateReleaseEnvironment(stagingFixture(), finalPolicy, legal), /staging test policies/);
   assert.throws(() => validateReleaseEnvironment({ ...stagingFixture(), TAKEME_RELEASE_TARGET: "production", TAKEME_DELETION_ENVIRONMENT: "production", TAKEME_ENABLE_PRODUCTION_DELETION: "true", NEXT_PUBLIC_SITE_URL: "https://takeme.my" }, finalPolicy, legal), /cannot qualify as a production/);
 });

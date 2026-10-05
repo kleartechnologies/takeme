@@ -59,10 +59,16 @@ export async function createProductionPolicyMirror(store: PolicyCreateStore, pla
   if (plan.path !== "releasePolicies/current" || plan.record.projectId !== productionEnvironment.projectId
     || validateProductionPolicy(policy).length || validateLegalPublication(readiness).length
     || !productionPolicyRecordMatches(plan.record, expected as ProductionPolicyRecord)) throw new ProductionPolicyBootstrapError(["The policy plan or current source approval is invalid."]);
-  try { await store.create(plan.record); return "created"; }
+  try { await store.create(plan.record); }
   catch (error) {
     if (![6, "already-exists"].includes((error as { code?: number | string }).code ?? "")) throw error;
     if (!productionPolicyRecordMatches(await store.read(), plan.record)) throw new ProductionPolicyBootstrapError(["The existing policy differs or is revoked; create-only bootstrap never changes it."]);
     return "already-current";
   }
+  // A successful create is not proof that the stored record matches the plan.
+  // Read back without repair, update, deletion or automatic re-enablement.
+  if (!productionPolicyRecordMatches(await store.read(), plan.record)) {
+    throw new ProductionPolicyBootstrapError(["The record was created but read-back verification failed; stop for review without changing it."]);
+  }
+  return "created";
 }

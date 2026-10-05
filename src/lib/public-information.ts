@@ -34,15 +34,19 @@ export function isLocalLegalPreview() { return canPreviewLegalDraft(legalRuntime
 export function isProductionLegalPublication() { return canPublishProductionLegal(legalRuntime()); }
 export function isLegalInformationAvailable() { return isLocalLegalPreview() || isProductionLegalPublication(); }
 
-// Existing owner-supplied proposed dates must be reviewed with the final content.
-// No version, effective date or approval is activated by a build command.
-export function legalDocumentState(kind: "terms" | "privacy" = "terms") {
-  const production = isProductionLegalPublication();
-  const preview = isLocalLegalPreview();
-  const previewVersion = isStagingReleaseProof(process.env.TAKEME_BUILD_RELEASE_PROOF) ? stagingEnvironment.policyVersion : demoReleasePolicy.termsVersion;
-  const policy = production ? productionReleasePolicy : preview ? { ...demoReleasePolicy, termsVersion: previewVersion, privacyVersion: previewVersion } : productionReleasePolicy;
+// Historical proposed dates belong only to an authorised draft preview.
+// Final dates stay unresolved until the central source receives owner/legal approval.
+export function resolveLegalDocumentState(kind: "terms" | "privacy", runtime: LegalRuntime, readiness: LegalPublicationReadiness = legalPublicationReadiness, finalPolicy: ReleasePolicy = productionReleasePolicy) {
+  const production = canPublishProductionLegal(runtime, readiness, finalPolicy);
+  const preview = canPreviewLegalDraft(runtime);
+  const previewVersion = isStagingReleaseProof(runtime.buildProof) ? stagingEnvironment.policyVersion : demoReleasePolicy.termsVersion;
+  const policy = production ? finalPolicy : preview ? { ...demoReleasePolicy, termsVersion: previewVersion, privacyVersion: previewVersion } : finalPolicy;
   return { version: kind === "privacy" ? policy.privacyVersion : policy.termsVersion,
-    termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion, lastUpdated: "2026-10-03", effectiveDate: "2026-10-05",
+    termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,
+    lastUpdated: preview ? "2026-10-03" : readiness.lastUpdated, effectiveDate: preview ? "2026-10-05" : readiness.effectiveDate,
     minimumAge: policy.minimumAge, jurisdiction: "Malaysia", publicationApproved: production, production };
+}
+export function legalDocumentState(kind: "terms" | "privacy" = "terms") {
+  return resolveLegalDocumentState(kind, legalRuntime());
 }
 export const legalDraft = Object.freeze(legalDocumentState());
