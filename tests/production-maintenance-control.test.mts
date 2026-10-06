@@ -48,8 +48,8 @@ test("operator planning is fixed-resource, exact three-field and does not activa
   assert.equal(Object.isFrozen(proposed.record), true);
   assert.deepEqual(Object.keys(proposed.record).sort(), ["releaseTarget", "projectId", "protectedWritesPaused"].sort());
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
-  assert.equal(legalPublicationReadiness.lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
+  assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
 });
 
 test("operator rejects wrong or mixed resources, emulator flags and deletion/payment activation", () => {

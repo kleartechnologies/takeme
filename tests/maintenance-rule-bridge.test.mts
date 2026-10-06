@@ -13,7 +13,9 @@ import { productionReleasePolicy } from "../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../functions/src/legal-publication.ts";
 
 const repository = path.resolve(new URL("../", import.meta.url).pathname);
-const captureDirectory = "/private/tmp/takeme-backend-parity-preparation.20261005";
+// An explicit fresh read-only capture may replace the old temporary location.
+// Both inputs still have to match the reviewed immutable hashes below.
+const captureDirectory = process.env.TAKEME_REVIEWED_RULE_CAPTURE_DIR ?? "/private/tmp/takeme-backend-parity-preparation.20261005";
 const firestoreInput = path.join(captureDirectory, "live-firestore.rules");
 const storageInput = path.join(captureDirectory, "live-storage.rules");
 const available = existsSync(firestoreInput) && existsSync(storageInput);
@@ -142,5 +144,5 @@ test("bridge generator has no cloud/apply/credential loads and leaves source app
   const source = await readFile(new URL("../scripts/prepare-maintenance-rule-bridge.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(source, /from\s+["']firebase|fetch\(|spawn\(|exec\(|process\.env|initializeApp\(|applicationDefault\(|cert\(/);
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(legalPublicationReadiness.effectiveDate, null); assert.equal(legalPublicationReadiness.lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12"); assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
 });

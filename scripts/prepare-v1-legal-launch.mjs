@@ -4,7 +4,8 @@ import { readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { legalLaunchDateInput, prepareV1LegalDateSource } from "../functions/src/legal-launch-date-plan.ts";
-import { prepareV1PolicyRecord } from "../src/lib/v1-legal-launch-gate.ts";
+import { prepareV1PolicyRecord, reviewV1ReleasePreparation } from "../src/lib/v1-legal-launch-gate.ts";
+import { v1OwnerLegalDocuments } from "../functions/src/v1-owner-approvals.ts";
 
 // A date proposal only, outside Git. No apply mode, credentials, SDK or cloud access.
 try {
@@ -26,7 +27,8 @@ try {
     sourceSha256: createHash("sha256").update(source).digest("hex"), proposal,
     proposedSourceSha256: createHash("sha256").update(proposedSource).digest("hex"),
     futurePolicyRecord: prepareV1PolicyRecord(), policyRecordWritten: false,
-    approvalsRequired: "Final owner/counsel, address/disclosure, date and coordinated production activation approval remain independent.",
+    ownerLegalContent: v1OwnerLegalDocuments, releasePreparationBlockers: reviewV1ReleasePreparation(),
+    approvalsRequired: "Owner content is approved. Counsel review and any required public-address decision remain outstanding; publication, launch date and production activation remain independent.",
   }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
   console.log("Local V1 date proposal prepared outside Git. Source dates and approvals unchanged; nothing applied, activated or deployed.");
 } catch (error) {

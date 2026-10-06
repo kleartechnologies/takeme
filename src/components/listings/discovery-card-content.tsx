@@ -2,7 +2,7 @@
 
 import { Clock3, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
-import { auctionTimeRemaining, discoveryPrice, listingAge } from "@/lib/listing-display";
+import { auctionTimeRemaining, listingCardPrice, listingAge } from "@/lib/listing-display";
 import { auctionBidLabel } from "@/lib/auction-presentation";
 import type { Listing } from "@/types/marketplace";
 
@@ -17,8 +17,9 @@ export function DiscoveryCardContent({ listing }: { listing: Listing }) {
     return () => clearInterval(timer);
   }, []);
   const auction = listing.listingType !== "buy_now";
+  const price = listingCardPrice(listing);
   return <>
-    <div className="discovery-price-row"><p className="discovery-price">{money.format(discoveryPrice(listing))}</p>{auction && <span className="discovery-bid-label">{auctionBidLabel(listing, now ?? 0)}</span>}</div>
+    <div className="discovery-price-row"><p className="discovery-price">{price === null ? (listing.bidCount ?? 0) === 0 ? "No bids" : "—" : money.format(price)}</p>{auction && <span className="discovery-bid-label">{auctionBidLabel(listing, now ?? 0)}</span>}</div>
     <p className="discovery-product-title">{listing.title}</p>
     {!auction && <p className="discovery-meta">{listing.location && <><MapPin size={11} aria-hidden="true" /><span className="truncate">{listing.location}</span></>}{now !== null && <time dateTime={listing.createdAt}>{listing.location && <span aria-hidden="true"> · </span>}{listingAge(listing.createdAt, now)}</time>}</p>}
     {auction ? <p className="discovery-auction-time"><Clock3 size={12} aria-hidden="true" />{listing.auctionStatus === "active" ? listing.auctionEndAt && now !== null ? auctionTimeRemaining(listing.auctionEndAt, now) : "Live auction" : listing.auctionStatus === "scheduled" ? "Scheduled auction" : listing.auctionStatus === "cancelled" ? "Auction cancelled" : "Auction ended"}</p> : <span className="discovery-condition">{listing.condition}</span>}

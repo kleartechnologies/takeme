@@ -53,8 +53,8 @@ test("new policy creation must read back exactly; failure never repairs or overw
 });
 
 test("final publication dates must be explicit valid calendar dates; historical proposal grants no approval", () => {
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
-  assert.equal(legalPublicationReadiness.lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
+  assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
   for (const field of ["effectiveDate", "lastUpdated"] as const) {
     for (const value of [null, "", "2026-02-30", " 2026-10-05", "2026-10-05T00:00:00Z"]) {
       assert.throws(() => planProductionPolicyBootstrap(runtime(), policy, { ...legal, [field]: value }));

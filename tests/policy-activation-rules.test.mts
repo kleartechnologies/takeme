@@ -38,8 +38,8 @@ test("read-only preview uses central final identifiers and exact production iden
   assert.match(section(preview, "configuredReleasePolicy"), /policy\.releaseTarget == 'production' && policy\.projectId == "takeme-52b80"/);
   assert.match(section(preview, "configuredReleasePolicy"), /policy\.projectId == request\.auth\.token\.aud/);
   assert.equal(JSON.stringify({ policy: productionReleasePolicy, legal: legalPublicationReadiness }), before);
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
-  assert.equal(legalPublicationReadiness.lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
+  assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
   assert.equal(Object.isFrozen(productionReleasePolicy), true);
 });
 

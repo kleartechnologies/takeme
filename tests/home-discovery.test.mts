@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { auctionTimeRemaining, discoveryPrice, listingAge } from "../src/lib/listing-display.ts";
+import { auctionTimeRemaining, discoveryPrice, listingCardPrice, listingAge } from "../src/lib/listing-display.ts";
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const now = Date.parse("2026-10-02T06:00:00Z");
@@ -10,6 +10,17 @@ test("Home price presentation preserves MYR vs sen and starting/current bid sema
   assert.equal(discoveryPrice({ listingType: "buy_now", price: 25.5 }), 25.5);
   assert.equal(discoveryPrice({ listingType: "auction", price: 0, startingBid: 1000, currentBid: 0, bidCount: 0 }), 10);
   assert.equal(discoveryPrice({ listingType: "auction", price: 0, startingBid: 1000, currentBid: 1100, bidCount: 1 }), 11);
+});
+
+test("auction cards never substitute starting/current amounts for a missing final bid", () => {
+  const auction = { listingType: "auction", price: 0, startingBid: 1000, currentBid: 1100 };
+  assert.equal(listingCardPrice({ listingType: "buy_now", price: 25.5 }), 25.5);
+  assert.equal(listingCardPrice({ ...auction, auctionStatus: "scheduled", bidCount: 0 }), 10);
+  assert.equal(listingCardPrice({ ...auction, auctionStatus: "active", bidCount: 1 }), 11);
+  assert.equal(listingCardPrice({ ...auction, auctionStatus: "ended", bidCount: 0, finalBid: null }), null);
+  assert.equal(listingCardPrice({ ...auction, status: "ended", bidCount: 1 }), null);
+  assert.equal(listingCardPrice({ ...auction, auctionStatus: "ended", bidCount: 1, finalBid: 1200 }), 12);
+  assert.equal(listingCardPrice({ ...auction, auctionStatus: "ended", finalBid: Number.NaN }), null);
 });
 
 test("listing age and auction urgency derive only from actual timestamps", () => {
@@ -62,7 +73,7 @@ test("Home discovery previews stay one compact row without changing inventory qu
 
 test("compact Home cards leave detailed seller trust and auction history on detail routes", () => {
   const content = source("src/components/listings/discovery-card-content.tsx");
-  assert.doesNotMatch(content, /PublicSellerSummary|bidCount.*bids|completedSales|sellerId/);
+  assert.doesNotMatch(content, /PublicSellerSummary|completedSales|sellerId/);
   assert.match(content, /auctionBidLabel\(listing, now \?\? 0\)/);
   assert.match(content, /auctionTimeRemaining\(listing.auctionEndAt, now\)/);
   const card = source("src/components/listings/listing-card.tsx");

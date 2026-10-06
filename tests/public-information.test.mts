@@ -64,22 +64,23 @@ test("owner-confirmed registration is available without activating final policie
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(productionReleasePolicy.termsVersion, "1.0");
   assert.equal(productionReleasePolicy.privacyVersion, "1.0");
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
-  assert.equal(legalPublicationReadiness.lastUpdated, null);
-  assert.equal(resolveLegalDocumentState("terms", {}).effectiveDate, null);
-  assert.equal(resolveLegalDocumentState("privacy", {}).lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
+  assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
+  assert.equal(resolveLegalDocumentState("terms", {}).effectiveDate, "2026-10-12");
+  assert.equal(resolveLegalDocumentState("privacy", {}).lastUpdated, "2026-10-12");
 });
 
 test("final publication requires actual calendar dates and review never invents a launch date", () => {
   for (const valid of ["2024-02-29", "2026-10-05", "2030-12-31"]) assert.equal(isLegalCalendarDate(valid), true, valid);
   for (const invalid of [null, undefined, 20261005, "", " 2026-10-05", "2026-10-05 ", "2026-1-05", "2026-10-05T00:00:00Z", "2026-02-29", "2026-02-30", "2026-04-31", "2026-13-01", "2026-00-01", "2026-01-00", "0000-01-01"]) assert.equal(isLegalCalendarDate(invalid), false, String(invalid));
-  assert.ok(validateLegalPublication().some(issue => /effective date/.test(issue)));
-  assert.ok(validateLegalPublication().some(issue => /last-updated date/.test(issue)));
+  const missingDates = { ...legalPublicationReadiness, effectiveDate: null, lastUpdated: null };
+  assert.ok(validateLegalPublication(missingDates).some(issue => /effective date/.test(issue)));
+  assert.ok(validateLegalPublication(missingDates).some(issue => /last-updated date/.test(issue)));
   const preview = resolveLegalDocumentState("privacy", { nodeEnv: "development", useEmulators: "true", projectId: "demo-takeme" });
   assert.equal(preview.production, false);
   assert.equal(preview.publicationApproved, false);
-  assert.equal(preview.effectiveDate, null);
-  assert.equal(preview.lastUpdated, null);
+  assert.equal(preview.effectiveDate, "2026-10-12");
+  assert.equal(preview.lastUpdated, "2026-10-12");
   assert.equal(preview.version, "1.0");
   assert.equal(preview.termsVersion, "1.0");
   assert.equal(preview.privacyVersion, "1.0");

@@ -26,7 +26,7 @@ test("activation preparation creates only review outputs with exact future six-f
     assert.equal(plan.futureDocument.written, false);
     assert.equal(plan.deletionEnabled, false);
     assert.equal(plan.paymentsEnabled, false);
-    assert.deepEqual(plan.actualSource, { publicationApproved: false, effectiveDate: null, lastUpdated: null });
+    assert.deepEqual(plan.actualSource, { publicationApproved: false, effectiveDate: "2026-10-12", lastUpdated: "2026-10-12" });
     assert.deepEqual(plan.launchDateProposal, { status: "pending", effectiveDate: null, lastUpdated: null });
     assert.deepEqual(plan.futureDocument.record, { releaseTarget: "production", projectId: "takeme-52b80", publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18 });
     assert.equal(plan.futureDocument.path, "releasePolicies/current");
@@ -60,6 +60,6 @@ test("activation preparation rejects apply, approval overrides, in-Git output an
   try { assert.notEqual(prepare(["--output", parent]).status, 0); }
   finally { await rm(parent, { recursive: true, force: true }); }
   assert.equal(productionReleasePolicy.publicationApproved, false);
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
-  assert.equal(legalPublicationReadiness.lastUpdated, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
+  assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");
 });

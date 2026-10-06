@@ -4,6 +4,15 @@ export function discoveryPrice(listing: { listingType: string; price: number; bi
   return auction ? ((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100 : listing.price;
 }
 
+// An ended auction's starting/current amount is not evidence of a final bid.
+export function listingCardPrice(listing: { listingType: string; price: number; status?: string; auctionStatus?: string; bidCount?: number; currentBid?: number; startingBid?: number; finalBid?: number | null }) {
+  const auction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
+  if (auction && (listing.status === "ended" || listing.auctionStatus === "ended")) {
+    return typeof listing.finalBid === "number" && Number.isFinite(listing.finalBid) && listing.finalBid > 0 ? listing.finalBid / 100 : null;
+  }
+  return discoveryPrice(listing);
+}
+
 export function listingAge(createdAt: string, now: number) {
   const elapsed = now - Date.parse(createdAt);
   if (!Number.isFinite(elapsed) || elapsed < 0) return "";

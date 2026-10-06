@@ -55,8 +55,8 @@ test("BM identity uses the approved central V1 source without final dates or pub
   assert.equal(bmPrivacyDocument.version, privacyDocument.version);
   assert.equal(bmPrivacyDocument.minimumAge, 18);
   assert.equal(bmPrivacyDocument.minimumAge, privacyDocument.minimumAge);
-  assert.equal(bmPrivacyDocument.effectiveDate, null);
-  assert.equal(bmPrivacyDocument.lastUpdated, null);
+  assert.equal(bmPrivacyDocument.effectiveDate, "2026-10-12");
+  assert.equal(bmPrivacyDocument.lastUpdated, "2026-10-12");
   assert.equal(bmPrivacyDocument.effectiveDate, legalPublicationReadiness.effectiveDate);
   assert.equal(bmPrivacyDocument.lastUpdated, legalPublicationReadiness.lastUpdated);
   assert.equal(productionReleasePolicy.publicationApproved, false);

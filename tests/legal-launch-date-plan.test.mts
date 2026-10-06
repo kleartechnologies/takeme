@@ -52,8 +52,8 @@ test("preparing a date changes none of the eight existing legal dates or central
     assert.equal(document.version, "1.0");
     assert.equal(document.effectiveDate, legalPublicationReadiness.effectiveDate);
     assert.equal(document.lastUpdated, legalPublicationReadiness.lastUpdated);
-    assert.equal(document.effectiveDate, null);
-    assert.equal(document.lastUpdated, null);
+    assert.equal(document.effectiveDate, "2026-10-12");
+    assert.equal(document.lastUpdated, "2026-10-12");
   }
   assert.equal(JSON.stringify(legalPublicationReadiness), readinessBefore);
   assert.equal(JSON.stringify(productionReleasePolicy), policyBefore);

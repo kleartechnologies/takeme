@@ -152,7 +152,7 @@ export const termsSections: InformationSection[] = [
     "LEGAL REVIEW REQUIRED — final indemnity scope and Malaysian drafting. No additional indemnity, defence obligation or open-ended reimbursement obligation is imposed by this unresolved draft section.",
   ] },
   { id: "updates", title: "31. Changes to These Terms", paragraphs: [
-    `Changes should have a clear version, last-updated date and effective date, with appropriate notice and acceptance where required. Terms v${termsDocument.version} becomes effective only on the actual approved public launch date; last updated uses that date unless the owner separately approves a change. No launch date is set by this draft.`,
+    `Changes should have a clear version, last-updated date and effective date, with appropriate notice and acceptance where required. Terms v${termsDocument.version} becomes effective only on the actual approved public launch date; last updated uses that date unless the owner separately approves a change. ${termsDocument.effectiveDate ? `The central owner-approved launch date is ${termsDocument.effectiveDate}; publication remains separately gated.` : "No launch date is set by this draft."}`,
     "When the required Terms or Privacy version changes, earlier acceptance is not treated as current consent. Users may continue public browsing and must expressly reaccept before protected writes. Historical acceptance evidence and existing marketplace records are preserved as implemented, and returning to an intended context does not execute the action automatically.",
   ] },
   { id: "law", title: "32. Governing Law", paragraphs: [

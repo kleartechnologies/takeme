@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -14,7 +14,13 @@ import { termsDocument } from "../src/content/terms.ts";
 import { privacyDocument } from "../src/content/privacy.ts";
 import { bmPrivacyDocument } from "../src/content/privacy-bm.ts";
 import { prohibitedItemsPolicy } from "../src/content/marketplace-rules.ts";
-import { counselApprovalItems, externalLegalIssueIds, finalLegalRoutes, ownerApprovalItems, pendingV1LaunchApprovals, prepareV1PolicyRecord, reviewV1PublicationGate, type V1PublicationGateInputs } from "../src/lib/v1-legal-launch-gate.ts";
+import { counselApprovalItems, currentV1LaunchApprovals, externalLegalIssueIds, finalLegalRoutes, ownerApprovalItems, pendingV1LaunchApprovals, prepareV1PolicyRecord, reviewV1PublicationGate, reviewV1ReleasePreparation, type V1PublicationGateInputs } from "../src/lib/v1-legal-launch-gate.ts";
+import { ownerApprovedPreparationItems, ownerApprovedV1ProductDecisions, v1OwnerDocumentApproval, v1OwnerLegalDocuments } from "../functions/src/v1-owner-approvals.ts";
+import { canPublishProductionLegal } from "../src/lib/public-information.ts";
+import { buildTermsMetadata } from "../src/lib/terms-metadata.ts";
+import { buildPrivacyMetadata } from "../src/lib/privacy-metadata.ts";
+import { buildBmPrivacyMetadata } from "../src/lib/privacy-bm-metadata.ts";
+import { buildProhibitedItemsMetadata } from "../src/lib/prohibited-items-metadata.ts";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const sourcePath = "functions/src/legal-publication.ts";
@@ -43,8 +49,8 @@ function readyFixture(): V1PublicationGateInputs {
 test("all four actual documents preserve central V1 identity, unresolved dates and public operator details", () => {
   for (const document of Object.values(documents)) {
     assert.equal(document.version, "1.0");
-    assert.equal(document.effectiveDate, null);
-    assert.equal(document.lastUpdated, null);
+    assert.equal(document.effectiveDate, "2026-10-12");
+    assert.equal(document.lastUpdated, "2026-10-12");
     assert.equal(document.operator.name, "TAKEME TECHNOLOGIES");
     assert.equal(document.operator.registrationNumber, "KT0622373-U");
     assert.equal(document.operator.supportEmail, "support.takeme@gmail.com");
@@ -54,6 +60,53 @@ test("all four actual documents preserve central V1 identity, unresolved dates a
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(prohibitedItemsPolicy.publicationApproved, false);
+});
+
+test("current owner-approved documents and nine preparation decisions remain separate from counsel and launch authority", () => {
+  assert.deepEqual(Object.keys(v1OwnerLegalDocuments).sort(), Object.keys(documents).sort());
+  for (const [id, approval] of Object.entries(v1OwnerLegalDocuments)) {
+    assert.equal(approval.version, documents[id as keyof typeof documents].version);
+    assert.equal(approval.version, "1.0");
+    assert.equal(approval.ownerStatus, "owner-approved");
+    assert.equal(approval.counselStatus, "outstanding");
+  }
+  assert.deepEqual(Object.keys(ownerApprovedPreparationItems).sort(), ["terms", "privacyEn", "privacyBm", "prohibitedItems", "productPolicyModel", "publicBrowsingMigration",
+    "immutableAcceptanceHistory", "protectedWriteMaintenance", "productionActivationRunbook"].sort());
+  for (const key of Object.keys(ownerApprovedPreparationItems) as (keyof typeof ownerApprovedPreparationItems)[]) assert.equal(currentV1LaunchApprovals.owner[key], true);
+  assert.ok(Object.values(ownerApprovedV1ProductDecisions).every(value => value === true));
+  assert.ok(Object.values(currentV1LaunchApprovals.counsel).every(value => value === false));
+  assert.equal(currentV1LaunchApprovals.owner.launchDate, true);
+  assert.ok(Object.values(currentV1LaunchApprovals.issues).every(issue => issue.status === "pending" && issue.reviewReference === null));
+  for (const key of ["addressDisclosure", "retention", "productionActivation", "domainCutover"] as const) assert.equal(currentV1LaunchApprovals.owner[key], false);
+  for (const version of [null, "1.0-draft", "1.0-staging", "2.0"]) assert.equal(v1OwnerDocumentApproval(version).ownerStatus, "not-approved");
+});
+
+test("deferred address and outstanding counsel permit engineering preparation while final publication remains closed", () => {
+  assert.equal(operatorDisclosureDecision.kind, "unresolved");
+  assert.equal(operatorDisclosureDecision.text, null);
+  assert.equal(operatorDisclosureDecision.bmText, null);
+  assert.deepEqual(reviewV1ReleasePreparation(), []);
+  assert.ok(reviewV1ReleasePreparation(pendingV1LaunchApprovals).length);
+  const publicationIssues = reviewV1PublicationGate({ ...readyFixture(), approvals: currentV1LaunchApprovals, launchDate: null,
+    sourceDates, disclosure: operatorDisclosureDecision, verifiedRoutes: {}, finalFrontendArtifactVerified: false, policyRulesArtifactsRegenerated: false });
+  assert.ok(publicationIssues.some(issue => /Counsel/.test(issue)));
+  assert.ok(publicationIssues.some(issue => /address/.test(issue)));
+  assert.ok(publicationIssues.some(issue => /productionActivation/.test(issue)));
+  assert.equal(legalPublicationReadiness.publicationApproved, false);
+  assert.equal(legalPublicationReadiness.finalContentApproved, false);
+  assert.equal(legalPublicationReadiness.bmPrivacyNoticeApproved, false);
+});
+
+test("recording owner approval publishes no address or legal route and does not supply an active runtime policy", () => {
+  assert.equal(canPublishProductionLegal({ nodeEnv: "production", useEmulators: "false", projectId: "takeme-52b80" }), false);
+  for (const metadata of [buildTermsMetadata(false), buildPrivacyMetadata(false), buildBmPrivacyMetadata(false), buildProhibitedItemsMetadata(false)]) {
+    assert.deepEqual(metadata.robots, { index: false, follow: false });
+  }
+  const context = { target: "production" as const, projectId: "takeme-52b80" };
+  assert.equal(releasePolicyFromMirror(undefined, context), null);
+  assert.equal(releasePolicyFromMirror({ releaseTarget: context.target, projectId: context.projectId, ...productionReleasePolicy }, context), null);
+  assert.equal(operatorDisclosureDecision.text, null);
+  for (const document of Object.values(documents)) assert.equal(document.businessAddress, null);
 });
 
 test("only the named owner date input prepares all eight fields, with no implicit fallback", () => {
@@ -75,12 +128,13 @@ test("only the named owner date input prepares all eight fields, with no implici
 
 test("the exact proposed source change propagates through actual legal modules in an isolated copy without approving publication", async () => {
   const original = await readFile(path.join(repository, sourcePath), "utf8");
-  const proposal = prepareV1LegalDateSource(original, inputs);
+  const pending = original.replace('effectiveDate: "2026-10-12", lastUpdated: "2026-10-12"', "effectiveDate: null, lastUpdated: null");
+  const proposal = prepareV1LegalDateSource(pending, inputs);
   assert.equal(proposal.applied, false);
-  assert.equal(proposal.proposedSource, original.replace(proposal.before, proposal.after));
-  assert.throws(() => prepareV1LegalDateSource(original, {}), /supplied explicitly/);
+  assert.equal(proposal.proposedSource, pending.replace(proposal.before, proposal.after));
+  assert.throws(() => prepareV1LegalDateSource(pending, {}), /supplied explicitly/);
   assert.throws(() => prepareV1LegalDateSource(proposal.proposedSource, inputs), /review changes/);
-  assert.throws(() => prepareV1LegalDateSource(original.replace("publicationApproved: false", "publicationApproved: true"), inputs), /review changes/);
+  assert.throws(() => prepareV1LegalDateSource(pending.replace("publicationApproved: false", "publicationApproved: true"), inputs), /review changes/);
   const directory = await mkdtemp(path.join(tmpdir(), "takeme-legal-date-offline-"));
   try {
     const files = [sourcePath, "functions/src/release-policy.ts", "functions/src/staging-environment.ts", "functions/src/production-environment.ts",
@@ -98,7 +152,7 @@ test("the exact proposed source change propagates through actual legal modules i
     assert.equal((await import(pathToFileURL(path.join(directory, sourcePath)).href)).legalPublicationReadiness.publicationApproved, false);
   } finally { await rm(directory, { recursive: true, force: true }); }
   assert.equal(await readFile(path.join(repository, sourcePath), "utf8"), original);
-  assert.equal(legalPublicationReadiness.effectiveDate, null);
+  assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
 });
 
 test("public disclosure needs explicit owner and counsel approval, and an alternative does not invent an address", () => {
@@ -159,8 +213,12 @@ test("every owner/counsel/legal-issue and artifact/route/date/disclosure conditi
 test("CLI creates a private outside-Git proposal only, rejects missing date/apply/overwrite/in-Git output", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "takeme-launch-proposal-offline-"));
   const original = await readFile(path.join(repository, sourcePath), "utf8");
+  const fixture = path.join(directory, "source");
+  await mkdir(fixture);
+  for (const folder of ["src", "functions/src", "scripts"]) await cp(path.join(repository, folder), path.join(fixture, folder), { recursive: true });
+  await writeFile(path.join(fixture, sourcePath), original.replace('effectiveDate: "2026-10-12", lastUpdated: "2026-10-12"', "effectiveDate: null, lastUpdated: null"));
   const run = (args: string[], date?: string) => spawnSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--experimental-strip-types", "scripts/prepare-v1-legal-launch.mjs", ...args], {
-    cwd: repository, encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, ...(date === undefined ? {} : { [legalLaunchDateInput]: date }) },
+    cwd: fixture, encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, ...(date === undefined ? {} : { [legalLaunchDateInput]: date }) },
   });
   try {
     const output = path.join(directory, "proposal.json");
@@ -175,6 +233,10 @@ test("CLI creates a private outside-Git proposal only, rejects missing date/appl
     assert.equal(plan.cloudAccessed, false); assert.equal(plan.policyRecordWritten, false);
     assert.equal(plan.proposal.input, legalLaunchDateInput);
     assert.deepEqual(plan.proposal.documents, planV1LegalDates(inputs).documents);
+    assert.deepEqual(plan.releasePreparationBlockers, []);
+    for (const approval of Object.values(plan.ownerLegalContent) as { ownerStatus: string; counselStatus: string }[]) {
+      assert.equal(approval.ownerStatus, "owner-approved"); assert.equal(approval.counselStatus, "outstanding");
+    }
     assert.notEqual(run(["--output", output], syntheticDate).status, 0);
   } finally { await rm(directory, { recursive: true, force: true }); }
   assert.equal(await readFile(path.join(repository, sourcePath), "utf8"), original);

@@ -13,6 +13,7 @@ import { trackMarketplaceIntent, type CandidateSource } from "@/lib/services/int
 import { trackPromotionIntent, type PromotionBadge } from "@/lib/services/promotions";
 import { auctionBidLabel } from "@/lib/auction-presentation";
 import { useCurrentTime } from "@/lib/use-current-time";
+import { listingCardPrice } from "@/lib/listing-display";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -30,6 +31,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
   const impression = useRef("");
   const recommendationImpression = useRef("");
   const isAuction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
+  const price = listingCardPrice(listing);
   useEffect(() => {
     if (!promotion || !user || impression.current === promotion.promotionId || !card.current || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver((entries) => {
@@ -73,7 +75,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
       <Link href={`/listings/${listing.id}`} onClick={recordClick} className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-3">
         {variant === "discovery" ? <DiscoveryCardContent listing={listing} /> : <>
         <p className="line-clamp-2 text-sm font-semibold leading-5 tracking-[-0.02em] text-[var(--takeme-charcoal)] sm:text-base">{listing.title}</p>
-        <p className="mt-1 text-lg font-bold leading-6 tracking-tight text-[var(--takeme-dark-green)] sm:text-xl">{isAuction ? money.format(((listing.bidCount ?? 0) > 0 ? listing.currentBid ?? 0 : listing.startingBid ?? 0) / 100) : money.format(listing.price)}</p>
+        <p className="mt-1 text-lg font-bold leading-6 tracking-tight text-[var(--takeme-dark-green)] sm:text-xl">{price === null ? (listing.bidCount ?? 0) === 0 ? "No bids" : "—" : money.format(price)}</p>
         {isAuction && <p className="mt-0.5 text-[11px] font-medium text-[var(--takeme-dark-green)] sm:text-xs">{auctionBidLabel(listing, now)} · {listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"}</p>}
         <div className="mt-1 flex items-center gap-1 text-xs text-[var(--takeme-gray)]">
           <span className="flex min-w-0 items-center gap-1"><MapPin size={13} className="shrink-0" /><span className="truncate">{listing.location}</span></span>

@@ -3,10 +3,12 @@ import { productionReleasePolicy, validateProductionPolicy } from "../../functio
 import { releasePolicyFromMirror } from "../../functions/src/policy-runtime.ts";
 import { validateV1LegalDates, type V1LegalDates } from "../../functions/src/legal-launch-date-plan.ts";
 import { validateOperatorDisclosure, type OperatorDisclosureDecision } from "../content/operator-disclosure.ts";
+import { deferredV1OwnerDecisions, ownerApprovedPreparationItems } from "../../functions/src/v1-owner-approvals.ts";
 
 // Preparation model only. No runtime import, cloud client, write or approval override.
 export const finalLegalRoutes = ["/terms", "/privacy", "/privacy/bm", "/help/prohibited-items", "/help", "/contact", "/account-deletion"] as const;
-export const ownerApprovalItems = ["terms", "privacyEn", "privacyBm", "prohibitedItems", "addressDisclosure", "retention", "launchDate", "productionActivation", "domainCutover"] as const;
+export const ownerApprovalItems = ["terms", "privacyEn", "privacyBm", "prohibitedItems", "productPolicyModel", "publicBrowsingMigration", "immutableAcceptanceHistory",
+  "protectedWriteMaintenance", "productionActivationRunbook", "addressDisclosure", "retention", "launchDate", "productionActivation", "domainCutover"] as const;
 export const counselApprovalItems = ["terms", "privacyEn", "privacyBm", "sellerDisclosures", "retentionDeletion", "providersTransfers", "rightsBreachDpo", "liabilityIndemnity", "prohibitedRegulatory"] as const;
 export const externalLegalIssueIds = [
   "terms", "privacyEn", "privacyBm", "prohibitedItems", "addressDisclosure", "individualSellerDisclosures", "businessSellerDisclosures",
@@ -20,10 +22,31 @@ export interface V1LaunchApprovals {
   issues: Readonly<Record<typeof externalLegalIssueIds[number], Readonly<LegalIssueDecision>>>;
 }
 const unchecked = <T extends string>(items: readonly T[]) => Object.freeze(Object.fromEntries(items.map(id => [id, false])) as Record<T, boolean>);
+// Blank template for tests/future records; it is not the current owner's status.
 export const pendingV1LaunchApprovals: Readonly<V1LaunchApprovals> = Object.freeze({
   owner: unchecked(ownerApprovalItems), counsel: unchecked(counselApprovalItems),
   issues: Object.freeze(Object.fromEntries(externalLegalIssueIds.map(id => [id, Object.freeze({ status: "pending", reviewReference: null })])) as V1LaunchApprovals["issues"]),
 });
+
+// Current factual preparation record: owner decisions and counsel/publication
+// decisions remain independent. Deferred address/launch choices do not undo content approval.
+export const currentV1LaunchApprovals: Readonly<V1LaunchApprovals> = Object.freeze({
+  owner: Object.freeze({ ...ownerApprovedPreparationItems, ...deferredV1OwnerDecisions }),
+  counsel: pendingV1LaunchApprovals.counsel,
+  issues: pendingV1LaunchApprovals.issues,
+});
+
+/** Review preparation authority only. Never requires an address, counsel approval or launch activation. */
+export function reviewV1ReleasePreparation(approvals: V1LaunchApprovals = currentV1LaunchApprovals): string[] {
+  const issues: string[] = [];
+  for (const key of Object.keys(ownerApprovedPreparationItems) as (keyof typeof ownerApprovedPreparationItems)[]) {
+    if (approvals.owner[key] !== true) issues.push(`Owner release-preparation approval outstanding: ${key}.`);
+  }
+  if (productionReleasePolicy.termsVersion !== "1.0" || productionReleasePolicy.privacyVersion !== "1.0" || productionReleasePolicy.minimumAge !== 18) {
+    issues.push("The release-preparation source must preserve reviewed V1 versions and 18+ eligibility.");
+  }
+  return issues;
+}
 
 export interface V1PublicationGateInputs {
   approvals: V1LaunchApprovals;

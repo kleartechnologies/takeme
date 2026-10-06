@@ -63,15 +63,15 @@ test("Prohibited Items policy identity is part of the central inactive Terms V1 
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(legalPublicationReadiness.finalContentApproved, false);
-  assert.equal(prohibitedItemsPolicy.effectiveDate, null);
-  assert.equal(prohibitedItemsPolicy.lastUpdated, null);
+  assert.equal(prohibitedItemsPolicy.effectiveDate, "2026-10-12");
+  assert.equal(prohibitedItemsPolicy.lastUpdated, "2026-10-12");
   assert.equal(prohibitedItemsPolicy.effectiveDate, legalPublicationReadiness.effectiveDate);
   assert.equal(prohibitedItemsPolicy.lastUpdated, legalPublicationReadiness.lastUpdated);
   const preview = resolveLegalDocumentState("terms", { nodeEnv: "development", useEmulators: "true", projectId: "demo-takeme" });
   assert.equal(preview.version, prohibitedItemsPolicy.version);
   assert.equal(preview.publicationApproved, false);
-  assert.equal(preview.effectiveDate, null);
-  assert.equal(preview.lastUpdated, null);
+  assert.equal(preview.effectiveDate, "2026-10-12");
+  assert.equal(preview.lastUpdated, "2026-10-12");
 });
 
 test("Policy uses the confirmed operator, SSM and reporting email without a business address", () => {

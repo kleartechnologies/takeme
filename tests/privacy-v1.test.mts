@@ -55,15 +55,15 @@ test("Privacy identity uses central V1 identifiers and keeps publication and lau
   assert.equal(privacyDocument.minimumAge, 18);
   assert.equal(privacyDocument.effectiveDate, legalPublicationReadiness.effectiveDate);
   assert.equal(privacyDocument.lastUpdated, legalPublicationReadiness.lastUpdated);
-  assert.equal(privacyDocument.effectiveDate, null);
-  assert.equal(privacyDocument.lastUpdated, null);
+  assert.equal(privacyDocument.effectiveDate, "2026-10-12");
+  assert.equal(privacyDocument.lastUpdated, "2026-10-12");
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(legalPublicationReadiness.finalContentApproved, false);
   const preview = resolveLegalDocumentState("privacy", { nodeEnv: "development", useEmulators: "true", projectId: "demo-takeme" });
   assert.equal(preview.version, "1.0");
-  assert.equal(preview.effectiveDate, null);
-  assert.equal(preview.lastUpdated, null);
+  assert.equal(preview.effectiveDate, "2026-10-12");
+  assert.equal(preview.lastUpdated, "2026-10-12");
   assert.equal(preview.publicationApproved, false);
 });
 

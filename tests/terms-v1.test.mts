@@ -47,8 +47,8 @@ test("Terms V1 identity and launch dates use the inactive central production sou
   assert.equal(termsDocument.minimumAge, 18);
   assert.equal(termsDocument.effectiveDate, legalPublicationReadiness.effectiveDate);
   assert.equal(termsDocument.lastUpdated, legalPublicationReadiness.lastUpdated);
-  assert.equal(termsDocument.effectiveDate, null);
-  assert.equal(termsDocument.lastUpdated, null);
+  assert.equal(termsDocument.effectiveDate, "2026-10-12");
+  assert.equal(termsDocument.lastUpdated, "2026-10-12");
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(legalPublicationReadiness.finalContentApproved, false);
@@ -56,8 +56,8 @@ test("Terms V1 identity and launch dates use the inactive central production sou
   assert.equal(legalLaunchDatePolicy.lastUpdated, "same-as-public-launch-date-for-v1-unless-separately-changed");
   const preview = resolveLegalDocumentState("terms", { nodeEnv: "development", useEmulators: "true", projectId: "demo-takeme" });
   assert.equal(preview.version, termsDocument.version);
-  assert.equal(preview.effectiveDate, null);
-  assert.equal(preview.lastUpdated, null);
+  assert.equal(preview.effectiveDate, "2026-10-12");
+  assert.equal(preview.lastUpdated, "2026-10-12");
   assert.equal(preview.publicationApproved, false);
 });
 

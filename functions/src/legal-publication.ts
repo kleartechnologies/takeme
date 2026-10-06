@@ -15,11 +15,11 @@ export interface LegalPublicationReadiness {
 export const legalPublicationReadiness: Readonly<LegalPublicationReadiness> = Object.freeze({
   publicationApproved: false, finalContentApproved: false, bmPrivacyNoticeApproved: false,
   registration: "approved", address: "pending", productionRoutesReviewed: false,
-  effectiveDate: null, lastUpdated: null,
+  effectiveDate: "2026-10-12", lastUpdated: "2026-10-12",
 });
 
-// Owner-approved V1 date rule, not a known date or an activation schedule.
-// Resolve both nullable date inputs only when the actual public launch is approved.
+// Owner-approved V1 date rule; the prepared date is not an activation schedule.
+// A later launch-date change requires separate explicit approval.
 export const legalLaunchDatePolicy = Object.freeze({
   effectiveDate: "actual-public-launch-date",
   lastUpdated: "same-as-public-launch-date-for-v1-unless-separately-changed",
