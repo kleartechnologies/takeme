@@ -2,6 +2,7 @@ import type { InformationSection } from "@/components/public-information/public-
 import { productionReleasePolicy } from "../../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../../functions/src/legal-publication.ts";
 import { marketplaceOperator } from "./operator.ts";
+import { legalOperatorDisclosure } from "./operator-disclosure.ts";
 
 // English owner draft only. Central approvals control publication and activation.
 export const privacyDocument = Object.freeze({
@@ -12,8 +13,7 @@ export const privacyDocument = Object.freeze({
   effectiveDate: legalPublicationReadiness.effectiveDate,
   lastUpdated: legalPublicationReadiness.lastUpdated,
   operator: marketplaceOperator,
-  businessAddress: null,
-  businessAddressStatus: "LEGAL REVIEW / OWNER INPUT REQUIRED",
+  ...legalOperatorDisclosure(),
   reviewNotice: "English owner draft for Malaysian legal review. This notice is not in effect and has not been published. Final English and Bahasa Melayu legal approval, the actual public launch date and separate publication approval remain required.",
 });
 

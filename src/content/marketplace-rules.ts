@@ -2,6 +2,7 @@ import type { InformationSection } from "@/components/public-information/public-
 import { productionReleasePolicy } from "../../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../../functions/src/legal-publication.ts";
 import { marketplaceOperator } from "./operator.ts";
+import { legalOperatorDisclosure } from "./operator-disclosure.ts";
 
 export const prohibitedItemsIntro = "This policy explains goods, content, offers and listings that are prohibited or restricted on TAKEME. It protects users, marketplace integrity, safety, intellectual property and lawful trade.";
 
@@ -17,8 +18,7 @@ export const prohibitedItemsPolicy = Object.freeze({
   operator: marketplaceOperator,
   registrationNumber: marketplaceOperator.registrationNumber,
   supportEmail: marketplaceOperator.supportEmail,
-  businessAddress: null,
-  businessAddressStatus: "LEGAL REVIEW / OWNER INPUT REQUIRED",
+  ...legalOperatorDisclosure(),
   reviewNotice: prohibitedItemsReviewNotice,
   publicationApproved: legalPublicationReadiness.publicationApproved && legalPublicationReadiness.finalContentApproved,
 });

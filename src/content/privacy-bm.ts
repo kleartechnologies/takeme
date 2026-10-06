@@ -2,6 +2,7 @@ import type { InformationSection } from "@/components/public-information/public-
 import { productionReleasePolicy } from "../../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../../functions/src/legal-publication.ts";
 import { marketplaceOperator } from "./operator.ts";
+import { bmLegalOperatorDisclosure, legalOperatorDisclosure } from "./operator-disclosure.ts";
 
 // Bahasa Melayu owner draft. The same central approvals control both languages.
 export const bmPrivacyDocument = Object.freeze({
@@ -12,9 +13,8 @@ export const bmPrivacyDocument = Object.freeze({
   effectiveDate: legalPublicationReadiness.effectiveDate,
   lastUpdated: legalPublicationReadiness.lastUpdated,
   operator: marketplaceOperator,
-  businessAddress: null,
-  businessAddressStatus: "LEGAL REVIEW / OWNER INPUT REQUIRED",
-  localizedBusinessAddressStatus: "SEMAKAN UNDANG-UNDANG / INPUT PEMILIK DIPERLUKAN",
+  ...legalOperatorDisclosure(),
+  localizedBusinessAddressStatus: bmLegalOperatorDisclosure(),
   legalReviewMarker: "SEMAKAN UNDANG-UNDANG DIPERLUKAN",
   reviewNotice: "Draf pemilik dalam Bahasa Melayu untuk semakan undang-undang Malaysia. Notis ini belum berkuat kuasa dan belum diterbitkan. Kelulusan undang-undang muktamad bagi versi Bahasa Inggeris dan Bahasa Melayu, tarikh pelancaran awam sebenar serta kelulusan penerbitan yang berasingan masih diperlukan.",
 });

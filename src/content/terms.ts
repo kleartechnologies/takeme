@@ -2,6 +2,7 @@ import type { InformationSection } from "@/components/public-information/public-
 import { productionReleasePolicy } from "../../functions/src/release-policy.ts";
 import { legalPublicationReadiness } from "../../functions/src/legal-publication.ts";
 import { marketplaceOperator } from "./operator.ts";
+import { legalOperatorDisclosure } from "./operator-disclosure.ts";
 import { prohibitedItemsPolicy } from "./marketplace-rules.ts";
 
 // Owner-approved content model only. Existing central gates still control
@@ -13,8 +14,7 @@ export const termsDocument = Object.freeze({
   effectiveDate: legalPublicationReadiness.effectiveDate,
   lastUpdated: legalPublicationReadiness.lastUpdated,
   operator: marketplaceOperator,
-  businessAddress: null,
-  businessAddressStatus: "LEGAL REVIEW / OWNER INPUT REQUIRED",
+  ...legalOperatorDisclosure(),
   reviewNotice: "Owner-approved draft content model for Malaysian legal review. This document is not in effect and has not been published. Final legal counsel approval, the actual public launch date and separate publication approval remain required.",
 });
 
