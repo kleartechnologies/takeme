@@ -38,6 +38,7 @@
 .footerInner { max-width: 1120px; margin: auto; padding: 24px; }
 .footerTop { display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 13px; }
 .footerTop a { display: inline-flex; align-items: center; min-height: 44px; color: #006233; font-weight: 600; }
+.footerBottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .footerLinks { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 12px; font-size: 13px; }
 .footerLinks a { display: inline-flex; align-items: center; min-height: 44px; color: #006233; }
 .header a:focus-visible, .page a:focus-visible, .footer a:focus-visible, .page summary:focus-visible { outline: 2px solid #006233; outline-offset: 4px; border-radius: 3px; }
@@ -57,6 +58,7 @@
   .section h2, .contactCard h2 { font-size: 18px; }
   .contactCard { padding: 20px; }
   .footerInner { padding: 20px; }
+  .footerBottom { flex-direction: column; gap: 16px; }
   .footerLinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { .page { scroll-behavior: auto; } }

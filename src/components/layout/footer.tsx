@@ -7,6 +7,7 @@ import { isSettingsUtilityPath } from "@/lib/settings-routes";
 import { isPublicInformationPath } from "@/lib/public-information";
 import { PublicInformationFooter, PublicInformationLinks } from "@/components/public-information/public-information";
 import { Logo } from "./logo";
+import { FooterSocialLinks } from "./footer-social-links";
 
 export function Footer() {
   const pathname = usePathname();
@@ -14,7 +15,7 @@ export function Footer() {
   if (isAuthPath(pathname) || isSettingsUtilityPath(pathname) || pathname === "/sell" || /^\/listings\/[^/]+\/edit$/.test(pathname) || pathname.startsWith("/admin") || pathname.startsWith("/messages")) return null;
   return (
     <footer className={`${pathname === "/" || pathname === "/explore" || pathname === "/updates" || pathname === "/saved" || pathname.startsWith("/profile") || pathname.startsWith("/sellers/") ? "hidden lg:block " : ""}border-t border-gray-200 bg-white pb-24 pt-7 text-[var(--takeme-gray)] lg:pb-10`}>
-      <div className="page-shell grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="page-shell grid gap-6 md:grid-cols-[1.4fr_1fr_1.4fr_0.8fr]">
         <div>
           <div className="inline-flex rounded-xl bg-white p-1.5"><Logo compact /></div>
           <p className="mt-4 max-w-sm text-sm font-semibold text-[var(--takeme-charcoal)]">Same Stuff. A Brighter Tomorrow.</p>
@@ -29,6 +30,7 @@ export function Footer() {
           <p className="mt-3 text-sm leading-6 text-[var(--takeme-gray)]">Buy-now requests, offers and auctions can form agreed deals. Buyer-to-seller checkout and payments are not processed by TAKEME yet.</p>
           <PublicInformationLinks className="mt-3 flex flex-wrap gap-x-5 text-sm [&>a]:inline-flex [&>a]:min-h-11 [&>a]:items-center" />
         </div>
+        <FooterSocialLinks />
       </div>
     </footer>
   );

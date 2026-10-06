@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/layout/logo";
+import { FooterSocialLinks } from "@/components/layout/footer-social-links";
 import { isLegalInformationAvailable, isProductionLegalPublication, legalDocumentState } from "@/lib/public-information";
 import styles from "./public-information.module.css";
 
@@ -16,7 +17,7 @@ export function PublicInformationLinks({ className }: { className?: string }) {
 }
 
 export function PublicInformationFooter() {
-  return <footer className={styles.footer}><div className={styles.footerInner}><div className={styles.footerTop}><span>TAKEME · Buy. Sell. Find.</span><a href="#public-content">Back to top ↑</a></div><PublicInformationLinks /></div></footer>;
+  return <footer className={styles.footer}><div className={styles.footerInner}><div className={styles.footerTop}><span>TAKEME · Buy. Sell. Find.</span><a href="#public-content">Back to top ↑</a></div><div className={styles.footerBottom}><PublicInformationLinks /><FooterSocialLinks className="mt-3 shrink-0" /></div></div></footer>;
 }
 
 function Contents({ sections }: { sections: Pick<InformationSection, "id" | "title">[] }) {
