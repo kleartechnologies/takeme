@@ -2,9 +2,9 @@
 
 import { ArrowUpDown, Bookmark, LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CategoryGrid } from "@/components/home/category-grid";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
@@ -18,6 +18,7 @@ import type { Listing } from "@/types/marketplace";
 import { ListingCard } from "./listing-card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { saveSearch } from "@/lib/services/engagement";
+import { mergeExplorePage, recallExplorePage, rememberExplorePage } from "@/lib/explore-continuity";
 
 type Filters = { q: string; category: string; condition: string; type: string; auction: string; price: string; location: string; sort: ListingSort };
 const defaults: Filters = { q: "", category: "", condition: "", type: "", auction: "", price: "", location: "", sort: "newest" };
@@ -31,6 +32,7 @@ function fromParams(params: URLSearchParams): Filters {
 
 export function ExploreBrowser() {
   const { user } = useAuth();
+  const router = useRouter();
   const params = useSearchParams();
   const [filters, setFilters] = useState<Filters>(() => fromParams(new URLSearchParams(params.toString())));
   const [queryInput, setQueryInput] = useState(filters.q);
@@ -42,6 +44,9 @@ export function ExploreBrowser() {
   const [savingSearch, setSavingSearch] = useState(false);
   const [savedSearchMessage, setSavedSearchMessage] = useState("");
   const [retry, setRetry] = useState(0);
+  const pendingScroll = useRef<number | null>(null);
+  const lastScroll = useRef(0);
+  const leaving = useRef(false);
 
   useEffect(() => {
     const next = fromParams(new URLSearchParams(params.toString()));
@@ -66,12 +71,46 @@ export function ExploreBrowser() {
 
   const request = useMemo(() => ({ search: filters.q, categoryId: filters.category || undefined, condition: filters.condition || undefined, listingType: filters.type || undefined, auctionStatus: filters.auction === "active" ? "active" as const : filters.auction === "scheduled" ? "scheduled" as const : undefined, location: filters.location || undefined, maxPrice: filters.price ? Number(filters.price) : undefined, sort: filters.sort, pageSize: 12 }), [filters]);
   const requestKey = JSON.stringify(request);
+  const continuityKey = `${router.bfcacheId}:${user?.uid ?? "guest"}:${requestKey}`;
   useEffect(() => {
     if (!isFirebaseConfigured) return;
     let active = true;
-    getActiveListings(request).then((page) => { if (active) setState({ key: requestKey, page, error: "" }); }).catch((error: unknown) => { if (active) setState({ key: requestKey, page: emptyPage, error: friendlyError(error) }); });
+    const previous = recallExplorePage<ListingPage>(continuityKey);
+    if (previous) { pendingScroll.current = previous.scrollY; setState({ key: requestKey, page: previous.page, error: "" }); }
+    // Revalidate every previously loaded page, up to the bounded memory cache.
+    // Removed/changed listings therefore reconcile instead of leaving a stale UI.
+    async function refresh() {
+      let page = await getActiveListings(request);
+      const pages = Math.min(10, Math.max(1, Math.ceil((previous?.page.listings.length ?? 0) / 12)));
+      for (let i = 1; active && i < pages && page.hasMore && page.cursor; i++) {
+        const next = await getActiveListings(request, page.cursor);
+        page = mergeExplorePage(page, next);
+      }
+      if (active) setState({ key: requestKey, page, error: "" });
+    }
+    refresh().catch((error: unknown) => { if (active) setState({ key: requestKey, page: previous?.page ?? emptyPage, error: friendlyError(error) }); });
     return () => { active = false; };
-  }, [request, requestKey, retry]);
+  }, [request, requestKey, continuityKey, retry]);
+
+  useEffect(() => {
+    if (state.key !== requestKey) return;
+    leaving.current = false;
+    const record = () => {
+      if (leaving.current) return;
+      lastScroll.current = window.scrollY;
+      if (state.page.listings.length <= 120) rememberExplorePage(continuityKey, state.page, lastScroll.current);
+    };
+    const departing = () => { record(); leaving.current = true; };
+    window.addEventListener("scroll", record, { passive: true });
+    window.addEventListener("popstate", departing);
+    window.addEventListener("pagehide", departing);
+    let frame = 0;
+    if (pendingScroll.current !== null) {
+      const top = pendingScroll.current; pendingScroll.current = null;
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => { window.scrollTo({ top, behavior: "instant" }); record(); }); });
+    } else record();
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", record); window.removeEventListener("popstate", departing); window.removeEventListener("pagehide", departing); };
+  }, [continuityKey, requestKey, state.key, state.page]);
 
   const listingIdsKey = state.page.listings.map((item) => item.id).join(",");
   const placementKey = `${requestKey}:${listingIdsKey}`;
@@ -102,12 +141,13 @@ export function ExploreBrowser() {
   const reset = () => { update(defaults); setQueryInput(""); setSearchError(""); };
   const submitSearch = (event: FormEvent) => { event.preventDefault(); const value = queryInput.trim(); if (value.length === 1) { setSearchError("Enter at least 2 characters."); return; } setSearchError(""); if (value.length >= 2) trackMarketplaceIntent({ type: "SEARCH", query: value, context: "explore" }); update({ q: value }); };
   async function loadMore() {
-    if (!state.page.cursor) return;
+    if (!state.page.cursor || loadingMore) return;
+    const key = requestKey;
     setLoadingMore(true);
     try {
       const next = await getActiveListings(request, state.page.cursor);
-      setState((current) => ({ key: requestKey, error: "", page: { listings: [...current.page.listings, ...next.listings], cursor: next.cursor, hasMore: next.hasMore } }));
-    } catch (error) { setState((current) => ({ ...current, error: friendlyError(error) })); }
+      setState((current) => current.key === key ? ({ key, error: "", page: mergeExplorePage(current.page, next) }) : current);
+    } catch (error) { setState((current) => current.key === key ? ({ ...current, error: friendlyError(error) }) : current); }
     finally { setLoadingMore(false); }
   }
 
@@ -122,7 +162,12 @@ export function ExploreBrowser() {
 
   const selectedCategory = categories.find((item) => item.id === filters.category)?.name;
   const activeSummary = [filters.q && `Search: “${filters.q}”`, filters.location && `Area: ${filters.location}`, filters.price && `Up to RM${filters.price}`, filters.auction && (filters.auction === "active" ? "Live now" : "Scheduled"), filters.type === "buy_now" && "Fixed price"].filter(Boolean).join(" · ");
-  return <div>
+  return <div onClickCapture={(event) => {
+    const link = (event.target as HTMLElement).closest?.("a[href]");
+    if (link && !event.metaKey && !event.ctrlKey && state.key === requestKey && state.page.listings.length <= 120) {
+      rememberExplorePage(continuityKey, state.page, window.scrollY); leaving.current = true;
+    }
+  }}>
     <form onSubmit={submitSearch} role="search" aria-label="Search marketplace listings" className="explore-search-row">
       <div className="explore-search-field"><button type="submit" aria-label="Search TAKEME" className="icon-button shrink-0"><Search size={19} /></button><label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={selectedCategory ? `Search in ${selectedCategory}…` : "Search TAKEME"} /></label></div>
       <button type="button" onClick={() => setOpen(true)} className="explore-filter-button icon-button" aria-label={activeCount ? `Filters (${activeCount})` : "Filters"} aria-expanded={open}><SlidersHorizontal size={21} />{activeCount > 0 && <span className="explore-filter-count" aria-hidden="true">{activeCount}</span>}</button>

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { StandardProductDetail } from "@/components/listings/standard-product-detail";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { FirebaseSetupState, SignInRequired } from "@/components/ui/firebase-state";
@@ -19,6 +19,8 @@ import { listMeetupLocations, type MeetupLocation } from "@/lib/services/locatio
 import { createListing, publishExistingAuctionDraft, publishExistingFixedDraft, saveListingDraft, updateListing } from "@/lib/services/listings";
 import { SELL_STEPS, sellInput, validateSellStep, type SellValues } from "@/lib/sell-flow";
 import { registerUnsavedListingWarning } from "@/lib/unsaved-listing-warning";
+import { clearRecovery, readRecoveryFiles, rememberRecoveryFiles } from "@/lib/transient-recovery";
+import { useTransientDraft } from "@/lib/use-transient-draft";
 import type { Listing } from "@/types/marketplace";
 import styles from "./sell.module.css";
 
@@ -39,6 +41,12 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const draft = listing?.status === "draft";
   const router = useRouter();
   const { user, loading, configured } = useAuth();
+  const requireAction = useProtectedMarketplaceAction();
+  const recoveryScope = listing ? `/listings/${listing.id}/edit` : "/sell";
+  const recovered = useRef(false);
+  const [hasRecoveredDraft, setHasRecoveredDraft] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [missingPhotos, setMissingPhotos] = useState(0);
   const defaults = useMemo<SellValues>(() => {
     const dates = auctionDefaults();
     return { title: listing?.title ?? "", categoryId: listing?.categoryId ?? "", condition: listing?.condition ?? "Good", description: listing?.description ?? "", price: listing?.listingType === "buy_now" ? String(listing.price) : "", districtOrCity: listing?.publicLocation?.districtOrCity ?? "", state: listing?.publicLocation?.state ?? "", meetupLocationId: listing?.meetupLocationId ?? "", saveLocationToProfile: false, listingType: listing?.listingType === "auction" ? "auction" : "buy_now", startingBid: listing?.startingBid ? senToRinggit(listing.startingBid) : "", minimumBidIncrement: listing?.minimumBidIncrement ? senToRinggit(listing.minimumBidIncrement) : "", auctionStartAt: listing?.auctionStartAt ? localDateTime(listing.auctionStartAt) : dates.start, auctionEndAt: listing?.auctionEndAt ? localDateTime(listing.auctionEndAt) : dates.end, startMode: "scheduled" };
@@ -66,13 +74,33 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const photoChanged = !result && (photos.some((photo, index) => photo.file || photo.url !== listing?.imageUrls[index]) || photos.length !== (listing?.imageUrls.length ?? 0));
   const dirty = isDirty || photoChanged;
 
+  const recoveryReady = useTransientDraft(recoveryScope, user?.uid ?? null, dirty || hasRecoveredDraft ? {
+    kind: "sell", values: { ...preview, saveLocationToProfile: false }, step,
+    photoCount: photos.filter(photo => photo.file).length + missingPhotos,
+  } : null, value => {
+    if (value.kind !== "sell" || !user) return;
+    recovered.current = true; setHasRecoveredDraft(true);
+    reset(value.values); setStep(value.step); setSheet(null);
+    const retained = readRecoveryFiles(recoveryScope, user.uid);
+    setPhotos(current => [...current.filter(photo => photo.existing), ...retained.map(file => {
+      const url = URL.createObjectURL(file); photoUrls.current.add(url);
+      return { id: crypto.randomUUID(), url, file, existing: false };
+    })]);
+    const missing = Math.max(0, value.photoCount - retained.length); setMissingPhotos(missing);
+    setRecoveryMessage(missing ? "Your listing entries are restored. Please reselect your photos; the browser could not retain those files. Nothing has been published." : "Your listing draft is restored. Review it before saving or publishing.");
+  }, !!user && !loading && !result);
+  useEffect(() => {
+    // Initial empty form state must not overwrite files before recovery reads them.
+    if (recoveryReady && user && !result) rememberRecoveryFiles(recoveryScope, user.uid, photos.flatMap(photo => photo.file ? [photo.file] : []));
+  }, [user, result, photos, recoveryScope, recoveryReady]);
+
   useEffect(() => {
     if (!user) return;
     let active = true;
     Promise.all([getUserProfile(user.uid), listMeetupLocations()]).then(([profile, savedMeetups]) => {
       if (!active) return;
       setMeetups(savedMeetups); setProfileName(profile?.displayName ?? user.displayName ?? "TAKEME member");
-      if (!listing) {
+      if (!listing && !recovered.current) {
         const general = parseLegacyGeneralLocation(profile?.location);
         if (general) { setValue("districtOrCity", general.districtOrCity); setValue("state", general.state); }
         const preferred = savedMeetups.find(item => item.isDefault);
@@ -98,7 +126,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     setPhotos(current => [...current, ...incoming.map(file => {
       const url = URL.createObjectURL(file); photoUrls.current.add(url);
       return { id: crypto.randomUUID(), url, file, existing: false };
-    })]); setPhotoError("");
+    })]); setPhotoError(""); setMissingPhotos(count => Math.max(0, count - incoming.length));
   }
   function removePhoto(photo: PhotoEntry) {
     if (!photo.existing) { URL.revokeObjectURL(photo.url); photoUrls.current.delete(photo.url); }
@@ -133,6 +161,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     const input = sellInput(values);
     inFlight.current = true; setBusy(true); setSubmitError(""); setProgress("Preparing and uploading your photos…");
     try {
+      if (!await requireAction(recoveryScope)) return;
       if (values.saveLocationToProfile) await updatePublicProfile({ displayName: profileName, location: formatPublicLocation(input.publicLocation) });
       let id: string;
       if (saveDraft) {
@@ -145,6 +174,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
       } else if (listing) {
         await updateListing(listing.id, input, photos); id = listing.id;
       } else id = await createListing(input, photos.flatMap(photo => photo.file ? [photo.file] : []));
+      clearRecovery(recoveryScope); recovered.current = false; setHasRecoveredDraft(false); setRecoveryMessage(""); setMissingPhotos(0);
       reset(values); setSheet(null); setResult({ id, draft: saveDraft, scheduled: input.listingType === "auction" && Date.parse(input.auctionStartAt) > Date.now(), auction: input.listingType === "auction" }); setFocusStep(n => n + 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
@@ -166,6 +196,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const publishLabel = auctionDraft ? "Publish draft auction" : listing && !draft ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing";
 
   return <div className={styles.flow} data-sell-flow>
+    {recoveryMessage && !result && <p role="status" className={styles.helper}>{recoveryMessage}</p>}
     <header className={styles.header}><button type="button" className="icon-button" disabled={busy} aria-label={step && !result ? "Previous step" : "Exit listing flow"} onClick={() => step && !result ? go(step - 1) : requestExit()}><ArrowLeft size={21} /></button><Image src="/brand/takeme-wordmark.png" alt="TAKEME" width={108} height={36} /><button type="button" className="icon-button" disabled={busy} aria-label="Close listing flow" onClick={requestExit}><X size={21} /></button></header>
     {result ? <section className={styles.success}><Image src={result.draft ? "/brand/mascot-2d-happy.png" : "/brand/mascot-3d-excited.png"} alt="" width={190} height={190} priority /><p className={styles.eyebrow}>{result.draft ? "Safe in your drafts" : listing && !draft ? "Listing updated" : "A new find on TAKEME"}</p><h1 ref={heading} tabIndex={-1}>{title}</h1><p>{result.draft ? "Your listing is private. Resume it from My Listings when you’re ready." : result.scheduled ? `Buyers can discover your auction. Bidding opens ${new Date(preview.auctionStartAt).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" })}.` : listing && !draft ? "Your updated details are now visible to buyers." : "Buyers can now discover your item and contact you on TAKEME."}</p><div className={styles.successActions}><Link className="button-primary" href={result.draft ? `/listings/${result.id}/edit` : `/listings/${result.id}`}>{result.draft ? "Resume draft" : result.auction ? "View auction" : "View listing"}<ArrowRight size={17} /></Link><Link className="button-secondary" href={`/profile/listings${result.draft ? "?tab=drafts" : ""}`}>My listings</Link><button type="button" className={styles.textButton} onClick={() => { if (listing) router.push("/sell"); else { reset({ ...defaults, ...auctionDefaultsToValues() }); setPhotos([]); setPhotoError(""); setResult(null); go(0); } }}>List another item</button></div></section> : <>
       <div className={styles.progressHeader}><div><h1>{title}</h1><p>Step {step + 1} of {SELL_STEPS.length} <span>· {stepTitle}</span></p></div>{(!listing || draft) && <button type="button" disabled={busy} className={styles.textButton} onClick={() => void submit(true)}>Save draft</button>}</div>
@@ -192,7 +223,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     </>}
     {sheet === "edit" && <ActionSheet title="Edit your listing" description="Return to a section. Your other entries stay here." onClose={() => setSheet(null)} fallbackFocus={() => heading.current}><div className={styles.reviewEdits}>{[[1, "Photos"], [2, "Category"], [3, "Details"], [4, "Condition"], [5, "Price & format"], [6, "Meet-up"]].map(([index, label]) => <button type="button" key={index} onClick={() => { setSheet(null); go(Number(index)); }}>Edit {label}<ArrowRight size={15} /></button>)}</div></ActionSheet>}
     {sheet === "publish" && <ActionSheet title={listing && !draft ? "Save these changes?" : "Ready to publish?"} description={listing && !draft ? "The updated details will be visible to buyers." : listingType === "auction" ? "Your auction will be visible on TAKEME. Bids open at its start time." : "Your listing will be visible to buyers on TAKEME."} busy={busy} onClose={() => setSheet(null)}><p className={styles.helper}>Check your photos, condition, price and general area. TAKEME does not process buyer-to-seller payments.</p>{submitError && <p className={styles.error} role="alert">{submitError}</p>}{progress && <p role="status" className={styles.helper}>{progress}</p>}<div className={styles.confirmActions}><button className="button-secondary" type="button" disabled={busy} onClick={() => setSheet(null)}>Keep reviewing</button><button className="button-primary" type="button" disabled={busy} onClick={() => void submit()}>{busy && <LoaderCircle size={17} className="animate-spin" />}{publishLabel}</button></div></ActionSheet>}
-    {sheet === "exit" && <ActionSheet title="Leave this listing?" description="Your unsaved entries will be lost. Keep editing, or complete the required details and save a private draft." onClose={() => setSheet(null)}><div className={styles.confirmActions}><button type="button" className="button-primary" onClick={() => setSheet(null)}>Keep editing</button><button type="button" className="button-secondary" onClick={() => { reset(); setPhotos([]); setSheet(null); router.push("/profile/listings"); }}>Discard & leave</button></div></ActionSheet>}
+    {sheet === "exit" && <ActionSheet title="Leave this listing?" description="Your unsaved entries will be lost. Keep editing, or complete the required details and save a private draft." onClose={() => setSheet(null)}><div className={styles.confirmActions}><button type="button" className="button-primary" onClick={() => setSheet(null)}>Keep editing</button><button type="button" className="button-secondary" onClick={() => { clearRecovery(recoveryScope); recovered.current = false; setHasRecoveredDraft(false); reset(); setPhotos([]); setSheet(null); router.push("/profile/listings"); }}>Discard & leave</button></div></ActionSheet>}
   </div>;
 }
 function auctionDefaultsToValues() { const dates = auctionDefaults(); return { auctionStartAt: dates.start, auctionEndAt: dates.end }; }

@@ -6,19 +6,20 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, updateDoc, getDoc, deleteDoc, terminate } from 'firebase/firestore';
+import { assertHistoricalEmulatorPackages } from './helpers/historical-emulator-packages.mjs';
 const require=createRequire(new URL('../functions/package.json',import.meta.url));
 const adminApp=require('firebase-admin/app'),adminStore=require('firebase-admin/firestore'),adminAuth=require('firebase-admin/auth');
-assert.equal(process.env.GCLOUD_PROJECT,'demo-takeme');assert.equal(process.env.FIRESTORE_EMULATOR_HOST,'127.0.0.1:18080');assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:19099');
-for(const name of ['TAKEME_CURRENT_PACKAGE_ROOT','TAKEME_LEGACY_PACKAGE_ROOT','TAKEME_LEGACY_PUBLISH_PACKAGE_ROOT','TAKEME_AUCTION_RULE_BRIDGE'])assert.ok(process.env[name]?.startsWith('/private/tmp/takeme-v1-operational-runbook-'), 'Private isolated review packages required.');
+await assertHistoricalEmulatorPackages(process.env, ['TAKEME_CURRENT_PACKAGE_ROOT','TAKEME_LEGACY_PACKAGE_ROOT','TAKEME_LEGACY_PUBLISH_PACKAGE_ROOT','TAKEME_AUCTION_RULE_BRIDGE']);
 const app=adminApp.initializeApp({projectId:'demo-takeme'},randomUUID()),db=adminStore.getFirestore(app),auth=adminAuth.getAuth(app),now=adminStore.Timestamp.now();
+if(!adminApp.getApps().some(app=>app.name==='[DEFAULT]'))adminApp.initializeApp({projectId:'demo-takeme'});
 const prefix='auction-freeze-'+randomUUID(),uid=prefix+'-owner',paths=new Set(),clients=[];
 const normal={releaseTarget:'demo',projectId:'demo-takeme',protectedWritesPaused:false},auction=paused=>({releaseTarget:'demo',projectId:'demo-takeme',auctionCreationPaused:paused}),control=db.doc('releaseControls/auctionCreation');
 const baseline=new Map();for(const name of ['releaseControls/current','releaseControls/auctionCreation','releasePolicies/current'])baseline.set(name,await db.doc(name).get());
 let groups=0;const check=async(label,run)=>{await run();console.log('PASS '+(++groups)+': '+label);};const denied=e=>e.code==='permission-denied',paused=e=>e.details?.reason==='auction-creation-paused';
-function client(user,admin=false){const app=initializeApp({projectId:'demo-takeme',apiKey:'demo-api-key'},randomUUID()),fire=getFirestore(app);connectFirestoreEmulator(fire,'127.0.0.1',18080,user?{mockUserToken:{sub:user,aud:'demo-takeme',admin}}:{});clients.push({app,fire});return fire;}
+function client(user,admin=false){const app=initializeApp({projectId:'demo-takeme',apiKey:'demo-api-key'},randomUUID()),fire=getFirestore(app);connectFirestoreEmulator(fire,'127.0.0.1',8080,user?{mockUserToken:{sub:user,aud:'demo-takeme',admin}}:{});clients.push({app,fire});return fire;}
 const operator=client(uid,true),guest=client(null),owner=client(uid);
 async function put(path,value){paths.add(path);await db.doc(path).set(value);}
-async function rules(content){const response=await fetch('http://127.0.0.1:18080/emulator/v1/projects/demo-takeme:securityRules',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ignore_errors:false,rules:{files:[{name:'firestore.rules',content}]}})});assert.equal(response.ok,true);assert.equal((await response.json()).issues?.some(x=>x.severity==='ERROR')??false,false);}
+async function rules(content){const response=await fetch('http://127.0.0.1:8080/emulator/v1/projects/demo-takeme:securityRules',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ignore_errors:false,rules:{files:[{name:'firestore.rules',content}]}})});assert.equal(response.ok,true);assert.equal((await response.json()).issues?.some(x=>x.severity==='ERROR')??false,false);}
 const finalRules=await readFile(new URL('../firestore.rules',import.meta.url),'utf8');
 const location={districtOrCity:'Jitra',state:'Kedah',country:'Malaysia'},listing={sellerId:uid,title:'Synthetic admission qualification',description:'Synthetic emulator-only item, no actual goods or exchange.',listingType:'buy_now',status:'active',price:10,privacyVersion:2,publicLocation:location,location:'Jitra, Kedah',imageUrls:[]};
 try{

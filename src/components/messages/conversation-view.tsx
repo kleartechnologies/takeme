@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Ellipsis, Send, ShieldCheck, Star, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 import { getConversation, getConversationMessages, markConversationSeen, sendConversationMessage, type ConversationMessage, type ConversationSummary } from "@/lib/services/conversations";
 import { getPublicListingDetail, type PublicListing } from "@/lib/services/listings";
@@ -12,6 +12,8 @@ import { getPublicSellerSummary } from "@/lib/services/public-sellers";
 import { getListingDealState, getTransactionDetail } from "@/lib/services/transactions";
 import { conversationDealState, messageTime } from "@/lib/messaging-presentation";
 import { pendingMessageSend, type PendingMessageSend } from "@/lib/message-send-request";
+import { clearRecovery, saveRecovery } from "@/lib/transient-recovery";
+import { useTransientDraft } from "@/lib/use-transient-draft";
 import { useCurrentTime } from "@/lib/use-current-time";
 import { ReportAction } from "@/components/trust/report-action";
 import { ActionSheet } from "@/components/ui/action-sheet";
@@ -29,6 +31,7 @@ export function ConversationView({ id, makeOffer = false }: { id: string; makeOf
 
 function ConversationSession({ id, userId, makeOffer }: { id: string; userId: string; makeOffer: boolean }) {
   const { setup } = useAuth();
+  const requireAction = useProtectedMarketplaceAction();
   const mayMarkSeen = setup?.step === "ready" && setup.policyAvailable === true;
   const now = useCurrentTime(30_000);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
@@ -49,6 +52,7 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
   const [menu, setMenu] = useState(false);
   const alive = useRef(true), sendRequest = useRef(false), olderRequest = useRef(false);
   const pendingSend = useRef<PendingMessageSend | null>(null);
+  const [recoverRequest, setRecoverRequest] = useState<PendingMessageSend | null>(null);
   const pendingRefresh = useRef<Promise<void> | null>(null);
   const history = useRef<HTMLElement>(null);
   const composer = useRef<HTMLFormElement>(null);
@@ -56,6 +60,10 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
   const followBottom = useRef(true);
   const loadedOlder = useRef(false);
   const autoSeenPaused = useRef(false);
+  const recoveryScope = `message:${id}`;
+  useTransientDraft(recoveryScope, userId, body ? { kind: "message", body, request: recoverRequest } : null, value => {
+    if (value.kind === "message") { setBody(value.body); pendingSend.current = value.request; setRecoverRequest(value.request); }
+  });
   const fetchCurrent = useCallback(async () => {
     if (!alive.current) return;
     try {
@@ -135,8 +143,13 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
     try {
       const request = pendingMessageSend(pendingSend.current, userId, id, body);
       pendingSend.current = request;
+      setRecoverRequest(request);
+      saveRecovery(recoveryScope, userId, { kind: "message", body, request });
+      if (!await requireAction(`/messages/${id}`)) return;
       await sendConversationMessage(id, request.body, request.idempotencyKey);
       pendingSend.current = null;
+      setRecoverRequest(null);
+      clearRecovery(recoveryScope);
       if (!alive.current) return;
       setBody(""); followBottom.current = true; await refresh();
     }

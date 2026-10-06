@@ -13,6 +13,8 @@ import { ProductContextCard, money } from "./product-context-card";
 import styles from "./messaging.module.css";
 import { OfferRequestForm, offerPaymentMethods } from "@/components/transactions/offer-request-form";
 import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
+import { clearRecovery } from "@/lib/transient-recovery";
+import { useTransientDraft } from "@/lib/use-transient-draft";
 
 const methods = offerPaymentMethods;
 export function ConversationDeals({ conversation, listing, offers, transaction, reviewed, userId, now, refresh, placement, makeOffer = false }: { conversation: ConversationSummary; listing: PublicListing | null; offers: MarketplaceOffer[]; transaction: MarketplaceTransaction | null; reviewed: boolean | null; userId: string; now: number; refresh: () => Promise<void>; placement: "events" | "actions"; makeOffer?: boolean }) {
@@ -29,6 +31,15 @@ export function ConversationDeals({ conversation, listing, offers, transaction, 
   const seller = userId === conversation.sellerId;
   const available = listing?.listingType === "buy_now" && listing.status === "active" && !transaction;
   const openOffer = offers.some((offer) => offerIsOpen(offer, now));
+  const recoveryScope = `offer:${conversation.id}`;
+  useTransientDraft(recoveryScope, userId, amount && (sheet === "make" || sheet === "counter") ? {
+    kind: "offer", listingId: conversation.listingId, amount, method, sheet, offerId: sheet === "counter" ? selectedId : null,
+  } : null, value => {
+    if (value.kind !== "offer" || value.listingId !== conversation.listingId || !available) return;
+    if (value.sheet === "make" && (seller || openOffer)) return;
+    if (value.sheet === "counter" && (!seller || !offers.some(offer => offer.id === value.offerId && offer.status === "submitted" && offerIsOpen(offer, now)))) return;
+    setSelectedId(value.offerId); setAmount(value.amount); setMethod(value.method as PaymentMethod); setSheet(value.sheet);
+  }, placement === "actions");
   function viewOffer(offer: MarketplaceOffer) { setSelectedId(offer.id); setError(""); setSheet("view"); }
   async function openWriteSheet(next: "make" | "counter") {
     try {
@@ -46,6 +57,7 @@ export function ConversationDeals({ conversation, listing, offers, transaction, 
       if (!await requireAction()) return;
       if (action === "send") await submitOffer(conversation.listingId, "offer", method, sen!);
       else await respondToOffer(selected!.id, action, sen ?? undefined);
+      clearRecovery(recoveryScope);
       await refresh(); setSheet(null); setAmount("");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "This request could not be completed."); }
     finally { inFlight.current = false; setBusy(false); }

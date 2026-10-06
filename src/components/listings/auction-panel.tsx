@@ -95,6 +95,9 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
     if (!canBid || !userId || !amountSen || inputError || pending.current) return;
     pending.current = true; setBusy(true); setError(""); setMessage("");
     try {
+      // Eligibility can change while the confirmation sheet is open. Return to
+      // the auction context, never store or replay this potentially stale bid.
+      if (!await requireAction(`/listings/${listing.id}?bid=1#bid-history`)) return;
       const result = await placeAuctionBid(listing.id, amountSen);
       setMessage(`Bid accepted at ${formatSen(result.currentBid)}. Your current position is checked against the latest auction data.`);
       setSheet(null); onChange();

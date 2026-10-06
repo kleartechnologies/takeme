@@ -17,7 +17,7 @@ test("Explore uses approved discovery cards and actual inventory, not reference 
 test("Explore retains the supported query and cursor contracts", () => {
   for (const key of ["search: filters.q", "categoryId: filters.category", "condition: filters.condition", "listingType: filters.type", "location: filters.location", "maxPrice:", "sort: filters.sort", "pageSize: 12"]) assert.ok(explore.includes(key), key);
   assert.match(explore, /getActiveListings\(request, state.page.cursor\)/);
-  assert.match(explore, /listings: \[\.\.\.current.page.listings, \.\.\.next.listings\]/);
+  assert.match(explore, /mergeExplorePage\(current.page, next\)/);
   assert.match(explore, /window.history.replaceState/);
   assert.match(explore, /next.price && next.sort === "newest"/);
   assert.doesNotMatch(explore, /minPrice|verifiedOnly|navigator.geolocation|nearest|price_range/);

@@ -14,6 +14,8 @@ import { logout } from "@/lib/firebase/auth";
 import { assertProtectedWritesAvailable } from "@/lib/services/protected-write-status";
 import { announceProtectedWriteMaintenance, protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 import { ProtectedWriteNotice } from "@/components/layout/protected-write-notice";
+import { syncRecoveryAccount } from "@/lib/transient-recovery";
+import { clearExploreContinuity } from "@/lib/explore-continuity";
 
 interface AuthContextValue {
   user: User | null;
@@ -76,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!auth) return;
     return onAuthStateChanged(auth, (nextUser) => {
+      syncRecoveryAccount(nextUser?.uid ?? null);
+      clearExploreContinuity();
       setUser(nextUser);
       setLoading(false);
       if (nextUser) void refreshSetup().catch(() => {});

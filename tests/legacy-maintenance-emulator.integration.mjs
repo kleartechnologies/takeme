@@ -6,11 +6,16 @@ import {createRequire} from 'node:module';
 import {initializeApp,deleteApp} from 'firebase/app';
 import {getAuth,connectAuthEmulator,createUserWithEmailAndPassword} from 'firebase/auth';
 import {getFunctions,connectFunctionsEmulator,httpsCallable} from 'firebase/functions';
+import {assertHistoricalEmulatorPackages} from './helpers/historical-emulator-packages.mjs';
+await assertHistoricalEmulatorPackages(process.env, ['TAKEME_LEGACY_PACKAGE_ROOT']);
 const require=createRequire(new URL('../functions/package.json',import.meta.url));
 const adminApp=require('firebase-admin/app'),adminStore=require('firebase-admin/firestore'),adminAuth=require('firebase-admin/auth');
 const names=`cancelAuction cancelPromotionRequest confirmTransactionCompletion createAuctionListing createFixedListingDraft createPromotionRequest declineTransactionCancellation deleteSavedSearch disputeTransaction markAllNotificationsRead markConversationSeen markNotificationRead openListingConversation openNotification openTransactionConversation placeBid publishAuctionListing publishFixedListing removeFixedListing reportPublicReview requestTransactionCancellation respondToOffer saveSearch sendConversationMessage setSellerFollow setNotificationPreference submitMarketplaceReport submitOffer submitTransactionReview trackMarketplaceEvent trackPromotionEngagement updateAdminReport updateAuctionListing updateFixedListing requestUploadPermits`.split(' ');
 for(const[k,v]of Object.entries({GCLOUD_PROJECT:'demo-takeme',GOOGLE_CLOUD_PROJECT:'demo-takeme',FIRESTORE_EMULATOR_HOST:'127.0.0.1:8080',FIREBASE_AUTH_EMULATOR_HOST:'127.0.0.1:9099'}))assert.equal(process.env[k],v);
 const projectId='demo-takeme',admin=adminApp.initializeApp({projectId},randomUUID()),db=adminStore.getFirestore(admin),control=db.doc('releaseControls/current'),policy=db.doc('releasePolicies/current');
+// Direct imports of historical handlers use the SDK's default app; keep it
+// explicitly demo-scoped even though the harness itself uses a named app.
+if(!adminApp.getApps().some(app=>app.name==='[DEFAULT]'))adminApp.initializeApp({projectId});
 const initialControl=await control.get(),initialPolicy=await policy.get(),normal={releaseTarget:'demo',projectId,protectedWritesPaused:false},prefix='legacy-'+randomUUID(),paths=new Set(),people=[];
 let groups=0;const check=async(label,run)=>{await run();console.log('PASS '+(++groups)+': '+label);};
 const paused=e=>e.details?.reason==='protected-writes-paused';
@@ -61,6 +66,6 @@ try{
  await check('existing policy-aware upload preparation retains policy checks when OFF',async()=>{await policy.delete();await assert.rejects(buyer.call('requestUploadPermits'),e=>['policy-release-unavailable','account-policy-required'].includes(e.details?.reason));});
 }finally{
  if(initialControl.exists)await control.set(initialControl.data());else await control.delete();if(initialPolicy.exists)await policy.set(initialPolicy.data());else await policy.delete();
- for(const path of paths)await db.recursiveDelete(db.doc(path));for(const person of people){for(const name of ['sellerFollowers','sellerFollowSummaries','notificationSummaries','notificationPreferences','accountLifecycles','userInterests'])await db.recursiveDelete(db.doc(name+'/'+person.uid));await adminAuth.getAuth(admin).deleteUser(person.uid);await deleteApp(person.app);}await adminApp.deleteApp(admin);
+ for(const path of paths)await db.recursiveDelete(db.doc(path));for(const person of people){for(const name of ['sellerFollowers','sellerFollowSummaries','notificationSummaries','notificationPreferences','accountLifecycles','userInterests'])await db.recursiveDelete(db.doc(name+'/'+person.uid));await adminAuth.getAuth(admin).deleteUser(person.uid);await deleteApp(person.app);}for(const app of adminApp.getApps())await adminApp.deleteApp(app);
 }
 console.log('Historical callable bridge: '+groups+' demo groups passed; owned synthetic data removed.');

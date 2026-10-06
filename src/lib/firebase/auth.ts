@@ -12,6 +12,8 @@ import {
 } from "firebase/auth";
 import { auth, db } from "./client";
 import { createProfileIfMissing } from "./profile-bootstrap";
+import { clearRecovery } from "../transient-recovery";
+import { clearExploreContinuity } from "../explore-continuity";
 
 function requireFirebase() {
   if (!auth || !db) {
@@ -68,4 +70,6 @@ export async function checkSignupPassword(password: string): Promise<PasswordVal
 
 export async function logout() {
   await signOut(requireFirebase().auth);
+  clearRecovery();
+  clearExploreContinuity();
 }
