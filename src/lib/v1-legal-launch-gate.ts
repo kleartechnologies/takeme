@@ -33,7 +33,9 @@ export const pendingV1LaunchApprovals: Readonly<V1LaunchApprovals> = Object.free
 export const currentV1LaunchApprovals: Readonly<V1LaunchApprovals> = Object.freeze({
   owner: Object.freeze({ ...ownerApprovedPreparationItems, ...deferredV1OwnerDecisions }),
   counsel: pendingV1LaunchApprovals.counsel,
-  issues: pendingV1LaunchApprovals.issues,
+  issues: Object.freeze({ ...pendingV1LaunchApprovals.issues,
+    addressDisclosure: Object.freeze({ status: "explicitly-accepted", reviewReference: "Owner instruction: RESOLVE TAKEME PHASE 1 PRECHECK BLOCKERS ONLY — NOT_PUBLISHED_FOR_V1 (2026-10-06)" }),
+  }),
 });
 
 /** Review preparation authority only. Never requires an address, counsel approval or launch activation. */

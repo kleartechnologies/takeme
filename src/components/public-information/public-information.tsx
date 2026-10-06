@@ -2,10 +2,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/layout/logo";
 import { FooterSocialLinks } from "@/components/layout/footer-social-links";
+import { legalSectionParagraphs } from "@/content/operator-disclosure";
 import { isLegalInformationAvailable, isProductionLegalPublication, legalDocumentState } from "@/lib/public-information";
 import styles from "./public-information.module.css";
 
-export interface InformationSection { id: string; title: string; paragraphs?: string[]; bullets?: string[]; links?: { href: string; label: string }[] }
+export interface InformationSection { id: string; title: string; paragraphs?: string[]; addressParagraphs?: string[]; bullets?: string[]; links?: { href: string; label: string }[] }
 
 export function PublicInformationHeader() {
   return <header className={styles.header}><a className={styles.skip} href="#public-content">Skip to content</a><div className={styles.headerInner}><Logo compact /><nav className={styles.headerNav} aria-label="Public navigation"><Link href="/help">Help</Link><Link href="/explore">Explore</Link></nav></div></header>;
@@ -54,5 +55,5 @@ export function PublicInformationPage({ title, intro, draft = false, policy, sec
 
 export function PolicySections({ sections }: { sections: InformationSection[] }) {
   const published = isProductionLegalPublication();
-  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{section.paragraphs?.map(text => <p key={text}>{text}</p>)}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{published ? link.label.replace(/\s+draft\b/gi, "") : link.label}</Link>)}</div>}</section>)}</>;
+  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{legalSectionParagraphs(section).map(text => <p key={text}>{text}</p>)}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{published ? link.label.replace(/\s+draft\b/gi, "") : link.label}</Link>)}</div>}</section>)}</>;
 }

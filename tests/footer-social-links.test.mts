@@ -6,6 +6,7 @@ import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { marketplaceOperator, marketplaceSocialLinks } from "../src/content/operator.ts";
+import { legalSectionParagraphs } from "../src/content/operator-disclosure.ts";
 import { isAuthPath } from "../src/lib/auth-routing.ts";
 import { isSettingsUtilityPath } from "../src/lib/settings-routes.ts";
 import { isPublicInformationPath } from "../src/lib/public-information.ts";
@@ -37,6 +38,7 @@ const information = loadTsx<{ PublicInformationFooter: ComponentType; PublicInfo
   "../src/components/public-information/public-information.tsx", {
     "next/link": Link, "@/components/layout/logo": { Logo },
     "@/components/layout/footer-social-links": { FooterSocialLinks },
+    "@/content/operator-disclosure": { legalSectionParagraphs },
     "@/lib/public-information": { isLegalInformationAvailable: () => legalAvailable },
     "./public-information.module.css": { footer: "footer", footerInner: "footerInner", footerTop: "footerTop", footerBottom: "footerBottom", footerLinks: "footerLinks" },
   },

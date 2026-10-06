@@ -6,7 +6,7 @@ import { legalPublicationReadiness } from "../functions/src/legal-publication.ts
 
 // Future approvals are pure fixtures only; real source decisions stay false/null.
 const policy = { publicationApproved: true, termsVersion: "approved-terms-v1", privacyVersion: "approved-privacy-v2", minimumAge: 18 as const };
-const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
+const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "approved" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 const runtime = () => ({ env: { GCLOUD_PROJECT: "takeme-52b80", TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "takeme-52b80", TAKEME_STORAGE_BUCKETS: "takeme-52b80.firebasestorage.app", TAKEME_ENABLE_PRODUCTION_DELETION: "false" }, appProjectId: "takeme-52b80", appStorageBucket: "takeme-52b80.firebasestorage.app" });
 const plan = () => planProductionPolicyBootstrap(runtime(), policy, legal);
 

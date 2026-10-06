@@ -185,7 +185,8 @@ export const privacySections: InformationSection[] = [
   ], links: [{ href: "/terms", label: "Read the Terms of Service draft" }] },
   { id: "contact", title: "29. Contact", paragraphs: [
     marketplaceOperator.name + ". SSM Registration No. " + marketplaceOperator.registrationNumber + ". Privacy and support: " + marketplaceOperator.privacyLegalEmail + ".",
-    "Business/correspondence address: " + privacyDocument.businessAddressStatus + ". No address is published in this draft and no private/home address is substituted.",
     "LEGAL REVIEW REQUIRED — final English Privacy approval, final BM notice, publishable address and the unresolved provider, transfer, statutory-rights and retention decisions described above.",
+  ], addressParagraphs: [
+    "Business/correspondence address: " + privacyDocument.businessAddressStatus + ". No address is published in this draft and no private/home address is substituted.",
   ], links: [{ href: "mailto:" + marketplaceOperator.privacyLegalEmail, label: "Contact " + marketplaceOperator.privacyLegalEmail }, { href: "/contact", label: "Contact information" }, { href: "/help", label: "Help Centre" }] },
 ];

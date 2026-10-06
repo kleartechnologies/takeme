@@ -40,5 +40,6 @@ export const ownerApprovedV1ProductDecisions = Object.freeze({
 });
 
 export const deferredV1OwnerDecisions = Object.freeze({
-  addressDisclosure: false, retention: false, launchDate: true, productionActivation: false, domainCutover: false,
+  // Owner explicitly approves V1 address omission; this supplies no counsel conclusion.
+  addressDisclosure: true, retention: false, launchDate: true, productionActivation: false, domainCutover: false,
 });

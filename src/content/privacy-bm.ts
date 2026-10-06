@@ -187,7 +187,8 @@ export const bmPrivacySections: InformationSection[] = [
   ], links: [{ href: "/terms", label: "Baca draf Terma Perkhidmatan" }] },
   { id: "contact", title: "29. Hubungi Kami", paragraphs: [
     marketplaceOperator.name + ". No. Pendaftaran SSM " + marketplaceOperator.registrationNumber + ". Privasi dan sokongan: " + marketplaceOperator.privacyLegalEmail + ".",
-    "Alamat perniagaan/surat-menyurat: " + bmPrivacyDocument.localizedBusinessAddressStatus + ". Tiada alamat diterbitkan dalam draf ini dan tiada alamat peribadi/rumah digunakan sebagai ganti.",
     "SEMAKAN UNDANG-UNDANG DIPERLUKAN — kelulusan muktamad Privasi Bahasa Inggeris, notis BM muktamad, alamat yang boleh diterbitkan serta keputusan penyedia, pemindahan, hak statutori dan penyimpanan yang belum diselesaikan seperti diterangkan di atas.",
+  ], addressParagraphs: [
+    "Alamat perniagaan/surat-menyurat: " + bmPrivacyDocument.localizedBusinessAddressStatus + ". Tiada alamat diterbitkan dalam draf ini dan tiada alamat peribadi/rumah digunakan sebagai ganti.",
   ], links: [{ href: "mailto:" + marketplaceOperator.privacyLegalEmail, label: "Hubungi " + marketplaceOperator.privacyLegalEmail }, { href: "/contact", label: "Maklumat hubungan" }, { href: "/help", label: "Pusat Bantuan" }] },
 ];

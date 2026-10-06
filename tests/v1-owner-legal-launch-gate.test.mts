@@ -55,7 +55,7 @@ test("all four actual documents preserve central V1 identity, unresolved dates a
     assert.equal(document.operator.registrationNumber, "KT0622373-U");
     assert.equal(document.operator.supportEmail, "support.takeme@gmail.com");
     assert.equal(document.businessAddress, null);
-    assert.equal(document.businessAddressStatus, "LEGAL REVIEW / OWNER INPUT REQUIRED");
+    assert.equal(document.businessAddressStatus, "NOT_PUBLISHED_FOR_V1");
   }
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
@@ -76,13 +76,15 @@ test("current owner-approved documents and nine preparation decisions remain sep
   assert.ok(Object.values(ownerApprovedV1ProductDecisions).every(value => value === true));
   assert.ok(Object.values(currentV1LaunchApprovals.counsel).every(value => value === false));
   assert.equal(currentV1LaunchApprovals.owner.launchDate, true);
-  assert.ok(Object.values(currentV1LaunchApprovals.issues).every(issue => issue.status === "pending" && issue.reviewReference === null));
-  for (const key of ["addressDisclosure", "retention", "productionActivation", "domainCutover"] as const) assert.equal(currentV1LaunchApprovals.owner[key], false);
+  assert.ok(Object.entries(currentV1LaunchApprovals.issues).filter(([key]) => key !== "addressDisclosure").every(([, issue]) => issue.status === "pending" && issue.reviewReference === null));
+  assert.equal(currentV1LaunchApprovals.owner.addressDisclosure, true);
+  assert.equal(currentV1LaunchApprovals.issues.addressDisclosure.status, "explicitly-accepted");
+  for (const key of ["retention", "productionActivation", "domainCutover"] as const) assert.equal(currentV1LaunchApprovals.owner[key], false);
   for (const version of [null, "1.0-draft", "1.0-staging", "2.0"]) assert.equal(v1OwnerDocumentApproval(version).ownerStatus, "not-approved");
 });
 
 test("deferred address and outstanding counsel permit engineering preparation while final publication remains closed", () => {
-  assert.equal(operatorDisclosureDecision.kind, "unresolved");
+  assert.equal(operatorDisclosureDecision.kind, "not-published-for-v1");
   assert.equal(operatorDisclosureDecision.text, null);
   assert.equal(operatorDisclosureDecision.bmText, null);
   assert.deepEqual(reviewV1ReleasePreparation(), []);
@@ -90,7 +92,7 @@ test("deferred address and outstanding counsel permit engineering preparation wh
   const publicationIssues = reviewV1PublicationGate({ ...readyFixture(), approvals: currentV1LaunchApprovals, launchDate: null,
     sourceDates, disclosure: operatorDisclosureDecision, verifiedRoutes: {}, finalFrontendArtifactVerified: false, policyRulesArtifactsRegenerated: false });
   assert.ok(publicationIssues.some(issue => /Counsel/.test(issue)));
-  assert.ok(publicationIssues.some(issue => /address/.test(issue)));
+  assert.ok(!publicationIssues.some(issue => /address|disclosure text|disclosure bmText/.test(issue)));
   assert.ok(publicationIssues.some(issue => /productionActivation/.test(issue)));
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(legalPublicationReadiness.finalContentApproved, false);
@@ -156,8 +158,9 @@ test("the exact proposed source change propagates through actual legal modules i
 });
 
 test("public disclosure needs explicit owner and counsel approval, and an alternative does not invent an address", () => {
-  assert.ok(validateOperatorDisclosure().length);
-  assert.deepEqual(legalOperatorDisclosure(), { businessAddress: null, businessAddressStatus: "LEGAL REVIEW / OWNER INPUT REQUIRED" });
+  assert.deepEqual(validateOperatorDisclosure(), []);
+  assert.equal(operatorDisclosureDecision.counselApproved, false);
+  assert.deepEqual(legalOperatorDisclosure(), { businessAddress: null, businessAddressStatus: "NOT_PUBLISHED_FOR_V1" });
   assert.deepEqual(legalOperatorDisclosure(approvedAlternative), { businessAddress: null, businessAddressStatus: approvedAlternative.text });
   assert.equal(bmLegalOperatorDisclosure(approvedAlternative), approvedAlternative.bmText);
   assert.equal(bmLegalOperatorDisclosure(), bmPrivacyDocument.localizedBusinessAddressStatus);
@@ -200,7 +203,8 @@ test("every owner/counsel/legal-issue and artifact/route/date/disclosure conditi
     const input = readyFixture(); input.verifiedRoutes = { ...input.verifiedRoutes, [route]: false };
     assert.ok(reviewV1PublicationGate(input).some(issue => issue.includes(route)));
   }
-  for (const change of [{ launchDate: null }, { launchDate: "2099-02-29" }, { sourceDates }, { disclosure: operatorDisclosureDecision },
+  for (const change of [{ launchDate: null }, { launchDate: "2099-02-29" }, { sourceDates },
+    { disclosure: { ...operatorDisclosureDecision, kind: "unresolved" as const, addressDisposition: undefined, ownerApprovedForPublicUse: false } },
     { finalFrontendArtifactVerified: false }, { policyRulesArtifactsRegenerated: false }]) {
     assert.ok(reviewV1PublicationGate({ ...readyFixture(), ...change }).length);
   }

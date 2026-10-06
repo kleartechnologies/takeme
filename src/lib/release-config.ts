@@ -163,7 +163,7 @@ export function offlineQualificationConfiguration(): ReleaseConfiguration {
     NEXT_PUBLIC_SITE_URL: "https://takeme.my", NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false", PROTECTED_PAYMENTS_ENABLED: "false",
   }, "offline-qualification",
   { publicationApproved: true, termsVersion: "qualification-final-v1", privacyVersion: "qualification-final-v1", minimumAge: 18 },
-  { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" });
+  { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "approved", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" });
 }
 
 // Explicit owner-confirmed public SDK inputs may be inspected offline only.
@@ -176,5 +176,5 @@ export function ownerOfflineQualificationConfiguration(env: ReleaseEnvironment, 
   if (issues.length) throw new ReleaseConfigurationError(issues);
   return validateConfiguration(env, "offline-qualification",
     { publicationApproved: true, termsVersion: "qualification-final-v1", privacyVersion: "qualification-final-v1", minimumAge: 18 },
-    { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "not-required", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" });
+    { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "not-required", address: "approved", productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" });
 }

@@ -166,6 +166,7 @@ export const termsSections: InformationSection[] = [
   ] },
   { id: "contact", title: "35. Contact", paragraphs: [
     `Operator: ${marketplaceOperator.name}. SSM registration: ${marketplaceOperator.registrationNumber}. Support, privacy and legal enquiries: ${marketplaceOperator.supportEmail}.`,
+  ], addressParagraphs: [
     `Business or publishable address: ${termsDocument.businessAddressStatus}. No address is published in this draft. A private or home address must not be substituted.`,
   ], links: [{ href: `mailto:${marketplaceOperator.supportEmail}`, label: `Contact ${marketplaceOperator.supportEmail}` }, { href: "/contact", label: "TAKEME contact information" }, { href: "/help", label: "Help Centre" }] },
 ];

@@ -17,7 +17,7 @@ const record = (paused: boolean): MaintenanceControlRecord => ({ releaseTarget: 
 const plan = (action: MaintenanceAction, state: ExpectedMaintenanceState = "absent", token: string | null = state === "absent" ? null : "100.000000001") => planProductionMaintenance(runtime(), action, state, token);
 const futurePolicy = { publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18 as const };
 const futureLegal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const,
-  address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
+  address: "approved" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 const mirror = { releaseTarget: "production", projectId: "takeme-52b80", ...futurePolicy };
 
 function store(initial?: unknown, policy: unknown = mirror) {

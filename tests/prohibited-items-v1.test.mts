@@ -80,7 +80,8 @@ test("Policy uses the confirmed operator, SSM and reporting email without a busi
   assert.equal(prohibitedItemsPolicy.registrationNumber, "KT0622373-U");
   assert.equal(prohibitedItemsPolicy.supportEmail, "support.takeme@gmail.com");
   assert.equal(prohibitedItemsPolicy.businessAddress, null);
-  assert.equal(prohibitedItemsPolicy.businessAddressStatus, "LEGAL REVIEW / OWNER INPUT REQUIRED");
+  assert.equal(prohibitedItemsPolicy.businessAddressStatus, "NOT_PUBLISHED_FOR_V1");
+  assert.doesNotMatch(copy("terms-contact"), /Business or correspondence address:|OWNER INPUT REQUIRED|NOT_PUBLISHED_FOR_V1/);
   for (const detail of [/TAKEME TECHNOLOGIES/, /KT0622373-U/, /support\.takeme@gmail\.com/]) assert.match(copy("terms-contact"), detail);
 });
 

@@ -25,7 +25,7 @@ test("unfinished policy/contact drafts are restricted to the authorised demo dev
 
 test("production legal publication needs independent source approvals and a matching production build", () => {
   const policy: ReleasePolicy = { publicationApproved: true, termsVersion: "unit-approved-terms", privacyVersion: "unit-approved-privacy", minimumAge: 18 };
-  const readiness: LegalPublicationReadiness = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved", address: "not-required", productionRoutesReviewed: true, effectiveDate: "2030-01-02", lastUpdated: "2030-01-01" };
+  const readiness: LegalPublicationReadiness = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved", address: "approved", productionRoutesReviewed: true, effectiveDate: "2030-01-02", lastUpdated: "2030-01-01" };
   const proof = { format: 1, purpose: "production-build", target: "production", projectId: "takeme-52b80", siteUrl: "https://takeme.my", useEmulators: false,
     firebase: { NEXT_PUBLIC_FIREBASE_PROJECT_ID: "takeme-52b80", NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "takeme-52b80.firebaseapp.com", NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "takeme-52b80.firebasestorage.app" }, policy };
   const encode = (value: unknown) => releaseProofPrefix + Buffer.from(JSON.stringify(value)).toString("base64");
@@ -35,7 +35,7 @@ test("production legal publication needs independent source approvals and a matc
   for (const key of ["publicationApproved", "finalContentApproved", "bmPrivacyNoticeApproved", "productionRoutesReviewed"] as const) {
     assert.equal(canPublishProductionLegal(runtime, { ...readiness, [key]: false }, policy), false, key);
   }
-  assert.equal(canPublishProductionLegal(runtime, { ...readiness, address: "pending" }, policy), false);
+  assert.equal(canPublishProductionLegal(runtime, { ...readiness, address: "pending", addressDisposition: undefined }, policy), false);
   for (const key of ["effectiveDate", "lastUpdated"] as const) {
     assert.equal(canPublishProductionLegal(runtime, { ...readiness, [key]: null }, policy), false, key);
     assert.equal(canPublishProductionLegal(runtime, { ...readiness, [key]: "2030-02-30" }, policy), false, key);

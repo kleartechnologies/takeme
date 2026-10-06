@@ -14,12 +14,12 @@ import { currentV1LaunchApprovals, reviewV1ReleasePreparation } from "../src/lib
 const environment = () => ({ TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "takeme-52b80", TAKEME_STORAGE_BUCKETS: "takeme-52b80.firebasestorage.app", TAKEME_DELETION_ENVIRONMENT: "production", TAKEME_ENABLE_PRODUCTION_DELETION: "false", PROTECTED_PAYMENTS_ENABLED: "false",
   NEXT_PUBLIC_FIREBASE_API_KEY: "AIza" + "a".repeat(35), NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "takeme-52b80.firebaseapp.com", NEXT_PUBLIC_FIREBASE_PROJECT_ID: "takeme-52b80", NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "takeme-52b80.firebasestorage.app", NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789012", NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789012:web:" + "a".repeat(22), NEXT_PUBLIC_SITE_URL: "https://takeme.my", NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false" });
 const policy = { publicationApproved: true, termsVersion: "approved-terms-v1", privacyVersion: "approved-privacy-v2", minimumAge: 18 as const };
-const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
+const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "approved" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 
 test("owner-approved release preparation is not blocked by a deferred address or unapproved counsel/publication", () => {
   assert.deepEqual(reviewV1ReleasePreparation(), []);
   assert.equal(currentV1LaunchApprovals.owner.terms, true);
-  assert.equal(currentV1LaunchApprovals.owner.addressDisclosure, false);
+  assert.equal(currentV1LaunchApprovals.owner.addressDisclosure, true);
   assert.equal(legalPublicationReadiness.address, "pending");
   assert.equal(legalPublicationReadiness.effectiveDate, "2026-10-12");
   assert.equal(legalPublicationReadiness.lastUpdated, "2026-10-12");

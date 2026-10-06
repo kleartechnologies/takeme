@@ -13,7 +13,7 @@ const record = (paused: boolean): AuctionCreationControl => ({ releaseTarget: co
 const runtime = { env: { GCLOUD_PROJECT: "takeme-52b80", TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "takeme-52b80", TAKEME_STORAGE_BUCKETS: "takeme-52b80.firebasestorage.app", TAKEME_ENABLE_PRODUCTION_DELETION: "false", PROTECTED_PAYMENTS_ENABLED: "false" }, appProjectId: "takeme-52b80", appStorageBucket: "takeme-52b80.firebasestorage.app" };
 const plan = (action: "freeze" | "restore", state: "absent" | "off" | "on" = "absent", token: string | null = state === "absent" ? null : "100.000000001") => planProductionAuctionControl(runtime, action, state, token);
 const policy = { publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18 as const };
-const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "not-required" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
+const legal = { publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, registration: "approved" as const, address: "approved" as const, productionRoutesReviewed: true, effectiveDate: "2099-01-01", lastUpdated: "2099-01-01" };
 const mirror = { releaseTarget: "production", projectId: "takeme-52b80", ...policy };
 function store(initial?: unknown, maintenance: unknown = { releaseTarget: "production", projectId: "takeme-52b80", protectedWritesPaused: false }, runtimePolicy: unknown = mirror) {
   let snapshot: MaintenanceSnapshot = { exists: initial !== undefined, data: initial, updateTime: initial === undefined ? null : "100.000000001" }, reads = 0, writes = 0;

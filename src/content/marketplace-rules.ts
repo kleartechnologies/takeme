@@ -130,7 +130,9 @@ export const prohibitedItemsSections: InformationSection[] = [
   { id: "terms-contact", title: "18. Terms Linkage, Draft Status and Contact", paragraphs: [
     `The TAKEME Prohibited Items Policy forms part of Terms of Service version ${prohibitedItemsPolicy.version}. Read it alongside the Terms and Privacy Notice.`,
     "The effective date remains the actual owner-approved public launch date; last updated uses that date unless separately changed. " + (prohibitedItemsPolicy.effectiveDate ? "Both dates are prepared for " + prohibitedItemsPolicy.effectiveDate + ". " : "Both dates remain unresolved. ") + "This owner draft is unpublished and not in effect, and does not grant permission to activate legal policies or publish the policy.",
-    `Operator: ${marketplaceOperator.name}. SSM registration: ${marketplaceOperator.registrationNumber}. Support and reporting: ${marketplaceOperator.supportEmail}. Business or correspondence address: ${prohibitedItemsPolicy.businessAddressStatus}. No address is published in this draft and no private/home address is substituted.`,
+    `Operator: ${marketplaceOperator.name}. SSM registration: ${marketplaceOperator.registrationNumber}. Support and reporting: ${marketplaceOperator.supportEmail}.`,
     "LEGAL REVIEW REQUIRED — final policy wording, regulated-category scope, intermediary obligations and enforcement/evidence duties. The identified unresolved legal inputs are not finalised by this draft.",
+  ], addressParagraphs: [
+    `Business or correspondence address: ${prohibitedItemsPolicy.businessAddressStatus}. No address is published in this draft and no private/home address is substituted.`,
   ], links: [{ href: "/terms", label: "Read the TAKEME Terms of Service draft" }, { href: "/privacy", label: "Read the TAKEME Privacy Notice draft" }, { href: `mailto:${marketplaceOperator.supportEmail}`, label: `Contact ${marketplaceOperator.supportEmail}` }] },
 ];

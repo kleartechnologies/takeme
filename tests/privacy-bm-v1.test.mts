@@ -74,11 +74,12 @@ test("BM preserves the verified operator, registration and contacts without addi
   assert.equal(bmPrivacyDocument.operator.privacyLegalEmail, "support.takeme@gmail.com");
   assert.equal(bmPrivacyDocument.businessAddress, null);
   assert.equal(bmPrivacyDocument.businessAddressStatus, privacyDocument.businessAddressStatus);
-  matches(bmPrivacyDocument.localizedBusinessAddressStatus, /SEMAKAN UNDANG-UNDANG|INPUT PEMILIK/);
+  assert.equal(bmPrivacyDocument.localizedBusinessAddressStatus, "NOT_PUBLISHED_FOR_V1");
+  assert.doesNotMatch(copy("contact"), /Alamat perniagaan\/surat-menyurat:|INPUT PEMILIK|NOT_PUBLISHED_FOR_V1/);
   assert.equal(legalPublicationReadiness.address, "pending");
   for (const identity of [/TAKEME TECHNOLOGIES/, /KT0622373-U/, /support\.takeme@gmail\.com/]) matches(copy("contact"), identity);
   matches(copy("contact"), /alamat/i);
-  matches(copy("contact"), /tiada alamat|alamat[^.]*tidak[^.]*diterbitkan/i);
+  matches(bmPrivacySections.find(section => section.id === "contact")!.addressParagraphs!.join(" "), /tiada alamat|alamat[^.]*tidak[^.]*diterbitkan/i);
 });
 
 test("BM account and data categories remain the current Firebase account and marketplace model", () => {

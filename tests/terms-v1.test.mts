@@ -71,9 +71,9 @@ test("Terms identify the owner-confirmed operator and 18+ eligibility without a 
   assert.match(sectionText("Eligibility"), /18\+|at least 18|18 years old/i);
   assert.match(sectionText("Contact"), /support\.takeme@gmail\.com/);
   assert.equal(termsDocument.businessAddress, null);
-  assert.equal(termsDocument.businessAddressStatus, "LEGAL REVIEW / OWNER INPUT REQUIRED");
+  assert.equal(termsDocument.businessAddressStatus, "NOT_PUBLISHED_FOR_V1");
   assert.equal(legalPublicationReadiness.address, "pending");
-  assert.match(sectionText("Contact"), /LEGAL REVIEW \/ OWNER INPUT REQUIRED/);
+  assert.doesNotMatch(sectionText("Contact"), /Business or publishable address|OWNER INPUT REQUIRED|NOT_PUBLISHED_FOR_V1/);
 });
 
 test("Terms permit public browsing and require explicit current acceptance for protected marketplace actions", () => {

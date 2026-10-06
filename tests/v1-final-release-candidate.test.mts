@@ -21,7 +21,7 @@ test("owner-approved RC date reaches all eight fields without publication or cou
   assert.equal(legalPublicationReadiness.publicationApproved, false);
   assert.equal(productionReleasePolicy.publicationApproved, false);
   assert.equal(prohibitedItemsPolicy.publicationApproved, false);
-  assert.equal(operatorDisclosureDecision.kind, "unresolved");
+  assert.equal(operatorDisclosureDecision.kind, "not-published-for-v1");
   assert.deepEqual(reviewV1ReleasePreparation(), []);
 });
 

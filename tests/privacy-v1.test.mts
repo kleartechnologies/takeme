@@ -74,9 +74,10 @@ test("Privacy identifies the confirmed operator and contact without inventing an
   assert.equal(privacyDocument.operator.supportEmail, "support.takeme@gmail.com");
   assert.equal(privacyDocument.operator.privacyLegalEmail, "support.takeme@gmail.com");
   assert.equal(privacyDocument.businessAddress, null);
-  assert.equal(privacyDocument.businessAddressStatus, "LEGAL REVIEW / OWNER INPUT REQUIRED");
+  assert.equal(privacyDocument.businessAddressStatus, "NOT_PUBLISHED_FOR_V1");
   assert.equal(legalPublicationReadiness.address, "pending");
-  for (const identity of [/TAKEME TECHNOLOGIES/, /KT0622373-U/, /support\.takeme@gmail\.com/, /LEGAL REVIEW \/ OWNER INPUT REQUIRED/]) assert.match(copy(/^contact$/i), identity);
+  for (const identity of [/TAKEME TECHNOLOGIES/, /KT0622373-U/, /support\.takeme@gmail\.com/]) assert.match(copy(/^contact$/i), identity);
+  assert.doesNotMatch(copy(/^contact$/i), /Business\/correspondence address:|OWNER INPUT REQUIRED|NOT_PUBLISHED_FOR_V1/);
 });
 
 test("Account and profile data describe V1 authentication without publishing private account identity", () => {
