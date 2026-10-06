@@ -1,0 +1,69 @@
+{
+  "purpose": "reviewed-production-function-rollback-reference",
+  "projectId": "takeme-52b80",
+  "projectNumber": "367115645204",
+  "region": "asia-southeast1",
+  "storageBucket": "takeme-52b80.firebasestorage.app",
+  "reconciliationSourceCheckpoint": "05924d53f4456f1be9edad186fdc07ba998dfb29",
+  "reviewedAt": "2026-10-06T07:49:33.994536+00:00",
+  "functionCount": 91,
+  "restoredRevisionChanges": 3,
+  "historicalManifestSha256": "ceda0e775e487748f93d671368b7ee7d118c0077f85587dcd78ff3b19cc26d53",
+  "historicalInventorySha256": "a7c33c6465752b13f09a2216ff7a61306e83e063f6af26cf2b2debbe7c58018f",
+  "reconciledManifestSha256": "a2a4ee81a0577cc93deccf346420dc0a54f1643f2fda5f535d49b42980fa0e5e",
+  "reconciledInventorySha256": "8d4afbef99191839a4b087743a173f5caa56e1a28aa1bf9d955dc62791ebe71f",
+  "privatePointerBasename": "current-production-function-rollback.json",
+  "baselineVerified": true,
+  "rollbackReady": true,
+  "bridgeVerifierReady": true,
+  "deploymentAuthorized": false,
+  "productionModified": false,
+  "publicationApproved": false,
+  "deletionEnabled": false,
+  "paymentsEnabled": false,
+  "evidenceFiles": {
+    "currentInventory": "evidence/current-functions-inventory.json",
+    "historicalInventory": "historical/pre-attempt-functions-inventory.json",
+    "rollbackPackages": "function-rollback"
+  },
+  "restoredFunctions": [
+    {
+      "name": "cancelAuction",
+      "historicalRevision": "cancelauction-00002-mig",
+      "temporaryBridgeRevision": "cancelauction-00003-jiw",
+      "restoredRevision": "cancelauction-00005-xuv",
+      "sourceHash": "086b84f1ba96d2093bad13864a7e1a8e3fdfc80a",
+      "compiledTreeSha256": "a2525c23d23c8b421ba99e15175d51d7664f626956a45b8bbe74d327527c333b",
+      "environmentSha256": "0296ae5a4bfbbec7573fa426d30ffb4ae2a7bba62bebf72ac48dd410b7e9d2fb",
+      "serviceConfigurationSha256": "60d99cf9983c5c9ac0d1ad41b150755b0991d7f05b2f2fddfcda48f5c7c68381",
+      "iamSha256": "b9a6087bad291d0bb96d7e1784d459b1521d258707c63f93933d3148c60391cb"
+    },
+    {
+      "name": "placeBid",
+      "historicalRevision": "placebid-00002-zev",
+      "temporaryBridgeRevision": "placebid-00003-qep",
+      "restoredRevision": "placebid-00005-boz",
+      "sourceHash": "086b84f1ba96d2093bad13864a7e1a8e3fdfc80a",
+      "compiledTreeSha256": "a2525c23d23c8b421ba99e15175d51d7664f626956a45b8bbe74d327527c333b",
+      "environmentSha256": "e7b65835f9818c821f2d997c06ab304e5bd606e446742d248514a278028b3013",
+      "serviceConfigurationSha256": "94dab9614f851aa057f8ece023000a486b3d9e1eef13f03de4d6ec4dfc50cd71",
+      "iamSha256": "b9a6087bad291d0bb96d7e1784d459b1521d258707c63f93933d3148c60391cb"
+    },
+    {
+      "name": "publishAuctionListing",
+      "historicalRevision": "publishauctionlisting-00003-kec",
+      "temporaryBridgeRevision": "publishauctionlisting-00004-vob",
+      "restoredRevision": "publishauctionlisting-00006-ton",
+      "sourceHash": "086b84f1ba96d2093bad13864a7e1a8e3fdfc80a",
+      "compiledTreeSha256": "a2525c23d23c8b421ba99e15175d51d7664f626956a45b8bbe74d327527c333b",
+      "environmentSha256": "d2b2040c7175480579f572a8d66b7062902cc6165d74a626d076faafa2e2025f",
+      "serviceConfigurationSha256": "5bf44f05f4341c3e8f6bb467092715facf2a00f115744c93f6dab4daaceb2890",
+      "iamSha256": "b9a6087bad291d0bb96d7e1784d459b1521d258707c63f93933d3148c60391cb"
+    }
+  ],
+  "limitations": [
+    "Point-in-time reviewed reference; refresh remote baseline before separately authorized execution.",
+    "New revision IDs are acceptable only after exact source/configuration/IAM/serving equivalence.",
+    "Private bundles, runtime environment values, managed deployment archives and credentials remain outside Git."
+  ]
+}
