@@ -1,0 +1,42 @@
+[
+  {
+    "id": "worker_health",
+    "severity": "WARNING / CRITICAL if sustained/broad",
+    "signal": "Owner-approved manual takeme-web Workers Logs/metrics inspection: invocation outcomes, 5xx, exceptions, request count and wall/CPU duration after separately approved deployment; observability and query-string redaction enabled",
+    "condition": "Review repeated server failures/exceptions over five minutes; broad valid-page outage or failed required smoke is CRITICAL immediately. No percentage SLA fabricated. Lost monitoring access or unknown telemetry stops progression.",
+    "evaluationWindow": "Continuous watch at deployment boundaries, recorded reviews at least every five minutes throughout activation and immediately after deployment/reopen; preserve observability and verify ingestion before proceeding",
+    "notificationDestination": "Manual primary-operator escalation to support.takeme@gmail.com and backup zweetdata@gmail.com; no automated Cloudflare notification or delivery claimed",
+    "falsePositiveRisk": "Sampled metrics, duplicate exception/5xx occurrences, and low traffic; do not attach origin/zone alerts as a substitute for a Worker metric",
+    "operatorAction": "Stop progression, inspect current exact Worker version/outcome; use authorized rollback/control runbook. Do not route traffic or disable protections automatically.",
+    "coverageMode": "owner-approved manual watch; Google/Firebase is the prepared automated alerting layer, with normal alert enablement separately authorized",
+    "customAlertStatus": "UNAVAILABLE: owner observed Dashboard Error 17203 / requesting user cannot access this query for Workers Real-Time Issues Count rows, scriptName = takeme-web, >= 5 / 5 minutes, execution 1 minute, repeat 1 hour",
+    "customAlertRequiredForTechnicalReadiness": false,
+    "readinessConditions": [
+      "Worker observability/logging and query-string redaction enabled",
+      "Documented owner-approved activation and immediate post-deployment manual watch",
+      "Google/Firebase actual delivery verified",
+      "Primary and backup incident contacts verified",
+      "Compatible rollback/runbook coverage ready"
+    ]
+  },
+  {
+    "id": "auth_policy",
+    "severity": "WARNING / CRITICAL for repeated known-valid failure",
+    "signal": "Firebase Auth usage/provider aggregates where available; future acceptWebPolicies/getAccountSetupStatus Cloud Run metrics; approved synthetic onboarding/reacceptance outcomes",
+    "condition": "Repeated failures across independent approved valid checks/provider flows while expected credentials/eligibility are correct; all required valid acceptance attempts fail => CRITICAL. Wrong password/no consent/under18/maintenance denial are not outages.",
+    "evaluationWindow": "Every auth/policy runbook checkpoint, compare five-minute aggregates with known-valid smoke; no invented fleet-wide rate before baseline",
+    "notificationDestination": "Primary operator support.takeme@gmail.com (primary), zweetdata@gmail.com (backup); no automatic user-identifying log collection",
+    "falsePositiveRisk": "HTTP200 callable errors and absent telemetry can hide failures; current production policy endpoints are not all deployed, so metrics alone cannot certify eligibility acceptance.",
+    "operatorAction": "Stop progression, verify provider/config/central source/runtime mirror/version parity. Never fabricate consent, remove age checks or repair policy records without authorization."
+  },
+  {
+    "id": "firestore_usage_cost",
+    "severity": "INFO / WARNING for persistent unexplained increase",
+    "signal": "Firebase Usage document reads/writes/deletes, Cloud Monitoring Firestore API result codes/rule-denial groups, Google Billing Reports/Budgets",
+    "condition": "Persistently unexplained growth versus captured operator baseline; broad operational failures => CRITICAL. Budget amount is OWNER INPUT REQUIRED; no numeric cost limit invented.",
+    "evaluationWindow": "Five-minute activation trend review with ingestion delay; daily billing review after launch",
+    "notificationDestination": "Primary operator support.takeme@gmail.com (primary), zweetdata@gmail.com (backup); future approved billing-budget destination only",
+    "falsePositiveRisk": "Monitoring reads, public browsing/polling and delayed billing data can increase counts; no automatic cutoff.",
+    "operatorAction": "Investigate source/revision/traffic trend and safe rate/cost bounds without customer documents. Do not raise quotas or disable services automatically."
+  }
+]

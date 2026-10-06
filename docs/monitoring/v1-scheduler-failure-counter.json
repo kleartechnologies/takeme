@@ -1,0 +1,6 @@
+{
+  "name": "takeme_v1_scheduler_failed_attempts",
+  "description": "TAKEME six reviewed production Scheduler jobs: count ERROR-level AttemptFinished delivery events only; no payload/identity label extraction. Prospective counter, not an application effect guarantee.",
+  "filter": "resource.type=\"cloud_scheduler_job\" AND resource.labels.project_id=\"takeme-52b80\" AND resource.labels.location=\"asia-southeast1\" AND (resource.labels.job_id=\"firebase-schedule-processEngagementJobs-asia-southeast1\" OR resource.labels.job_id=\"firebase-schedule-advanceAuctionLifecycle-asia-southeast1\" OR resource.labels.job_id=\"firebase-schedule-expirePromotions-asia-southeast1\" OR resource.labels.job_id=\"firebase-schedule-expireOffers-asia-southeast1\" OR resource.labels.job_id=\"firebase-schedule-queueEndingAuctionAlerts-asia-southeast1\" OR resource.labels.job_id=\"firebase-schedule-releaseExpiredReviews-asia-southeast1\") AND jsonPayload.\"@type\"=\"type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished\" AND severity>=ERROR",
+  "disabled": false
+}

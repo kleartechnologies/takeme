@@ -1,0 +1,338 @@
+{
+  "projectId": "takeme-52b80",
+  "sourceApprovalCheckpoint": "3e424f4083d2d193c4968646bad43c5d759eae25",
+  "allDisabled": true,
+  "thresholdBasis": "Owner-approved conservative V1 failure counts on 6 October 2026; unchanged from the reviewed candidates. Not a measured baseline/SLO. Sensitivity approval does not authorize enabling policies.",
+  "policies": [
+    {
+      "id": "functions_failures",
+      "severity": "WARNING",
+      "ownerApprovalRequiredBeforeEnabling": true,
+      "falsePositiveRisk": "Repeated transient upstream/internal failures can trigger. Normal authentication, eligibility and input 4xx are excluded.",
+      "operatorAction": "Compare required Function ACTIVE/revision state and known valid smoke results. Escalate CRITICAL for widespread required-function failure; stop activation progression and retain the current safe state.",
+      "apiPayload": {
+        "displayName": "TAKEME V1 Functions repeated server failures",
+        "severity": "WARNING",
+        "enabled": false,
+        "combiner": "OR",
+        "notificationChannels": [
+          "projects/takeme-52b80/notificationChannels/17384389673105497221",
+          "projects/takeme-52b80/notificationChannels/14950290015287672268"
+        ],
+        "conditions": [
+          {
+            "displayName": "At least five 5xx per service in five minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"cloud_run_revision\" AND resource.labels.project_id = \"takeme-52b80\" AND resource.labels.location = \"asia-southeast1\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\"",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 4,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "300s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": [
+                    "resource.labels.service_name"
+                  ]
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          }
+        ],
+        "userLabels": {
+          "takeme_purpose": "v1_launch_monitoring",
+          "managed_by": "owner_review",
+          "coverage": "functions_failures"
+        },
+        "alertStrategy": {
+          "autoClose": "1800s"
+        },
+        "documentation": {
+          "mimeType": "text/markdown",
+          "subject": "TAKEME V1 WARNING Functions repeated server failures",
+          "content": "Disabled owner-review candidate; no serving behavior change. Initial count-based sensitivity is proposed, not a measured SLA. Compare required Function ACTIVE/revision state and known valid smoke results. Escalate CRITICAL for widespread required-function failure; stop activation progression and retain the current safe state. False-positive risk: Repeated transient upstream/internal failures can trigger. Normal authentication, eligibility and input 4xx are excluded. Inspect aggregate codes/status/revision only; do not expose credentials, customer payloads or identities. No automatic rollback or write-state changes."
+        }
+      },
+      "notificationDestinations": [
+        "support.takeme@gmail.com",
+        "zweetdata@gmail.com"
+      ],
+      "ownerSensitivityApproved": true
+    },
+    {
+      "id": "scheduler_failures",
+      "severity": "WARNING",
+      "ownerApprovalRequiredBeforeEnabling": true,
+      "falsePositiveRisk": "Two retry attempts can be counted for one scheduled run. Counter has ingestion delay/gaps and starts prospectively.",
+      "operatorAction": "Inspect exact job state, lastAttemptTime/status and expected cron. Two attempts can include retries, so confirm persistence/consecutive-run failure. Prioritize lifecycle. Do not alter jobs.",
+      "apiPayload": {
+        "displayName": "TAKEME V1 Scheduler repeated delivery failures",
+        "severity": "WARNING",
+        "enabled": false,
+        "combiner": "OR",
+        "notificationChannels": [
+          "projects/takeme-52b80/notificationChannels/17384389673105497221",
+          "projects/takeme-52b80/notificationChannels/14950290015287672268"
+        ],
+        "conditions": [
+          {
+            "displayName": "At least two failed delivery attempts per job in ten minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"cloud_scheduler_job\" AND resource.labels.project_id = \"takeme-52b80\" AND resource.labels.location = \"asia-southeast1\" AND metric.type = \"logging.googleapis.com/user/takeme_v1_scheduler_failed_attempts\"",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 1,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "600s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": [
+                    "resource.labels.job_id"
+                  ]
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          }
+        ],
+        "userLabels": {
+          "takeme_purpose": "v1_launch_monitoring",
+          "managed_by": "owner_review",
+          "coverage": "scheduler_failures"
+        },
+        "alertStrategy": {
+          "autoClose": "1800s"
+        },
+        "documentation": {
+          "mimeType": "text/markdown",
+          "subject": "TAKEME V1 WARNING Scheduler repeated delivery failures",
+          "content": "Disabled owner-review candidate; no serving behavior change. Initial count-based sensitivity is proposed, not a measured SLA. Inspect exact job state, lastAttemptTime/status and expected cron. Two attempts can include retries, so confirm persistence/consecutive-run failure. Prioritize lifecycle. Do not alter jobs. False-positive risk: Two retry attempts can be counted for one scheduled run. Counter has ingestion delay/gaps and starts prospectively. Inspect aggregate codes/status/revision only; do not expose credentials, customer payloads or identities. No automatic rollback or write-state changes."
+        }
+      },
+      "notificationDestinations": [
+        "support.takeme@gmail.com",
+        "zweetdata@gmail.com"
+      ],
+      "ownerSensitivityApproved": true
+    },
+    {
+      "id": "auction_lifecycle",
+      "severity": "CRITICAL",
+      "ownerApprovalRequiredBeforeEnabling": true,
+      "falsePositiveRisk": "Transient failures/retries can trigger; HTTP success alone cannot prove ending/winner effects.",
+      "operatorAction": "Stop progression; verify lifecycle Function/revision and scheduler metadata. Never inspect/private-edit bids or clocks. Keep/restore only separately authorized safe controls through the existing incident runbook.",
+      "apiPayload": {
+        "displayName": "TAKEME V1 Auction lifecycle repeated failures",
+        "severity": "CRITICAL",
+        "enabled": false,
+        "combiner": "OR",
+        "notificationChannels": [
+          "projects/takeme-52b80/notificationChannels/17384389673105497221",
+          "projects/takeme-52b80/notificationChannels/14950290015287672268"
+        ],
+        "conditions": [
+          {
+            "displayName": "At least two lifecycle 5xx in five minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"cloud_run_revision\" AND resource.labels.project_id = \"takeme-52b80\" AND resource.labels.location = \"asia-southeast1\" AND resource.labels.service_name = \"advanceauctionlifecycle\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\"",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 1,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "300s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": [
+                    "resource.labels.service_name"
+                  ]
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          },
+          {
+            "displayName": "At least two lifecycle delivery failures in ten minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"cloud_scheduler_job\" AND resource.labels.project_id = \"takeme-52b80\" AND resource.labels.location = \"asia-southeast1\" AND metric.type = \"logging.googleapis.com/user/takeme_v1_scheduler_failed_attempts\" AND resource.labels.job_id = \"firebase-schedule-advanceAuctionLifecycle-asia-southeast1\"",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 1,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "600s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": [
+                    "resource.labels.job_id"
+                  ]
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          }
+        ],
+        "userLabels": {
+          "takeme_purpose": "v1_launch_monitoring",
+          "managed_by": "owner_review",
+          "coverage": "auction_lifecycle"
+        },
+        "alertStrategy": {
+          "autoClose": "1800s"
+        },
+        "documentation": {
+          "mimeType": "text/markdown",
+          "subject": "TAKEME V1 CRITICAL Auction lifecycle repeated failures",
+          "content": "Disabled owner-review candidate; no serving behavior change. Initial count-based sensitivity is proposed, not a measured SLA. Stop progression; verify lifecycle Function/revision and scheduler metadata. Never inspect/private-edit bids or clocks. Keep/restore only separately authorized safe controls through the existing incident runbook. False-positive risk: Transient failures/retries can trigger; HTTP success alone cannot prove ending/winner effects. Inspect aggregate codes/status/revision only; do not expose credentials, customer payloads or identities. No automatic rollback or write-state changes."
+        }
+      },
+      "notificationDestinations": [
+        "support.takeme@gmail.com",
+        "zweetdata@gmail.com"
+      ],
+      "ownerSensitivityApproved": true
+    },
+    {
+      "id": "storage_failures",
+      "severity": "WARNING",
+      "ownerApprovalRequiredBeforeEnabling": true,
+      "falsePositiveRisk": "Five transient errors may trigger; legitimate client MIME/size/access 4xx are excluded. Semantic/permit failures require operator smoke review.",
+      "operatorAction": "Inspect aggregate method/code and exact bucket/rule/permit/client parity. Broad valid-user upload failure is CRITICAL; do not weaken owner/type/size/overwrite/permit guards.",
+      "apiPayload": {
+        "displayName": "TAKEME V1 Storage repeated server failures",
+        "severity": "WARNING",
+        "enabled": false,
+        "combiner": "OR",
+        "notificationChannels": [
+          "projects/takeme-52b80/notificationChannels/17384389673105497221",
+          "projects/takeme-52b80/notificationChannels/14950290015287672268"
+        ],
+        "conditions": [
+          {
+            "displayName": "At least five Storage 5xx in five minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"gcs_bucket\" AND resource.labels.project_id = \"takeme-52b80\" AND resource.labels.bucket_name = \"takeme-52b80.firebasestorage.app\" AND metric.type = \"storage.googleapis.com/api/request_count\" AND metric.labels.response_code = monitoring.regex.full_match(\"5[0-9][0-9]\")",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 4,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "300s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": []
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          }
+        ],
+        "userLabels": {
+          "takeme_purpose": "v1_launch_monitoring",
+          "managed_by": "owner_review",
+          "coverage": "storage_failures"
+        },
+        "alertStrategy": {
+          "autoClose": "1800s"
+        },
+        "documentation": {
+          "mimeType": "text/markdown",
+          "subject": "TAKEME V1 WARNING Storage repeated server failures",
+          "content": "Disabled owner-review candidate; no serving behavior change. Initial count-based sensitivity is proposed, not a measured SLA. Inspect aggregate method/code and exact bucket/rule/permit/client parity. Broad valid-user upload failure is CRITICAL; do not weaken owner/type/size/overwrite/permit guards. False-positive risk: Five transient errors may trigger; legitimate client MIME/size/access 4xx are excluded. Semantic/permit failures require operator smoke review. Inspect aggregate codes/status/revision only; do not expose credentials, customer payloads or identities. No automatic rollback or write-state changes."
+        }
+      },
+      "notificationDestinations": [
+        "support.takeme@gmail.com",
+        "zweetdata@gmail.com"
+      ],
+      "ownerSensitivityApproved": true
+    },
+    {
+      "id": "firestore_errors",
+      "severity": "WARNING",
+      "ownerApprovalRequiredBeforeEnabling": true,
+      "falsePositiveRisk": "Engine errors can be caused by malformed requests/rule paths; DENY is intentionally excluded to avoid maintenance/input noise.",
+      "operatorAction": "Inspect current rules release and aggregate API/rule codes; distinguish expected maintenance/eligibility DENY from engine ERROR. Broad valid-user denials after reopen are CRITICAL even without 5xx. Check Usage/Billing trend without customer documents.",
+      "apiPayload": {
+        "displayName": "TAKEME V1 Firestore repeated rule-engine errors",
+        "severity": "WARNING",
+        "enabled": false,
+        "combiner": "OR",
+        "notificationChannels": [
+          "projects/takeme-52b80/notificationChannels/17384389673105497221",
+          "projects/takeme-52b80/notificationChannels/14950290015287672268"
+        ],
+        "conditions": [
+          {
+            "displayName": "At least five rule evaluation ERRORs in five minutes",
+            "conditionThreshold": {
+              "filter": "resource.type = \"firestore.googleapis.com/Database\" AND resource.labels.resource_container = \"takeme-52b80\" AND resource.labels.database_id = \"(default)\" AND metric.type = \"firestore.googleapis.com/rules/evaluation_count\" AND metric.labels.result = \"ERROR\"",
+              "comparison": "COMPARISON_GT",
+              "thresholdValue": 4,
+              "duration": "60s",
+              "trigger": {
+                "count": 1
+              },
+              "aggregations": [
+                {
+                  "alignmentPeriod": "300s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": []
+                }
+              ],
+              "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+            }
+          }
+        ],
+        "userLabels": {
+          "takeme_purpose": "v1_launch_monitoring",
+          "managed_by": "owner_review",
+          "coverage": "firestore_errors"
+        },
+        "alertStrategy": {
+          "autoClose": "1800s"
+        },
+        "documentation": {
+          "mimeType": "text/markdown",
+          "subject": "TAKEME V1 WARNING Firestore repeated rule-engine errors",
+          "content": "Disabled owner-review candidate; no serving behavior change. Initial count-based sensitivity is proposed, not a measured SLA. Inspect current rules release and aggregate API/rule codes; distinguish expected maintenance/eligibility DENY from engine ERROR. Broad valid-user denials after reopen are CRITICAL even without 5xx. Check Usage/Billing trend without customer documents. False-positive risk: Engine errors can be caused by malformed requests/rule paths; DENY is intentionally excluded to avoid maintenance/input noise. Inspect aggregate codes/status/revision only; do not expose credentials, customer payloads or identities. No automatic rollback or write-state changes."
+        }
+      },
+      "notificationDestinations": [
+        "support.takeme@gmail.com",
+        "zweetdata@gmail.com"
+      ],
+      "ownerSensitivityApproved": true
+    }
+  ],
+  "deliveryChannels": [
+    "projects/takeme-52b80/notificationChannels/17384389673105497221",
+    "projects/takeme-52b80/notificationChannels/14950290015287672268"
+  ],
+  "notificationDestinations": [
+    "support.takeme@gmail.com",
+    "zweetdata@gmail.com"
+  ],
+  "ownerSensitivityApproved": true,
+  "normalAlertActivationAuthorized": false,
+  "apiDocumentationStatus": "API candidate annotations describe their original pre-approval preparation. Only notificationChannels were patched remotely; the owner approval is recorded here without altering thresholds or application behavior."
+}
