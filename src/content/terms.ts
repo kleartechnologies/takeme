@@ -47,7 +47,7 @@ export const termsSections: InformationSection[] = [
   ] },
   { id: "sellers", title: "7. Seller Obligations", paragraphs: [
     "Sellers must describe their items and arrangements honestly and comply with applicable law. Individual sellers and sellers acting for a business use the available marketplace tools. A profile, rating or reputation tier is not proof of business registration, authenticity or a verified seller.",
-    "LEGAL REVIEW REQUIRED — exact seller disclosure fields; individual vs business seller requirements; national-language disclosure requirements where applicable; and any additional platform/operator obligations. The final required fields and implementation are not legally finalised by this draft.",
+    "LEGAL REVIEW REQUIRED — exact seller disclosure fields; individual vs business seller requirements; national-language disclosure requirements where applicable; and any additional platform/operator obligations. The final required fields and implementation are not legally finalised by these Terms.",
   ], bullets: [
     "Have lawful ownership or the right to offer the item and publish its photos and content.",
     "Describe price, category, condition, included accessories and material defects accurately. New and branded goods are permitted only when lawful and truthfully described.",
@@ -60,9 +60,9 @@ export const termsSections: InformationSection[] = [
   ] },
   { id: "rules", title: "9. Prohibited and Restricted Items", paragraphs: [
     "Do not list, offer, request or transact in illegal, unsafe, fraudulent, infringing or prohibited goods or services. Any lawful restricted item remains subject to applicable requirements and the TAKEME Prohibited Items Policy.",
-    `The TAKEME Prohibited Items Policy is referenced as part of these Terms and follows intended Terms version ${prohibitedItemsPolicy.version}. It applies to relevant listings, content and marketplace activity.`,
-    "LEGAL REVIEW REQUIRED — final prohibited-items wording and legal approval. This draft does not claim that every listing is pre-approved or authenticated.",
-  ], links: [{ href: "/help/prohibited-items", label: "TAKEME Prohibited Items Policy draft" }] },
+    `The TAKEME Prohibited Items Policy is referenced as part of these Terms and follows Terms version ${prohibitedItemsPolicy.version}. It applies to relevant listings, content and marketplace activity.`,
+    "LEGAL REVIEW REQUIRED — final prohibited-items wording and legal approval. These Terms do not claim that every listing is pre-approved or authenticated.",
+  ], links: [{ href: "/help/prohibited-items", label: "TAKEME Prohibited Items Policy" }] },
   { id: "offers", title: "10. Offers and Negotiations", paragraphs: [
     "Make requests and offers in good faith. Where available, a seller can accept, decline or counter an offer and a buyer can accept a counter through the supported flow. Do not use offers to spam, defraud, harass or manipulate another user.",
     "Acceptance records the agreed marketplace amount and a deal state. It does not mean that payment completed, that a shipment exists or that TAKEME guarantees fulfilment. Buyers and sellers remain responsible for the agreed exchange.",
@@ -100,15 +100,15 @@ export const termsSections: InformationSection[] = [
   ], links: [{ href: "/help#safety", label: "Safety and reporting help" }, { href: `mailto:${marketplaceOperator.supportEmail}`, label: "Contact TAKEME support" }] },
   { id: "retention", title: "18. Records and Legal Retention", paragraphs: [
     "Certain online marketplace records may need to be retained for three years under applicable Malaysian electronic-trade rules. LEGAL REVIEW REQUIRED — the applicable records, exact statutory retention implementation and reconciliation with the current deletion and retention model.",
-    "This draft does not change retention periods, create an indefinite evidence store or automatically extend production deletion schedules. Scope, access restrictions, legal holds and retention/deletion conflicts must be resolved through legal review before the relevant launch decisions are made. Refresh, login and browsing do not create acceptance evidence.",
+    "These Terms do not change retention periods, create an indefinite evidence store or automatically extend production deletion schedules. Scope, access restrictions, legal holds and retention/deletion conflicts must be resolved through legal review before the relevant launch decisions are made. Refresh, login and browsing do not create acceptance evidence.",
   ] },
   { id: "privacy", title: "19. Privacy", paragraphs: [
     "The TAKEME Privacy Notice describes collection, use, visibility, provider processing and retention of personal data. Please read it alongside these Terms. Current Privacy acceptance is required with Terms acceptance before protected marketplace writes.",
-    "Detailed privacy disclosures belong in the Privacy Notice. This Terms draft does not finalise the English or Bahasa Melayu Privacy Notice or approve unresolved provider and cross-border transfer wording.",
-  ], links: [{ href: "/privacy", label: "Read the TAKEME Privacy Notice draft" }] },
+    "Detailed privacy disclosures belong in the Privacy Notice. These Terms do not finalise the English or Bahasa Melayu Privacy Notice or approve unresolved provider and cross-border transfer wording.",
+  ], links: [{ href: "/privacy", label: "Read the TAKEME Privacy Notice" }] },
   { id: "restrictions", title: "20. Account Suspension and Restrictions", paragraphs: [
     "TAKEME may suspend or restrict content, accounts or actions where supported and reasonably necessary to address unlawful content, marketplace-rule violations, fraud, abuse, safety concerns or applicable legal obligations. Do not evade account restrictions.",
-    "An account needing policy reacceptance may still browse public content but cannot perform protected writes. Deletion-pending and other lifecycle restrictions retain their existing safeguards and supported resolution paths. This draft does not claim that every suspension, investigation or appeal procedure is already automated.",
+    "An account needing policy reacceptance may still browse public content but cannot perform protected writes. Deletion-pending and other lifecycle restrictions retain their existing safeguards and supported resolution paths. These Terms do not claim that every suspension, investigation or appeal procedure is already automated.",
   ] },
   { id: "deletion", title: "21. Account Deletion", paragraphs: [
     "Account-deletion requests are supported through Settings and the public account-deletion route with authentication and identity confirmation. Live auctions with bids, unfinished or disputed transactions and unresolved reports can keep deletion pending until safe resolution. Deletion does not silently cancel or complete marketplace obligations.",
@@ -121,19 +121,19 @@ export const termsSections: InformationSection[] = [
   ], links: [{ href: "/help#safety", label: "Marketplace safety help" }] },
   { id: "payments", title: "23. Payments Between Users", paragraphs: [
     "Unless TAKEME expressly introduces an integrated payment service with applicable terms, payment arrangements between the buyer and seller remain their responsibility. TAKEME does not currently receive, hold or transfer buyer funds or provide integrated protected checkout, escrow, Stripe Connect or seller payouts.",
-    "An accepted offer, auction result or recorded completion is not evidence that TAKEME processed a payment. Any future integrated payment service would require separate clear terms and review; this draft does not activate it or provide a contractual payment guarantee.",
+    "An accepted offer, auction result or recorded completion is not evidence that TAKEME processed a payment. Any future integrated payment service would require separate clear terms and review; these Terms do not activate it or provide a contractual payment guarantee.",
   ] },
   { id: "shipping", title: "24. Shipping, Delivery and Collection", paragraphs: [
     "Unless TAKEME expressly provides an integrated shipping service, buyers and sellers arrange shipping, delivery or collection and any related costs themselves. TAKEME does not currently create shipments, provide integrated shipping or generate airway bills (AWB).",
     "Agree the exchange arrangements and costs before proceeding. Future integrated shipping or AWB functionality may have separate terms; mentioning it here does not mean it is currently available or that TAKEME guarantees delivery.",
   ] },
   { id: "fees", title: "25. Fees", paragraphs: [
-    "Any applicable marketplace fee or promoted feature must be clearly disclosed before a user chooses the relevant service. Future fees or promoted services may have additional terms. This draft does not claim that category transaction fees are active at launch.",
+    "Any applicable marketplace fee or promoted feature must be clearly disclosed before a user chooses the relevant service. Future fees or promoted services may have additional terms. These Terms do not claim that category transaction fees are active at launch.",
     "TAKEME will not impose an undisclosed fee retroactively. New payments, fees, payouts, refunds or shipping require further Terms and Privacy review before the relevant feature is introduced.",
   ] },
   { id: "third-party", title: "26. Third-Party Services", paragraphs: [
     "TAKEME uses third-party technical services to operate the marketplace. Relevant provider and personal-data processing disclosures belong in the Privacy Notice. Third-party links or services do not create a TAKEME guarantee of the third party's performance.",
-    "LEGAL REVIEW REQUIRED — final provider and cross-border transfer wording. This draft does not expand provider access, finalise privacy disclosures or migrate backend services.",
+    "LEGAL REVIEW REQUIRED — final provider and cross-border transfer wording. These Terms do not expand provider access, finalise privacy disclosures or migrate backend services.",
   ] },
   { id: "availability", title: "27. Service Availability", paragraphs: [
     "The service is subject to reasonable availability and technical limitations. Maintenance, connectivity problems, errors or interruptions can affect access and actions. Do not rely on submitting at the last possible moment, including near an auction deadline.",
@@ -145,14 +145,14 @@ export const termsSections: InformationSection[] = [
   ] },
   { id: "liability", title: "29. Limitation of Liability", paragraphs: [
     "To the extent permitted by applicable law, TAKEME is not responsible for loss caused by inaccurate user content, another user's failure to perform an exchange or events outside its reasonable control. No clause excludes liability or consumer rights that cannot lawfully be excluded.",
-    "LEGAL REVIEW REQUIRED — final Malaysian limitation-of-liability drafting. This conservative owner draft does not add a liability cap or a broader exclusion of platform responsibilities.",
+    "LEGAL REVIEW REQUIRED — final Malaysian limitation-of-liability drafting. These Terms do not add a liability cap or a broader exclusion of platform responsibilities.",
   ] },
   { id: "indemnity", title: "30. Indemnity", paragraphs: [
     "You remain responsible for the lawful content and marketplace activity you submit and for your own obligations under these Terms and applicable law.",
-    "LEGAL REVIEW REQUIRED — final indemnity scope and Malaysian drafting. No additional indemnity, defence obligation or open-ended reimbursement obligation is imposed by this unresolved draft section.",
+    "LEGAL REVIEW REQUIRED — final indemnity scope and Malaysian drafting. No additional indemnity, defence obligation or open-ended reimbursement obligation is imposed by this section.",
   ] },
   { id: "updates", title: "31. Changes to These Terms", paragraphs: [
-    `Changes should have a clear version, last-updated date and effective date, with appropriate notice and acceptance where required. Terms v${termsDocument.version} becomes effective only on the actual approved public launch date; last updated uses that date unless the owner separately approves a change. ${termsDocument.effectiveDate ? `The central owner-approved launch date is ${termsDocument.effectiveDate}; publication remains separately gated.` : "No launch date is set by this draft."}`,
+    `Changes should have a clear version, last-updated date and effective date, with appropriate notice and acceptance where required. Terms v${termsDocument.version} becomes effective only on the actual approved public launch date; last updated uses that date unless the owner separately approves a change. ${termsDocument.effectiveDate ? `The launch date is ${termsDocument.effectiveDate}.` : "The launch date remains pending."}`,
     "When the required Terms or Privacy version changes, earlier acceptance is not treated as current consent. Users may continue public browsing and must expressly reaccept before protected writes. Historical acceptance evidence and existing marketplace records are preserved as implemented, and returning to an intended context does not execute the action automatically.",
   ] },
   { id: "law", title: "32. Governing Law", paragraphs: [

@@ -78,15 +78,15 @@ test("unresolved, invented and malformed omission states fail closed before any 
 });
 
 test("all approved non-address legal wording, section order, lists and links match the reviewed checkpoint", () => {
-  // Terms/Prohibited Items retain the reviewed 67e8971 non-address models.
-  // Privacy hashes include only the separately owner-approved publication-copy
-  // correction; substantive obligations/caveats are checked by Privacy tests.
+  // Non-address models include the separately owner-approved Privacy and
+  // Terms/Prohibited Items publication-copy corrections only. Substantive
+  // obligations/caveats are checked by the focused policy tests.
   // The omitted address block is excluded from all four section models.
   const reviewed: [typeof termsSections, string][] = [
-    [termsSections, "29ed594a2ff84c08dbe9c04b6befbb46e74b56f2fb3e964abead2925da07d067"],
+    [termsSections, "566dc181a7a447169bb1d529444e8ab0061a9da44837197aefa2066b8da19b20"],
     [privacySections, "407c3b1586246da63f23c2f7fb11362a7154d1d79cdd5956357fe7c452f65bd6"],
     [bmPrivacySections, "7378f3a9658a6e0185652f0844f9308a694a0010b134f08d13611bea7f58a4ef"],
-    [prohibitedItemsSections, "bf4d6387ac86c7d7bfa2b0ce87d4cad68371807e9ccd09ee75bdc73f6b02ef34"],
+    [prohibitedItemsSections, "54fcb96c8f1e93fdc0a9f6a63aa2eddb1ada71f5f24b2cf64a40718ad83285ac"],
   ];
   for (const [sections, hash] of reviewed) {
     const prose = sections.map(section => ({ id: section.id, title: section.title, paragraphs: section.paragraphs ?? [], bullets: section.bullets ?? [], links: section.links ?? [] }));
@@ -147,11 +147,10 @@ test("all four actual public legal routes omit the address block while preservin
     assert.match(html, /KT0622373-U/);
     assert.match(html, /support\.takeme@gmail\.com/);
     assert.match(html, /dateTime="2026-10-12"/i);
-    if (file.includes("/privacy/")) {
-      assert.match(html, /(?:Version|Versi) 1\.0/);
-      assert.doesNotMatch(html, /owner draft|draf pemilik|not approved for publication|belum diluluskan untuk penerbitan|publication remains separately gated|penerbitan belum diluluskan|OUTSTANDING|Working draft|>Owner review<|>Semakan pemilik</i);
-      assert.match(html, /LEGAL REVIEW REQUIRED|SEMAKAN UNDANG-UNDANG DIPERLUKAN/);
-    }
+    // Final publication presentation applies to every legal route.
+    assert.match(html, /(?:Version|Versi) 1\.0/);
+    assert.doesNotMatch(html, /owner draft|draf pemilik|not approved for publication|belum diluluskan untuk penerbitan|publication remains separately gated|penerbitan belum diluluskan|unpublished|not in effect|pending publication|Draft Status|OUTSTANDING|Working draft|>Owner review<|>Semakan pemilik</i);
+    assert.match(html, /LEGAL REVIEW REQUIRED|SEMAKAN UNDANG-UNDANG DIPERLUKAN/);
     assert.doesNotMatch(html, /Business or publishable address:|Business\/correspondence address:|Business or correspondence address:|Alamat perniagaan\/surat-menyurat:/);
     assert.doesNotMatch(html, /\[ADDRESS REQUIRED\]|OWNER INPUT REQUIRED|INPUT PEMILIK DIPERLUKAN|NOT_PUBLISHED_FOR_V1|>null</);
   }

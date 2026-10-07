@@ -49,7 +49,7 @@ export const prohibitedItemsSections: InformationSection[] = [
   { id: "scope", title: "1. Purpose and General Rule", paragraphs: [
     `This policy is operated by ${marketplaceOperator.name} (SSM ${marketplaceOperator.registrationNumber}) and forms part of TAKEME Terms of Service version ${prohibitedItemsPolicy.version}. It applies to listings, photos, descriptions, offers, requests, advertisements and related marketplace conduct.`,
     "Do not list, offer, request, advertise, buy or sell goods or services that are illegal, unsafe, fraudulent, counterfeit, stolen, regulated without required authorisation, prohibited by TAKEME policy or otherwise unsuitable for the marketplace. TAKEME may remove listings or restrict accounts where reasonably necessary to address legal, safety, fraud or abuse risk.",
-    "A platform prohibition can be stricter than what is lawful in another setting. This draft preserves the reviewed TAKEME prohibitions; it does not say that every platform-prohibited item is unlawful in all circumstances. It governs listing eligibility and does not introduce new marketplace categories or services.",
+    "A platform prohibition can be stricter than what is lawful in another setting. This policy preserves the reviewed TAKEME prohibitions; it does not say that every platform-prohibited item is unlawful in all circumstances. It governs listing eligibility and does not introduce new marketplace categories or services.",
   ] },
   { id: "responsibility", title: "2. Seller Responsibility and Restricted Goods", paragraphs: [
     "Sellers remain responsible for lawful ownership, any required permission or authorisation, accurate descriptions and claims, applicable safety requirements and the right to use listing content. A lawful item may still be prohibited by TAKEME platform rules. Do not assume that selecting a category, stating that an item is a replica or showing a document makes it eligible.",
@@ -73,7 +73,7 @@ export const prohibitedItemsSections: InformationSection[] = [
   { id: "drugs-medicines", title: "6. Drugs, Controlled Substances and Medicines", paragraphs: [
     "Illegal drugs, controlled substances and unlawful drug paraphernalia are prohibited. Prescription or restricted medicines must not be sold unlawfully or without required authorisation. Do not use listings or messages to arrange these prohibited offers.",
     "An over-the-counter or other health product is not automatically eligible. Where an item is otherwise permitted, sellers remain responsible for lawful sale, accurate descriptions and claims, required authorisations and applicable safety requirements. Do not imply a medical approval or treatment claim that is not lawfully supported.",
-    "LEGAL REVIEW REQUIRED — exact medicines, restricted health-product and paraphernalia scope, required authorisations and applicable marketplace duties. This draft does not approve a medicines category or provide sourcing guidance.",
+    "LEGAL REVIEW REQUIRED — exact medicines, restricted health-product and paraphernalia scope, required authorisations and applicable marketplace duties. This policy does not approve a medicines category or provide sourcing guidance.",
   ] },
   { id: "hazardous", title: "7. Dangerous and Hazardous Materials", paragraphs: [
     "Dangerous or hazardous materials are prohibited under the reviewed TAKEME platform rules. This includes toxic substances, hazardous chemicals, radioactive materials, unsafe pesticides, dangerous precursors and dangerous recalled goods.",
@@ -98,12 +98,12 @@ export const prohibitedItemsSections: InformationSection[] = [
   { id: "extremism", title: "11. Unlawful Extremist or Terrorist Material", paragraphs: [
     "Unlawful extremist or terrorist propaganda, merchandise, fundraising or related offers are prohibited where applicable. Do not use listings or messages to promote or facilitate unlawful violence, exploitation or terrorist activity.",
     "Do not disguise unlawful propaganda, merchandise or fundraising as an ordinary item or use marketplace content to evade applicable restrictions. A listing is not legal clearance for the material or activity it promotes.",
-    "LEGAL REVIEW REQUIRED — exact applicable classifications and intermediary reporting obligations. This draft does not invent a list of organisations or promise automatic reporting in every case.",
+    "LEGAL REVIEW REQUIRED — exact applicable classifications and intermediary reporting obligations. This policy does not invent a list of organisations or promise automatic reporting in every case.",
   ] },
   { id: "wildlife", title: "12. Wildlife and Environmental Contraband", paragraphs: [
     "Unlawful trade in protected wildlife, endangered species, ivory or protected animal products where unlawful, and environmental contraband is prohibited. Wildlife or protected-species products remain prohibited where required by the reviewed rules or applicable restrictions.",
     "Do not conceal the species, origin or restricted nature of an item or imply that a claimed permit automatically makes a listing eligible.",
-    "LEGAL REVIEW REQUIRED — exact wildlife and environmental categories, protected-product scope, permits and seller/platform obligations. This draft does not approve trade in a regulated species or replace applicable legal requirements.",
+    "LEGAL REVIEW REQUIRED — exact wildlife and environmental categories, protected-product scope, permits and seller/platform obligations. This policy does not approve trade in a regulated species or replace applicable legal requirements.",
   ] },
   { id: "digital", title: "13. Unlawful Digital Goods, Accounts and Access", paragraphs: [
     "If content or an offer involves a digital item, the same legal and anti-fraud rules apply. Malware, spyware, stolen account or financial credentials, hacked accounts, stolen digital goods, pirated content, fraudulent access keys and illegal digital access are prohibited. Surveillance tools intended for unlawful use are also prohibited.",
@@ -120,19 +120,19 @@ export const prohibitedItemsSections: InformationSection[] = [
   { id: "enforcement", title: "16. Enforcement and Evidence", paragraphs: [
     "Where supported and reasonably necessary, TAKEME may remove or hide listings, restrict listing ability, suspend or restrict accounts, request relevant documentation and investigate reports. Violations may also breach the Terms of Service. These are policy rights, not a promise that every moderation, investigation or appeal action is automated.",
     "Relevant evidence may be preserved with restricted access where required for a lawful purpose or legal obligation. Matters may be reported to authorities where required by law. Reporting does not automatically resolve a transaction, issue a refund or guarantee an enforcement outcome; TAKEME does not promise automatic police reporting in every case.",
-    "LEGAL REVIEW REQUIRED — marketplace intermediary reporting obligations, enforcement powers and procedures, evidence-retention duties and their reconciliation with account deletion and bounded retention. This draft does not create indefinite retention or change backend cleanup schedules.",
+    "LEGAL REVIEW REQUIRED — marketplace intermediary reporting obligations, enforcement powers and procedures, evidence-retention duties and their reconciliation with account deletion and bounded retention. This policy does not create indefinite retention or change backend cleanup schedules.",
   ] },
   { id: "reports", title: "17. Reporting Suspected Violations and Errors", paragraphs: [
     "Report suspicious or prohibited listings using the existing in-app Report actions where available, or contact " + marketplaceOperator.supportEmail + ". Existing reporting can cover listings, sellers, conversations or another participant's messages. Provide relevant, truthful details without unnecessary private information.",
     "Do not send passwords, verification codes or stolen credentials, and do not redistribute prohibited or exploitative content as evidence. Identify the relevant listing or concern and provide an appropriate description through the supported channel.",
     "If you believe a listing was removed or restricted incorrectly, contact support with the relevant context. TAKEME can review the concern where appropriate. This contact path does not promise a dedicated automated appeal system, a particular outcome or a fixed response time.",
   ], links: [{ href: `mailto:${marketplaceOperator.supportEmail}`, label: "Contact TAKEME support" }, { href: "/help#safety", label: "Safety and reporting help" }] },
-  { id: "terms-contact", title: "18. Terms Linkage, Draft Status and Contact", paragraphs: [
+  { id: "terms-contact", title: "18. Terms Linkage and Contact", paragraphs: [
     `The TAKEME Prohibited Items Policy forms part of Terms of Service version ${prohibitedItemsPolicy.version}. Read it alongside the Terms and Privacy Notice.`,
-    "The effective date remains the actual owner-approved public launch date; last updated uses that date unless separately changed. " + (prohibitedItemsPolicy.effectiveDate ? "Both dates are prepared for " + prohibitedItemsPolicy.effectiveDate + ". " : "Both dates remain unresolved. ") + "This owner draft is unpublished and not in effect, and does not grant permission to activate legal policies or publish the policy.",
+    "This Prohibited Items Policy sets out products, listings and activities that are prohibited or restricted on TAKEME. " + (prohibitedItemsPolicy.effectiveDate && prohibitedItemsPolicy.lastUpdated ? "The effective and last updated dates are " + prohibitedItemsPolicy.effectiveDate + " and " + prohibitedItemsPolicy.lastUpdated + ", respectively." : "The effective date and last updated date remain pending."),
     `Operator: ${marketplaceOperator.name}. SSM registration: ${marketplaceOperator.registrationNumber}. Support and reporting: ${marketplaceOperator.supportEmail}.`,
-    "LEGAL REVIEW REQUIRED — final policy wording, regulated-category scope, intermediary obligations and enforcement/evidence duties. The identified unresolved legal inputs are not finalised by this draft.",
+    "LEGAL REVIEW REQUIRED — final policy wording, regulated-category scope, intermediary obligations and enforcement/evidence duties. The identified unresolved legal inputs are not finalised by this policy.",
   ], addressParagraphs: [
     `Business or correspondence address: ${prohibitedItemsPolicy.businessAddressStatus}. No address is published in this draft and no private/home address is substituted.`,
-  ], links: [{ href: "/terms", label: "Read the TAKEME Terms of Service draft" }, { href: "/privacy", label: "Read the TAKEME Privacy Notice draft" }, { href: `mailto:${marketplaceOperator.supportEmail}`, label: `Contact ${marketplaceOperator.supportEmail}` }] },
+  ], links: [{ href: "/terms", label: "Read the TAKEME Terms of Service" }, { href: "/privacy", label: "Read the TAKEME Privacy Notice" }, { href: `mailto:${marketplaceOperator.supportEmail}`, label: `Contact ${marketplaceOperator.supportEmail}` }] },
 ];
