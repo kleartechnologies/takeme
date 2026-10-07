@@ -9,7 +9,7 @@ export function PrivacySettings() {
     <section className={styles.card}><h2>Your public profile</h2><p>Your profile photo, display name and general marketplace location can be seen by other people. Listings can show the general area and a meet-up place you explicitly select.</p><Link className={styles.link} href="/profile/settings/edit">Edit public profile</Link></section>
     <section className={styles.card}><h2>Your private details</h2><p>Your account email and saved private address are account-only. A private address is never copied into a listing or selected as a meet-up place automatically.</p><Link className={styles.link} href="/profile/locations">Manage addresses &amp; meet-up places</Link></section>
     <div className={styles.notice}><LockKeyhole size={19} /><span>There are currently no adjustable profile-visibility or messaging-privacy controls.</span></div>
-    <section className={styles.card}><h2>Privacy Policy</h2><p>The policy draft explains current data practices and limited retention. It remains under business and legal review.</p><Link className={styles.link} href="/privacy">Read Privacy Policy draft</Link></section>
+    <section className={styles.card}><h2>Privacy Notice</h2><p>The Privacy Notice explains how TAKEME handles personal data and retention.</p><Link className={styles.link} href="/privacy">Read Privacy Notice</Link></section>
     <Link className={styles.link} href="/account-deletion">Account deletion information</Link>
   </>;
 }

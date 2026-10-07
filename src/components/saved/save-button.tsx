@@ -6,10 +6,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { isListingSaved, removeSavedListing, saveListing } from "@/lib/services/saved";
+import type { Listing } from "@/types/marketplace";
+import { listingSaveAction } from "@/lib/listing-save-presentation";
 import type { SavedChange } from "@/lib/marketplace-state-events";
 import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
-export function SaveButton({ listingId, initialSaved, onChange, compact = false }: { listingId: string; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
+export function SaveButton({ listingId, initialSaved, onChange, compact = false, listing, allowTerminalRemoval = false }: { listingId: string; listing?: Listing; allowTerminalRemoval?: boolean; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
   const { user, loading } = useAuth();
   const requireAction = useProtectedMarketplaceAction();
   const pathname = usePathname();
@@ -18,6 +20,22 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const reads = useRef(0);
+  const [now, setNow] = useState(0);
+  const auction = listing?.listingType === "auction" || listing?.listingType === "buy_now_and_auction";
+  useEffect(() => {
+    if (!auction) return;
+    const end = listing?.auctionEndAt ? Date.parse(listing.auctionEndAt) : NaN;
+    let timer: number;
+    const update = () => {
+      const time = Date.now();
+      setNow(time);
+      if (Number.isFinite(end) && end > time) timer = window.setTimeout(update, Math.min(end - time, 2_147_483_647));
+    };
+    timer = window.setTimeout(update, 0);
+    return () => window.clearTimeout(timer);
+  }, [auction, listing?.auctionEndAt]);
+  const currentListing = useRef(listing);
+  useEffect(() => { currentListing.current = listing; }, [listing]);
 
   useEffect(() => {
     if (!user) return;
@@ -34,14 +52,18 @@ export function SaveButton({ listingId, initialSaved, onChange, compact = false 
   const className = compact
     ? "grid size-11 place-items-center rounded-full border border-gray-200 bg-white/95 text-[var(--takeme-dark-green)] shadow-sm"
     : "button-secondary mt-3 min-h-12 w-full gap-2";
-  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}&intent=save`} onClick={event => { event.preventDefault(); void requireAction().catch(() => undefined); }} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
   const displaySaved = savedUid === user?.uid && saved;
+  if (!listingSaveAction(listing, displaySaved, now, allowTerminalRemoval)) return null;
+  if (!user && !loading) return <Link href={`/login?next=${encodeURIComponent(pathname)}&intent=save`} onClick={event => { event.preventDefault(); void requireAction().catch(() => undefined); }} className={className} aria-label="Log in to save listing"><Heart size={20} />{!compact && "Save listing"}</Link>;
 
   async function toggle() {
-    if (!user || pending) return;
+    if (!user || pending || !listingSaveAction(currentListing.current, displaySaved, Date.now(), allowTerminalRemoval)) return;
     try { if (!await requireAction()) return; }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not check your account. Please try again."); return; }
-    const next = !displaySaved;
+    // Recheck after account eligibility resolves: the auction may have ended meanwhile.
+    const action = listingSaveAction(currentListing.current, displaySaved, Date.now(), allowTerminalRemoval);
+    if (!action) return;
+    const next = action === "save";
     reads.current++;
     setSaved(next); setSavedUid(user.uid); setPending(true); setError("");
     try {

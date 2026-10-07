@@ -70,7 +70,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
           {(isAuction || variant !== "discovery") && <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shadow-sm sm:text-xs ${isAuction ? "bg-orange-700 text-white" : "bg-white/95 text-[var(--takeme-dark-green)]"}`}>{isAuction ? auctionLabel(listing) : listing.condition}</span>}
           {promotion && <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/95 px-2 py-1 text-[9px] font-semibold text-[var(--takeme-dark-green)] sm:text-[11px]">{promotion.type === "featured" ? <Star size={11} /> : <Sparkles size={11} />}{promotion.type === "featured" ? "Featured · paid" : "Boosted · paid"}</span>}
         </div>
-        <div className="absolute right-2 top-2 sm:right-3 sm:top-3"><SaveButton listingId={listing.id} initialSaved={initialSaved} onChange={onSavedChange} compact /></div>
+        <div className="absolute right-2 top-2 sm:right-3 sm:top-3"><SaveButton listingId={listing.id} listing={listing} allowTerminalRemoval initialSaved={initialSaved} onChange={onSavedChange} compact /></div>
       </div>
       <Link href={`/listings/${listing.id}`} onClick={recordClick} className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-3">
         {variant === "discovery" ? <DiscoveryCardContent listing={listing} /> : <>
