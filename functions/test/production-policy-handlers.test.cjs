@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { assertSourcePhase } = require("./helpers/publication-phase.cjs");
 const net = require("node:net");
 const http = require("node:http");
 const https = require("node:https");
@@ -164,7 +165,7 @@ test("approved demo policy walks fresh acceptance, profile, welcome and current 
   await onboarding.completeFirstTimeProfile.run(request());
   await onboarding.finishAccountWelcome.run(request());
   assert.equal(committedWrites.length, completedWrites, "Completion retries preserve the original timestamps.");
-  assert.equal(productionReleasePolicy.publicationApproved, false);
+  assertSourcePhase();
   assert.equal(productionReleasePolicy.termsVersion, "1.0"); assert.equal(productionReleasePolicy.privacyVersion, "1.0");
 });
 

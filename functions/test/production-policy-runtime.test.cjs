@@ -3,11 +3,12 @@ const test = require("node:test");
 const { resolvePolicyContext, policyMirrorMatches, hasCurrentAcceptance } = require("../lib/account-eligibility");
 const { releasePolicyFromMirror } = require("../lib/policy-runtime");
 const { productionEnvironment } = require("../lib/production-environment");
-const { demoReleasePolicy, stagingReleasePolicy, productionReleasePolicy, validateProductionPolicy } = require("../lib/release-policy");
+const { demoReleasePolicy, stagingReleasePolicy, productionReleasePolicy } = require("../lib/release-policy");
 const { stagingEnvironment } = require("../lib/staging-environment");
 const { planProductionPolicyBootstrap } = require("../lib/production-policy-bootstrap");
 const { qualifyDeletionExecution } = require("../lib/deletion-config");
 const { validateAcceptance } = require("../lib/auth-onboarding");
+const { assertSourcePhase } = require("./helpers/publication-phase.cjs");
 
 const production = () => ({ GCLOUD_PROJECT: productionEnvironment.projectId, TAKEME_RELEASE_TARGET: "production",
   TAKEME_FIREBASE_PROJECT_ID: productionEnvironment.projectId, TAKEME_STORAGE_BUCKETS: productionEnvironment.storageBucket,
@@ -20,12 +21,12 @@ const timestamp = { toMillis: () => 1 };
 const acceptanceFor = policy => ({ termsVersion: policy.termsVersion, privacyVersion: policy.privacyVersion,
   termsAcceptedAt: timestamp, privacyAcceptedAt: timestamp, age18ConfirmedAt: timestamp, acceptanceSource: "web" });
 
-test("exact production resource context can be prepared without compiled legal activation", () => {
-  assert.equal(productionReleasePolicy.publicationApproved, false);
+test("exact production resource context is independent of source publication and runtime activation", () => {
+  assertSourcePhase();
   assert.equal(productionReleasePolicy.termsVersion, "1.0");
   assert.equal(productionReleasePolicy.privacyVersion, "1.0");
-  assert.ok(validateProductionPolicy().length);
   assert.deepEqual(contextFor(production()), { target: "production", projectId: productionEnvironment.projectId });
+  assert.equal(releasePolicyFromMirror(undefined, contextFor(production())), null);
   const configured = { ...production(), NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false",
     FIREBASE_CONFIG: JSON.stringify({ projectId: productionEnvironment.projectId, storageBucket: productionEnvironment.storageBucket }) };
   assert.deepEqual(contextFor(configured), contextFor(production()));
@@ -133,10 +134,20 @@ test("demo and staging mirrors stay pinned to source versions even with a forged
   }
 });
 
-test("runtime resolution does not approve source bootstrap or enable production deletion", () => {
+test("source planning and runtime resolution never enable deletion or create a policy record", () => {
+  const publicationEnabled = assertSourcePhase();
   const runtime = { env: production(), appProjectId: productionEnvironment.projectId, appStorageBucket: productionEnvironment.storageBucket };
   assert.ok(releasePolicyFromMirror(finalRecord(), contextFor(production())));
-  assert.throws(() => planProductionPolicyBootstrap(runtime));
+  if (publicationEnabled) {
+    assert.deepEqual(planProductionPolicyBootstrap(runtime).record, {
+      releaseTarget: "production", projectId: productionEnvironment.projectId,
+      publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18,
+    });
+  } else assert.throws(() => planProductionPolicyBootstrap(runtime));
+  assert.equal(releasePolicyFromMirror(undefined, contextFor(production())), null);
   assert.throws(() => qualifyDeletionExecution(runtime), error => error.reason === "production-disabled");
-  assert.throws(() => qualifyDeletionExecution({ ...runtime, env: { ...runtime.env, TAKEME_ENABLE_PRODUCTION_DELETION: "true" } }), error => error.reason === "production-policy-unapproved");
+  const explicitlyEnabledFixture = { ...runtime, env: { ...runtime.env, TAKEME_ENABLE_PRODUCTION_DELETION: "true" } };
+  if (publicationEnabled) assert.equal(qualifyDeletionExecution(explicitlyEnabledFixture).environment, "production");
+  else assert.throws(() => qualifyDeletionExecution(explicitlyEnabledFixture), error => error.reason === "production-policy-unapproved");
+  assert.throws(() => qualifyDeletionExecution(explicitlyEnabledFixture, { ...productionReleasePolicy, publicationApproved: false }), error => error.reason === "production-policy-unapproved");
 });

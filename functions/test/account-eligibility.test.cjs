@@ -4,6 +4,7 @@ const { readFileSync } = require("node:fs");
 const { resolvePolicyContext, policyMirrorMatches, hasCurrentAcceptance } = require("../lib/account-eligibility");
 const { demoReleasePolicy, stagingReleasePolicy, productionReleasePolicy, getReleasePolicy, validateProductionPolicy, assertStoragePolicyRules, assertFirestorePolicyRules } = require("../lib/release-policy");
 const { stagingEnvironment } = require("../lib/staging-environment");
+const { assertSourcePhase } = require("./helpers/publication-phase.cjs");
 const demo = { GCLOUD_PROJECT: "demo-takeme", FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099", FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" };
 const staging = () => ({ GCLOUD_PROJECT: stagingEnvironment.projectId, TAKEME_RELEASE_TARGET: "staging", TAKEME_FIREBASE_PROJECT_ID: stagingEnvironment.projectId });
 const stagingContext = env => resolvePolicyContext(env, stagingEnvironment.projectId, stagingEnvironment.storageBucket);
@@ -15,9 +16,8 @@ test("demo policy is pinned to explicit matching runtime and emulator configurat
   }
   assert.equal(resolvePolicyContext(demo, "other"), null);
 });
-test("source production approval remains inactive and unconfirmed production resources are refused", () => {
-  assert.ok(validateProductionPolicy().length);
-  assert.equal(productionReleasePolicy.publicationApproved, false);
+test("explicit source publication phase never approves unconfirmed production resources", () => {
+  assertSourcePhase();
   assert.equal(productionReleasePolicy.termsVersion, "1.0");
   assert.equal(productionReleasePolicy.privacyVersion, "1.0");
   const production = { TAKEME_RELEASE_TARGET: "production", TAKEME_FIREBASE_PROJECT_ID: "approved-test-project", GCLOUD_PROJECT: "approved-test-project" };
@@ -83,5 +83,7 @@ test("checked-in Firestore and Storage gates exactly match the central policy so
   assert.doesNotThrow(() => assertStoragePolicyRules(storage));
   assert.doesNotThrow(() => assertFirestorePolicyRules(firestore));
   assert.throws(() => assertStoragePolicyRules(storage.replace('"1.0-draft"', '"wrong"')));
-  assert.throws(() => assertFirestorePolicyRules(firestore.replace("|| false", "|| true")));
+  const alteredFirestore = firestore.replace("policy.minimumAge == 18", "policy.minimumAge == 17");
+  assert.notEqual(alteredFirestore, firestore, "The rule corruption must not be a no-op in either source phase.");
+  assert.throws(() => assertFirestorePolicyRules(alteredFirestore));
 });

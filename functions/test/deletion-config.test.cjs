@@ -2,6 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validateDeletionConfig, qualifyDeletionExecution, ownedDeletionMedia, DeletionConfigurationError } = require('../lib/deletion-config.js');
 const { stagingEnvironment } = require('../lib/staging-environment.js');
+const { assertSourcePhase } = require('./helpers/publication-phase.cjs');
+const { productionReleasePolicy } = require('../lib/release-policy.js');
 
 const demo = () => ({ env: { GCLOUD_PROJECT: 'demo-takeme', FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099', FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080', FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9199' }, appProjectId: 'demo-takeme', appStorageBucket: 'demo-takeme.firebasestorage.app' });
 const production = () => ({ env: { GCLOUD_PROJECT: 'takeme-qualified-123', TAKEME_FIREBASE_PROJECT_ID: 'takeme-qualified-123', TAKEME_RELEASE_TARGET: 'production', TAKEME_DELETION_ENVIRONMENT: 'production', TAKEME_ENABLE_PRODUCTION_DELETION: 'true', TAKEME_STORAGE_BUCKETS: 'takeme-qualified-123.firebasestorage.app,takeme-qualified-123.appspot.com' }, appProjectId: 'takeme-qualified-123', appStorageBucket: 'takeme-qualified-123.firebasestorage.app' });
@@ -93,8 +95,15 @@ test('synthetic qualified production config is pure, immutable and uses no demo 
   assert.deepEqual(validateDeletionConfig(alternate).storageBuckets, ['takeme-qualified-123.appspot.com']);
 });
 
-test('production execution qualification remains closed under the actual unpublished central policy', () => {
-  assert.throws(() => qualifyDeletionExecution(production()), error => error instanceof DeletionConfigurationError && error.reason === 'production-policy-unapproved');
+test('publication preparation never enables deletion without its separate execution flag', () => {
+  const publicationEnabled = assertSourcePhase();
+  const disabled = production(); disabled.env.TAKEME_ENABLE_PRODUCTION_DELETION = 'false';
+  assert.throws(() => qualifyDeletionExecution(disabled), error => error instanceof DeletionConfigurationError && error.reason === 'production-disabled');
+  // An ON flag here is synthetic resource qualification only, not execution or
+  // runtime activation. The actual release/deployment flag remains OFF.
+  if (publicationEnabled) assert.equal(qualifyDeletionExecution(production()).environment, 'production');
+  else assert.throws(() => qualifyDeletionExecution(production()), error => error instanceof DeletionConfigurationError && error.reason === 'production-policy-unapproved');
+  assert.throws(() => qualifyDeletionExecution(production(), { ...productionReleasePolicy, publicationApproved: false }), error => error.reason === 'production-policy-unapproved');
   assert.equal(qualifyDeletionExecution(demo()).environment, 'demo');
   const finalPolicy = { publicationApproved: true, termsVersion: '1.0-2026-10-05', privacyVersion: '1.0-2026-10-05', minimumAge: 18 };
   // Synthetic metadata validation only: no SDK, credentials, network or cleanup execution.
