@@ -4,10 +4,10 @@ const { productionReleasePolicy, validateProductionPolicy } = require("../../lib
 const { legalPublicationReadiness, validateLegalPublication } = require("../../lib/legal-publication");
 
 // Test expectations only. This selector is never read by runtime or deployment code.
-// Preparation is the checked-in default; a private publication RC must select its
-// phase explicitly instead of inferring approval from the source under test.
+// Main is the owner-approved published production baseline. Historical preparation
+// fixtures select pre-publication explicitly; expectations never infer approval.
 function expectedSourcePhase(env = process.env) {
-  const phase = env.TAKEME_FUNCTIONS_TEST_SOURCE_PHASE ?? "pre-publication";
+  const phase = env.TAKEME_FUNCTIONS_TEST_SOURCE_PHASE ?? "publication-enabled-rc";
   assert.ok(["pre-publication", "publication-enabled-rc"].includes(phase), "Unknown Functions test source phase.");
   return phase;
 }

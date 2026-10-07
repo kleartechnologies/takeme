@@ -79,7 +79,8 @@ async function artifactFixture(configuration: ReleaseConfiguration = stagingConf
   await mkdir(path.join(repository, "workers"));
   await writeFile(path.join(repository, "workers", "staging-entry.mjs"), 'export { default } from "../.open-next/worker.js";');
   await writeFile(path.join(repository, "workers", "staging-access.mjs"), 'export const failClosed = true;');
-  await writeFile(path.join(repository, "wrangler.jsonc"), JSON.stringify(wrangler));
+  await writeFile(path.join(repository, "wrangler.staging.jsonc"), JSON.stringify(wrangler));
+  await writeFile(path.join(repository, "wrangler.jsonc"), JSON.stringify({ name: "takeme-web", workers_dev: false, preview_urls: false }));
   await writeFile(path.join(repository, "open-next.config.mjs"), "export default {};\n");
   await writeFile(path.join(repository, "package-lock.json"), '{"lockfileVersion":3}\n');
   await writeFile(path.join(repository, "package.json"), '{"private":true}\n');
@@ -151,7 +152,7 @@ test("approved future workers.dev activation is buildable and invalidates the ea
   const activated = wranglerFixture(); activated.env.preview.workers_dev = true;
   const disabled = await artifactFixture();
   try {
-    await writeFile(path.join(disabled.repository, "wrangler.jsonc"), JSON.stringify(activated));
+    await writeFile(path.join(disabled.repository, "wrangler.staging.jsonc"), JSON.stringify(activated));
     await assert.rejects(validateStagingCloudflareArtifact(disabled.repository, disabled.configuration), /identity changed/);
   } finally { await cleanup(disabled.repository); }
   const rebuilt = await artifactFixture(stagingConfiguration(), activated);
@@ -319,7 +320,7 @@ test("plan reports the validated routing state and still requires approval and A
 
 test("deployment planning refuses tracked changes and nonignored untracked source files", () => {
   assert.doesNotThrow(() => assertPreviewWorkingTreeClean(""));
-  for (const status of [" M wrangler.jsonc\n", "?? workers/staging-entry.mjs\n", "?? functions/src/staging-environment.ts\n", "?? docs/unreviewed-plan.md\n"]) {
+  for (const status of [" M wrangler.staging.jsonc\n", "?? workers/staging-entry.mjs\n", "?? functions/src/staging-environment.ts\n", "?? docs/unreviewed-plan.md\n"]) {
     assert.throws(() => assertPreviewWorkingTreeClean(status), /clean working tree/);
   }
 });

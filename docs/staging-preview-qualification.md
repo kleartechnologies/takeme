@@ -87,7 +87,7 @@ The adapter uses the existing gated webpack Next build and explicit `--env previ
 Future deployment command, **not executed**:
 
 ```sh
-npx --no-install opennextjs-cloudflare deploy --config wrangler.jsonc --env preview
+npx --no-install opennextjs-cloudflare deploy --config wrangler.staging.jsonc --env preview
 ```
 
 The plan never invokes this command. A successful plan does not independently authorize cloud writes. For approved Workers Builds, use build/check as the build command and plan-check followed by this exact named-environment deploy as the deploy command; a failed check must stop the chain. Private Access evidence must be supplied afresh through a controlled file/CI mechanism, not a committed fixture. Keep automatic deployments off until that review/refresh process is configured. Avoid invoking the bare deploy command outside this reviewed procedure.

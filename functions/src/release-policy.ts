@@ -21,7 +21,7 @@ export const stagingReleasePolicy: Readonly<ReleasePolicy> = Object.freeze({
 
 // Owner-approved V1 identifiers. Legal publication and activation remain separate.
 export const productionReleasePolicy: Readonly<ReleasePolicy> = Object.freeze({
-  publicationApproved: false, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18,
+  publicationApproved: true, termsVersion: "1.0", privacyVersion: "1.0", minimumAge: 18,
 });
 
 export function getReleasePolicy(target: ReleaseTarget): Readonly<ReleasePolicy> {

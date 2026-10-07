@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "takeme-web",
+  "account_id": "3ade68940865285d676a83971b23b4d4",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-03",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "takeme-web" }
+  ],
+  "images": { "binding": "IMAGES" },
+  "observability": { "enabled": false },
+  "env": {
+    "preview": {
+      "name": "takeme-web-preview",
+      "account_id": "3ade68940865285d676a83971b23b4d4",
+      "main": "workers/staging-entry.mjs",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "TAKEME_RELEASE_TARGET": "staging",
+        "TAKEME_FIREBASE_PROJECT_ID": "takeme-staging-822a5",
+        "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "takeme-staging-822a5",
+        "NEXT_PUBLIC_SITE_URL": "https://takeme-web-preview.takeme-technologies.workers.dev",
+        "NEXT_PUBLIC_USE_FIREBASE_EMULATORS": "false",
+        "TAKEME_ENABLE_PRODUCTION_DELETION": "false"
+      },
+      "services": [
+        { "binding": "WORKER_SELF_REFERENCE", "service": "takeme-web-preview" }
+      ],
+      "images": { "binding": "IMAGES" }
+    }
+  }
+}

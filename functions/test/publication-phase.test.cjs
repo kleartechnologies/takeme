@@ -25,7 +25,7 @@ const context = () => resolvePolicyContext(runtime().env, runtime().appProjectId
 const paused = Object.freeze({ releaseTarget: "production", projectId: productionEnvironment.projectId, protectedWritesPaused: true });
 
 test("source phase is explicit and rejects runtime activation or unknown phase selectors", () => {
-  assert.equal(expectedSourcePhase({}), "pre-publication");
+  assert.equal(expectedSourcePhase({}), "publication-enabled-rc");
   for (const phase of ["pre-publication", "publication-enabled-rc"]) assert.equal(expectedSourcePhase({ TAKEME_FUNCTIONS_TEST_SOURCE_PHASE: phase }), phase);
   for (const phase of ["active-production", "true", "", "publication-enabled-rc "]) {
     assert.throws(() => expectedSourcePhase({ TAKEME_FUNCTIONS_TEST_SOURCE_PHASE: phase }), /Unknown Functions test source phase/);

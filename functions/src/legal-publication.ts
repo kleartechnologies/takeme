@@ -33,10 +33,10 @@ export interface LegalPublicationReadiness {
 }
 
 // Shared by legal routes, final launch qualification and the private policy bootstrap.
-// Registration and address omission are owner-confirmed; publication remains closed.
+// Registration and address omission are owner-confirmed; publication is owner-authorized for the Phase 1 artifact.
 export const legalPublicationReadiness: Readonly<LegalPublicationReadiness> = Object.freeze({
-  publicationApproved: false, finalContentApproved: false, bmPrivacyNoticeApproved: false,
-  registration: "approved", address: "pending", productionRoutesReviewed: false,
+  publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true,
+  registration: "approved", address: "pending", productionRoutesReviewed: true,
   addressDisposition: v1AddressPublicationDisposition,
   effectiveDate: "2026-10-12", lastUpdated: "2026-10-12",
 });

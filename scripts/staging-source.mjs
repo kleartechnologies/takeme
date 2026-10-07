@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const sourceFolders = ["src", "public", "scripts", "workers"];
 const requiredFiles = ["package.json", "package-lock.json", "next.config.ts", "open-next.config.mjs", "wrangler.jsonc", "tsconfig.json"];
-const optionalFiles = ["postcss.config.mjs", "eslint.config.mjs", "firestore.rules", "storage.rules", "firebase.json", "firestore.indexes.json",
+const optionalFiles = ["wrangler.staging.jsonc", "postcss.config.mjs", "eslint.config.mjs", "firestore.rules", "storage.rules", "firebase.json", "firestore.indexes.json",
   "functions/src/release-policy.ts", "functions/src/staging-environment.ts"];
 
 async function git(repository, args) {

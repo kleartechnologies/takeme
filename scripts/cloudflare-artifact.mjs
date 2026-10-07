@@ -51,7 +51,7 @@ async function nextPrecondition(repository, configuration) {
 
 async function inputs(repository, staging = false) {
   const records = [];
-  for (const name of [...inputNames, ...(staging ? ["workers/staging-entry.mjs", "workers/staging-access.mjs"] : [])]) {
+  for (const name of [...inputNames.map(name => staging && name === "wrangler.jsonc" ? "wrangler.staging.jsonc" : name), ...(staging ? ["workers/staging-entry.mjs", "workers/staging-access.mjs"] : [])]) {
     const bytes = await ordinaryFile(path.join(repository, name));
     records.push({ path: name, bytes: bytes.length, sha256: digest(bytes) });
   }

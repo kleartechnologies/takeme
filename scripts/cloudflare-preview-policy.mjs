@@ -67,10 +67,10 @@ export function validatePreviewWrangler(raw, configuration) {
 }
 
 export async function readPreviewWrangler(repository, configuration) {
-  const file = path.join(repository, "wrangler.jsonc");
+  const file = path.join(repository, "wrangler.staging.jsonc");
   if (!(await lstat(file)).isFile()) throw new Error("Preview Wrangler configuration must be an ordinary local file.");
   const text = await readFile(file, "utf8");
-  const parsed = ts.parseConfigFileTextToJson("wrangler.jsonc", text);
+  const parsed = ts.parseConfigFileTextToJson("wrangler.staging.jsonc", text);
   if (parsed.error) throw new Error("Preview Wrangler configuration is malformed.");
   return validatePreviewWrangler(parsed.config, configuration);
 }

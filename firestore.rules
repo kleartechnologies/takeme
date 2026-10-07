@@ -43,7 +43,7 @@ service cloud.firestore {
           && acceptance.privacyVersion == "1.0-draft")
           || (request.auth.token.aud == "takeme-staging-822a5" && acceptance.termsVersion == "1.0-staging"
             && acceptance.privacyVersion == "1.0-staging")
-          || false);
+          || (request.auth.token.aud == "takeme-52b80" && acceptance.termsVersion == "1.0" && acceptance.privacyVersion == "1.0"));
     }
     function configuredReleasePolicy(policy) {
       return policy.publicationApproved == true && policy.minimumAge == 18
@@ -52,7 +52,10 @@ service cloud.firestore {
             && policy.termsVersion == "1.0-draft" && policy.privacyVersion == "1.0-draft")
           || (policy.releaseTarget == 'staging' && policy.projectId == "takeme-staging-822a5"
             && policy.termsVersion == "1.0-staging" && policy.privacyVersion == "1.0-staging")
-          || false);
+          || (policy.releaseTarget == 'production' && policy.projectId == "takeme-52b80"
+            && policy.keys().hasAll(['releaseTarget', 'projectId', 'publicationApproved', 'termsVersion', 'privacyVersion', 'minimumAge'])
+            && policy.keys().hasOnly(['releaseTarget', 'projectId', 'publicationApproved', 'termsVersion', 'privacyVersion', 'minimumAge'])
+            && policy.termsVersion == "1.0" && policy.privacyVersion == "1.0"));
     }
     function configuredStorageBucket(name) {
       return (request.auth.token.aud == "takeme-staging-822a5" && name == "takeme-staging-822a5.firebasestorage.app")

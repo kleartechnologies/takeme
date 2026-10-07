@@ -21,7 +21,7 @@
     "cloudflare:preview:plan": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/plan-preview-deployment.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.mts",
+    "test": "node scripts/test-app-phases.mjs",
     "test:functions": "npm --prefix functions test"
   },
   "dependencies": {

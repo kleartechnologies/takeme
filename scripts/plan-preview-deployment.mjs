@@ -35,7 +35,7 @@ try {
   console.log(plan.routingActivationRequired
     ? "Recorded preview routing is disabled. Separate owner-approved activation and a fresh build/check are required; live Access protection must be verified before exposure."
     : "Recorded preview routing is enabled in configuration. Nothing was deployed; separate owner approval and reviewed live Access protection remain prerequisites.");
-  console.log("Future command only: npx --no-install opennextjs-cloudflare deploy --config wrangler.jsonc --env preview");
+  console.log("Future command only: npx --no-install opennextjs-cloudflare deploy --config wrangler.staging.jsonc --env preview");
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Preview deployment plan refused.");
   process.exitCode = 1;

@@ -38,7 +38,7 @@ try {
   for (const [name, version] of Object.entries(installed)) {
     if (lock.packages?.[`node_modules/${name}`]?.version !== version) throw new Error(`Installed ${name} does not match the reviewed lockfile. Cloudflare build refused.`);
   }
-  const result = spawnSync(process.execPath, [cli, "build", "--config", "wrangler.jsonc", "--openNextConfigPath", "open-next.config.mjs", ...(staging ? ["--env", "preview"] : [])], { cwd: repository, env: { ...environment, TAKEME_WEB_RUNTIME: "cloudflare" }, stdio: "inherit" });
+  const result = spawnSync(process.execPath, [cli, "build", "--config", staging ? "wrangler.staging.jsonc" : "wrangler.jsonc", "--openNextConfigPath", "open-next.config.mjs", ...(staging ? ["--env", "preview"] : [])], { cwd: repository, env: { ...environment, TAKEME_WEB_RUNTIME: "cloudflare" }, stdio: "inherit" });
   if (result.error || result.status !== 0) throw new Error("Cloudflare adapter build failed. No deployment was attempted.");
   // OpenNext transforms some Next server files after npm run build has gated
   // them. Recheck the same first-party proof and bind the transformed output.
