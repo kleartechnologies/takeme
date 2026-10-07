@@ -45,6 +45,6 @@ function DetailSeller({ seller }: { seller: SellerSummary }) {
     </Link>
     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-stone-700"><span>{sellerRatingLabel(seller)}</span><span>{completedSalesLabel(seller.sellerCompletedTransactionCount)} completed</span></div>
     <p className="mt-2 break-words text-[11px] leading-4 text-[var(--takeme-gray)]">Seller reputation uses completed sales and published buyer reviews. Buyer reputation is tracked separately.</p>
-    <Link href="/help/tiers" className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-[var(--takeme-dark-green)] underline underline-offset-4">How seller tiers work</Link>
+    <Link href="/help/tiers" className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-[var(--takeme-dark-green)] action-link">How seller tiers work</Link>
   </section>;
 }

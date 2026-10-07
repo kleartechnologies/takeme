@@ -16,7 +16,7 @@ import { ListingDealPanel } from "@/components/transactions/listing-deal-panel";
 import { AuctionPanel, AuctionStatusBadge, BidHistory } from "./auction-panel";
 import type { PublicAuctionBid } from "@/lib/services/listings";
 import { effectiveStatus } from "@/lib/auction-presentation";
-import { useCurrentTime } from "@/lib/use-current-time";
+import { useAuctionTime } from "@/lib/use-auction-time";
 import { ListingCard } from "./listing-card";
 import { SimilarListings } from "./similar-listings";
 import { openListingConversation } from "@/lib/services/conversations";
@@ -33,7 +33,7 @@ const statusLabels = { active: "Available", sold: "Sold", ended: "Unavailable", 
 
 export function StandardProductDetail({ listing, related, userId, created, share, shareMessage, bids = [], onAuctionChange = () => {}, previewMode = false }: { listing: Listing; related: Listing[]; userId?: string; created: boolean; share: () => Promise<void>; shareMessage: string; bids?: PublicAuctionBid[]; onAuctionChange?: () => void; previewMode?: boolean }) {
   const auction = listing.listingType === "auction" || listing.listingType === "buy_now_and_auction";
-  const now = useCurrentTime();
+  const now = useAuctionTime(listing);
   const auctionStatus = effectiveStatus(listing, now);
   const owner = userId === listing.sellerId;
   const DetailRoot = previewMode ? "section" : "main";
@@ -83,7 +83,7 @@ function ProductGallery({ listing, badge }: { listing: Listing; badge?: React.Re
   const [index, setIndex] = useState(0);
   const total = listing.imageUrls.length;
   const selected = Math.min(index, Math.max(0, total - 1));
-  return <section className={styles.gallery} aria-label="Product images"><div className={styles.mainImage}>{badge}{total ? <Image src={listing.imageUrls[selected]} alt={`${listing.title} — image ${selected + 1}`} fill priority sizes="(min-width: 1024px) 58vw, 100vw" className="object-contain" /> : <div className={styles.noImage}><ImageIcon size={36} /><p>No product image available</p></div>}{total > 1 && <><button type="button" className={`${styles.galleryArrow} ${styles.previous}`} aria-label="Previous product image" onClick={() => setIndex((selected - 1 + total) % total)}><ChevronLeft size={19} /></button><button type="button" className={`${styles.galleryArrow} ${styles.next}`} aria-label="Next product image" onClick={() => setIndex((selected + 1) % total)}><ChevronRight size={19} /></button><span className={styles.counter} aria-live="polite">{selected + 1} / {total}</span></>}</div>{total > 1 && <div className={styles.thumbnails} aria-label="Choose product image">{listing.imageUrls.map((url, i) => <button key={`${url}:${i}`} type="button" aria-label={`Show product image ${i + 1}`} aria-pressed={selected === i} onClick={() => setIndex(i)}><Image src={url} alt="" fill sizes="64px" className="object-contain" /></button>)}</div>}</section>;
+  return <section className={styles.gallery} aria-label="Product images"><div className={styles.mainImage}>{badge}{total ? <Image src={listing.imageUrls[selected]} alt={`${listing.title} — image ${selected + 1}`} fill priority={selected === 0} sizes="(min-width: 1024px) 58vw, 100vw" className="object-contain" /> : <div className={styles.noImage}><ImageIcon size={36} /><p>No product image available</p></div>}{total > 1 && <><button type="button" className={`${styles.galleryArrow} ${styles.previous}`} aria-label="Previous product image" onClick={() => setIndex((selected - 1 + total) % total)}><ChevronLeft size={19} /></button><button type="button" className={`${styles.galleryArrow} ${styles.next}`} aria-label="Next product image" onClick={() => setIndex((selected + 1) % total)}><ChevronRight size={19} /></button><span className={styles.counter} aria-live="polite">{selected + 1} / {total}</span></>}</div>{total > 1 && <div className={styles.thumbnails} aria-label="Choose product image">{listing.imageUrls.map((url, i) => <button key={`${url}:${i}`} type="button" aria-label={`Show product image ${i + 1}`} aria-pressed={selected === i} onClick={() => setIndex(i)}><Image src={url} alt="" fill sizes="64px" className="object-contain" /></button>)}</div>}</section>;
 }
 
 function ProductActionBar({ listing, userId }: { listing: Listing; userId?: string }) {

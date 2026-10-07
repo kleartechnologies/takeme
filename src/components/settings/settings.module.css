@@ -59,7 +59,7 @@
 .faq summary::-webkit-details-marker { display: none; }
 .faq[open] summary svg { transform: rotate(180deg); }
 .faq p { padding-bottom: 16px; margin-top: 0; }
-.link { color: var(--takeme-dark-green); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 44px; font-size: 12px; }
+.link { color: var(--takeme-dark-green); font-weight: 600; text-decoration: none; border-radius: 8px; padding: 4px 8px; gap: 6px; display: inline-flex; align-items: center; min-height: 44px; font-size: 12px; }
 .legal { max-width: 640px; padding: 32px 20px 60px; margin: 0 auto; }
 .legal h1 { font-size: 24px; font-weight: 700; margin: 16px 0; }
 .legal p { font-size: 14px; line-height: 1.8; color: var(--takeme-gray); }
@@ -82,3 +82,6 @@
   .card { padding: 22px; }
   .group:first-of-type { margin-top: 16px; }
 }
+
+.link::after { content: "›"; font-size: 17px; }
+.link:hover { background: #f1f8f3; }

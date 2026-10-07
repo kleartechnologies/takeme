@@ -1,3 +1,4 @@
+import { createInFlightRead } from "@/lib/in-flight-read";
 import { marketplaceCallable } from "@/lib/services/marketplace-call";
 import { auth, functions } from "@/lib/firebase/client";
 import { announceFollowChange } from "@/lib/marketplace-state-events";
@@ -14,7 +15,8 @@ async function call<T>(name: string, payload: Record<string, unknown> = {}, publ
   return (await marketplaceCallable<Record<string, unknown>, T>(functions, name)(payload)).data;
 }
 
-export const getUnreadCount = () => call<{ unreadCount: number }>("getUnreadCount");
+const unreadReads = createInFlightRead<{ unreadCount: number }>();
+export const getUnreadCount = () => unreadReads(auth?.currentUser?.uid ?? "guest", () => call<{ unreadCount: number }>("getUnreadCount"));
 export const getNotifications = (cursor?: string | null) => call<{ items: Notification[]; cursor: string | null; hasMore: boolean }>("getNotifications", cursor ? { cursor } : {});
 export const markNotificationRead = (notificationId: string) => call<{ read: boolean }>("markNotificationRead", { notificationId });
 export const openNotification = (notificationId: string) => call<{ href: string }>("openNotification", { notificationId });

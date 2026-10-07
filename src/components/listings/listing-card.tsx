@@ -12,7 +12,7 @@ import { DiscoveryCardContent } from "./discovery-card-content";
 import { trackMarketplaceIntent, type CandidateSource } from "@/lib/services/intelligence";
 import { trackPromotionIntent, type PromotionBadge } from "@/lib/services/promotions";
 import { auctionBidLabel } from "@/lib/auction-presentation";
-import { useCurrentTime } from "@/lib/use-current-time";
+import { useAuctionTime } from "@/lib/use-auction-time";
 import { listingCardPrice } from "@/lib/listing-display";
 
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -26,7 +26,7 @@ function auctionLabel(listing: Listing) {
 
 export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw", priority = false, initialSaved, onSavedChange, recommendationSource, recommendationSessionId, promotion, promotionContext = "explore", variant = "default" }: { listing: Listing; sizes?: string; priority?: boolean; initialSaved?: boolean; onSavedChange?: (saved: boolean) => void; recommendationSource?: CandidateSource; recommendationSessionId?: string | null; promotion?: PromotionBadge; promotionContext?: "home" | "explore"; variant?: "default" | "discovery" }) {
   const { user } = useAuth();
-  const now = useCurrentTime(60_000);
+  const now = useAuctionTime(listing);
   const card = useRef<HTMLElement>(null);
   const impression = useRef("");
   const recommendationImpression = useRef("");

@@ -1,3 +1,4 @@
+import { createInFlightRead } from "@/lib/in-flight-read";
 import { withEligibilityHandling } from "@/lib/services/marketplace-call";
 import {
   Timestamp,
@@ -6,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   limit,
   orderBy,
   query,
@@ -36,9 +38,10 @@ function savedRef(uid: string, listingId: string) {
   return doc(db!, "users", uid, "saved", listingId);
 }
 
-export async function isListingSaved(listingId: string) {
+const savedReads = createInFlightRead<boolean>();
+export function isListingSaved(listingId: string) {
   const { uid } = requireSavedServices();
-  return (await getDoc(savedRef(uid, listingId))).exists();
+  return savedReads(`${uid}:${listingId}`, async () => (await getDoc(savedRef(uid, listingId))).exists());
 }
 
 export async function saveListing(listingId: string) {
@@ -61,6 +64,14 @@ export async function removeSavedListing(listingId: string) {
   const { uid } = requireSavedServices();
   await withEligibilityHandling(() => deleteDoc(savedRef(uid, listingId)));
   announceSavedChange({ uid, listingId, saved: false });
+}
+
+/** Profile needs only a count, never hydrated product details. Owner rules still apply. */
+export async function getSavedCount() {
+  const { database, uid } = requireSavedServices();
+  // The existing owner-list rule caps reads at 13. Preserve the previous 10+ display.
+  const count = (await getCountFromServer(query(collection(database, "users", uid, "saved"), limit(11)))).data().count;
+  return { count: Math.min(count, 10), hasMore: count > 10 };
 }
 
 export async function getSavedPage(cursor?: QueryDocumentSnapshot<DocumentData> | null, requestedPageSize = 10): Promise<SavedPage> {

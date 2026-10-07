@@ -10,6 +10,7 @@ import { cancelAuctionListing, getAuctionViewerState, placeAuctionBid, type Auct
 import { openListingConversation } from "@/lib/services/conversations";
 import type { PublicAuctionBid } from "@/lib/services/listings";
 import { useCurrentTime } from "@/lib/use-current-time";
+import { useAuctionTime } from "@/lib/use-auction-time";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import type { Listing } from "@/types/marketplace";
@@ -22,12 +23,13 @@ const formatSen = (value: number) => money.format(value / 100);
 const date = (value?: string | null) => value ? new Date(value).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" }) : "Time unavailable";
 
 export function AuctionStatusBadge({ listing }: { listing: Listing }) {
-  const status = effectiveStatus(listing, useCurrentTime());
+  const status = effectiveStatus(listing, useAuctionTime(listing));
   const text = listing.status === "draft" ? "Draft auction" : listing.status === "removed" ? "Auction unavailable" : status === "active" ? "Live auction" : status === "scheduled" ? "Auction starts soon" : status === "cancelled" ? "Auction cancelled" : "Auction ended";
   return <span className={styles.badge} data-live={status === "active" && listing.status === "active" || undefined}><Flame size={14} aria-hidden="true" />{text}</span>;
 }
 
-function AuctionCountdown({ listing, now }: { listing: Listing; now: number }) {
+function AuctionCountdown({ listing }: { listing: Listing }) {
+  const now = useCurrentTime();
   const status = effectiveStatus(listing, now);
   const clock = auctionClock(status === "scheduled" ? listing.auctionStartAt : listing.auctionEndAt, now);
   if (status === "ended" || status === "cancelled") return null;
@@ -37,7 +39,7 @@ function AuctionCountdown({ listing, now }: { listing: Listing; now: number }) {
 }
 
 export function AuctionPanel({ listing, userId, owner, onChange, previewMode = false }: { listing: Listing; userId?: string; owner: boolean; onChange: () => void; previewMode?: boolean }) {
-  const now = useCurrentTime();
+  const now = useAuctionTime(listing);
   const router = useRouter();
   const requireAction = useProtectedMarketplaceAction();
   const version = `${listing.id}:${listing.bidCount}:${listing.currentBid}:${listing.auctionStatus}:${listing.status}:${listing.auctionEndAt}`;
@@ -123,7 +125,7 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not open Chat."); }
     finally { pending.current = false; setBusy(false); }
   }
-  if (previewMode) return <div className={styles.panel} aria-label="Auction preview"><div className={styles.summary}><div><span>Starting bid</span><strong className={styles.price}>{formatSen(listing.startingBid ?? 0)}</strong><p className={styles.helper}>Minimum increment {formatSen(increment)}</p></div><AuctionCountdown listing={listing} now={now} /></div><p className={styles.timing}>Starts {date(listing.auctionStartAt)}<br />Ends {date(listing.auctionEndAt)}</p><p className={styles.helper}>Bids open only after this auction is published and its start time is reached.</p></div>;
+  if (previewMode) return <div className={styles.panel} aria-label="Auction preview"><div className={styles.summary}><div><span>Starting bid</span><strong className={styles.price}>{formatSen(listing.startingBid ?? 0)}</strong><p className={styles.helper}>Minimum increment {formatSen(increment)}</p></div><AuctionCountdown listing={listing} /></div><p className={styles.timing}>Starts {date(listing.auctionStartAt)}<br />Ends {date(listing.auctionEndAt)}</p><p className={styles.helper}>Bids open only after this auction is published and its start time is reached.</p></div>;
   const primary = highest ? "Raise your bid" : outbid ? `Bid ${formatSen(minimum)}` : userId ? "Place Bid" : "Log in to bid";
   const action = <button type="button" disabled={busy} className="button-primary" onClick={() => void openBid()}><Gavel size={17} aria-hidden="true" />{primary}</button>;
   return <div className={styles.panel} data-ending-soon={endingSoon || undefined}>
@@ -141,7 +143,7 @@ export function AuctionPanel({ listing, userId, owner, onChange, previewMode = f
     </div> : status === "cancelled" ? <div className={styles.ended}><h2>Auction cancelled</h2><p>The seller cancelled this auction. Bidding is closed.</p></div> : status === "ended" ? <div className={styles.ended}><h2>Bidding closed</h2><p role="status">Waiting for the server to confirm the auction result.</p></div> : <>
       <div className={styles.summary}>
         <div><span>{bidLabel}</span><strong className={styles.price}>{formatSen(bidValue)}</strong><a href="#bid-history">{listing.bidCount ?? 0} {(listing.bidCount ?? 0) === 1 ? "bid" : "bids"} · View history</a></div>
-        <AuctionCountdown listing={listing} now={now} />
+        <AuctionCountdown listing={listing} />
       </div>
       {highest && <p className={styles.winningPill}>You’re winning · {formatSen(bidValue)}</p>}
       {canBid && <div className={styles.primaryAction}>{action}<p>Minimum next bid <strong>{formatSen(minimum)}</strong></p></div>}

@@ -69,7 +69,7 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
     try {
       const [next, page] = await Promise.all([getConversation(id), getConversationMessages(id)]);
       if (!alive.current) return;
-      setConversation(next); setError("");
+      setConversation(next); setError(""); setLoading(false);
       setMessages((current) => [...page.items, ...current.filter((item) => !page.items.some((fresh) => fresh.id === item.id))]);
       if (!loadedOlder.current) { setCursor(page.cursor); setHasMore(page.hasMore); }
       const [product, trust, state] = await Promise.allSettled([getPublicListingDetail(next.listingId), getPublicSellerSummary(next.otherId), getListingDealState(next.listingId)]);
@@ -173,8 +173,8 @@ function ConversationSession({ id, userId, makeOffer }: { id: string; userId: st
       <ConversationDeals {...dealProps} placement="events" />
     </section>
     <div className={styles.chatBottom}>
-      {error && <div role="alert" className={styles.error}>{error}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div>}
-      {dealError ? <div role="alert" className={styles.error}>{dealError}<button className="min-h-11 underline ml-2" type="button" onClick={() => void refresh()}>Retry</button></div> : <ConversationDeals key={makeOffer ? "offer" : "chat"} {...dealProps} placement="actions" />}
+      {error && <div role="alert" className={styles.error}>{error}<button className="min-h-11 action-link ml-2" type="button" onClick={() => void refresh()}>Retry</button></div>}
+      {dealError ? <div role="alert" className={styles.error}>{dealError}<button className="min-h-11 action-link ml-2" type="button" onClick={() => void refresh()}>Retry</button></div> : <ConversationDeals key={makeOffer ? "offer" : "chat"} {...dealProps} placement="actions" />}
       <form ref={composer} className={styles.composer} onSubmit={(event) => { event.preventDefault(); void send(); }}><label className="sr-only" htmlFor="message-body">Your message</label><textarea id="message-body" value={body} disabled={sending || conversation.status === "closed"} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={1} placeholder={conversation.status === "closed" ? "Conversation closed" : "Type a message…"} /><button type="submit" disabled={sending || !body.trim() || conversation.status === "closed"} aria-label={sending ? "Sending message" : "Send message"} className={styles.send}><Send size={21} /></button></form>
       <p className={styles.composerNote}>{sending ? "Sending…" : `${body.length}/2000`}</p>
     </div>

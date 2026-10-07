@@ -46,7 +46,7 @@ function AccountSetupGate({ children }: { children: React.ReactNode }) {
     router.replace(protectedActionDestination(true, setup, intended) ?? intended);
   }, [redirect, path, router, setup]);
   if (!user || exempt) return children;
-  if (setupError) return <main className="page-shell grid min-h-[75vh] place-content-center gap-4 text-center"><h1 className="text-2xl font-bold">Let’s reconnect</h1><p role="alert">Your account status could not be checked. Please try again.</p><button className="button-primary" onClick={() => void refreshSetup().catch(() => {})}>Retry</button><Link className="min-h-11 underline" href="/account-deletion">Account deletion</Link><button className="min-h-11 underline" onClick={() => void logout()}>Sign out</button></main>;
+  if (setupError) return <main className="page-shell grid min-h-[75vh] place-content-center gap-4 text-center"><h1 className="text-2xl font-bold">Let’s reconnect</h1><p role="alert">Your account status could not be checked. Please try again.</p><button className="button-primary" onClick={() => void refreshSetup().catch(() => {})}>Retry</button><Link className="action-link" href="/account-deletion">Account deletion</Link><button className="action-link" onClick={() => void logout()}>Sign out</button></main>;
   if (!setup || redirect) return <main className="grid min-h-[75vh] place-content-center" role="status">Checking your TAKEME account…</main>;
   return children;
 }

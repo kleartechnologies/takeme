@@ -52,11 +52,14 @@ export function ListingDetailView({ id, created = false }: { id: string; created
         return;
       }
       contextSeller = listing.sellerId;
+      // Primary product content never waits for optional seller inventory.
+      setState({ loading: false, listing, related: [], error: "" });
+      const sellerId = listing.sellerId;
       try {
         const related = await getListingsBySeller(listing.sellerId);
-        if (active) setState({ loading: false, listing, related: related.filter((item) => item.id !== listing.id), error: "" });
+        if (active && contextSeller === sellerId) setState(current => ({ ...current, related: related.filter((item) => item.id !== id) }));
       } catch {
-        if (active) setState({ loading: false, listing, related: [], error: "" });
+        if (active && contextSeller === sellerId) setState(current => ({ ...current, related: [] }));
       }
     }, (error) => { if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) }); });
     return () => { active = false; unsubscribe(); };

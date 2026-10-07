@@ -47,6 +47,8 @@ export function MessagesInbox({ activeId }: { activeId?: string }) {
       setError("");
       setItems((current) => next ? [...current.filter((item) => !page.items.some((fresh) => fresh.id === item.id)), ...page.items] : quiet ? [...page.items, ...current.filter((item) => !page.items.some((fresh) => fresh.id === item.id))] : page.items);
       if (!quiet) { setCursor(page.cursor); setHasMore(page.hasMore); }
+      // Show the private inbox before optional listing/deal enrichment.
+      setLoading(false);
       const enriched = await Promise.all(page.items.map(async (item) => {
         const [listing, state] = await Promise.allSettled([getPublicListingDetail(item.listingId), getListingDealState(item.listingId)]);
         const deal = state.status === "fulfilled" ? conversationDealState(item, state.value) : null;
@@ -70,7 +72,7 @@ export function MessagesInbox({ activeId }: { activeId?: string }) {
   return <div className={styles.inbox}><h1 className={styles.inboxTitle}>Messages</h1>
     {!authLoading && !user ? <div className={styles.empty}><h2>Your private inbox</h2><p>Sign in to chat about listings and agreed deals.</p><Link className="button-primary min-h-11 px-5 mt-4" href="/login?next=%2Fmessages">Log in</Link></div> : <>
       <div className={styles.filters} aria-label="Filter conversations">{["All", "Buying", "Selling", "Offers"].map((value) => <button key={value} type="button" aria-pressed={value === filter} onClick={() => setFilter(value)}>{value}</button>)}</div>
-      {error && <div role="alert" className={styles.error}>{error}<button type="button" className="min-h-11 underline ml-3 font-semibold" onClick={() => void load()}>Retry</button></div>}
+      {error && <div role="alert" className={styles.error}>{error}<button type="button" className="min-h-11 action-link ml-3 font-semibold" onClick={() => void load()}>Retry</button></div>}
       {(authLoading || loading) && !items.length && Array.from({ length: 6 }, (_, index) => <div key={index} className={`${styles.skeleton} animate-pulse`} aria-hidden="true"><div className="h-16 w-16 rounded-xl bg-gray-100" /><div className="flex-1 space-y-2 pt-1"><div className="h-3 w-2/3 rounded bg-gray-100" /><div className="h-3 rounded bg-gray-100" /><div className="h-3 w-1/2 rounded bg-gray-100" /></div></div>)}
       {filter === "Offers" && Object.values(contexts).some((context) => context.unavailable) && <p role="status" className="text-xs text-[var(--takeme-gray)] py-2">Some offer details are unavailable. Refresh to try again.</p>}
       {!authLoading && !loading && !error && !visible.length && <div className={styles.empty}><Image src="/brand/mascot-2d-happy.png" alt="" width={96} height={96} /><h2>{items.length ? `No ${filter.toLowerCase()} conversations` : "No messages yet"}</h2><p>{items.length ? "Try another filter or load more conversations." : "When you chat with buyers or sellers, your conversations will appear here."}</p>{!items.length && <Link className="button-secondary min-h-11 px-5 mt-4" href="/explore">Explore TAKEME</Link>}</div>}

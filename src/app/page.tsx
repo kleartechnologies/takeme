@@ -4,6 +4,7 @@ import { HeroBannerCarousel } from "@/components/home/hero-banner-carousel";
 import { FeaturedMarketplace } from "@/components/home/featured-marketplace";
 import { HomeMarketplace, NearYouMarketplace } from "@/components/home/home-marketplace";
 import { EndingSoonMarketplace } from "@/components/home/ending-soon-marketplace";
+import { DeferredMarketplace } from "@/components/home/deferred-marketplace";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
@@ -14,8 +15,7 @@ export default function HomePage() {
       <CategoryGrid />
       <HomeMarketplace />
       <NearYouMarketplace />
-      <EndingSoonMarketplace />
-      <FeaturedMarketplace />
+      <DeferredMarketplace><EndingSoonMarketplace /><FeaturedMarketplace /></DeferredMarketplace>
     </main>
   );
 }

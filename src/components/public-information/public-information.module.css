@@ -26,7 +26,7 @@
 .section ul { margin: 14px 0; padding-left: 22px; list-style: disc; }
 .section li + li { margin-top: 10px; }
 .links { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 12px; }
-.links a { display: inline-flex; align-items: center; min-height: 44px; color: #006233; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+.links a { display: inline-flex; align-items: center; min-height: 44px; color: #006233; font-weight: 600; text-decoration: none; border-radius: 8px; gap: 8px; padding-inline: 8px; }
 .faq { border-top: 1px solid #e5e7eb; }
 .faq summary { position: relative; min-height: 54px; padding: 16px 28px 16px 0; cursor: pointer; font-weight: 600; font-size: 14px; line-height: 1.6; list-style: none; }
 .faq summary::-webkit-details-marker { display: none; }
@@ -62,3 +62,7 @@
   .footerLinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { .page { scroll-behavior: auto; } }
+
+.links a::after { content: "›"; font-size: 18px; }
+.links a:hover { background: #edf6ef; }
+.links a:focus-visible { outline: 2px solid #006233; outline-offset: 2px; }

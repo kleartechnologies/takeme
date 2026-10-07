@@ -1,3 +1,4 @@
+import { createInFlightRead } from "@/lib/in-flight-read";
 import {
   Timestamp,
   doc,
@@ -129,7 +130,11 @@ export async function getListing(id: string) {
   }
 }
 
-export async function getPublicListingDetail(id: string): Promise<PublicListingDetail> {
+const publicDetailReads = createInFlightRead<PublicListingDetail>();
+export function getPublicListingDetail(id: string): Promise<PublicListingDetail> {
+  return publicDetailReads(`${auth?.currentUser?.uid ?? "guest"}:${id}`, () => readPublicListingDetail(id));
+}
+async function readPublicListingDetail(id: string): Promise<PublicListingDetail> {
   if (!functions) throw new Error("Firebase Functions is not configured.");
   const result = await httpsCallable<{ listingId: string }, PublicListingDetail>(functions, "getPublicListingDetail")({ listingId: id });
   return result.data;

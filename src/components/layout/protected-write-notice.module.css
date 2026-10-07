@@ -3,5 +3,5 @@
 .content { min-width: 0; flex: 1; }
 .content strong { display: block; font-size: .9rem; }
 .content p { margin-top: .4rem; font-size: .8rem; line-height: 1.65; overflow-wrap: anywhere; }
-.browse { display: inline-flex; align-items: center; min-height: 2.75rem; margin-top: .35rem; color: var(--takeme-dark-green); font-size: .8rem; font-weight: 600; text-decoration: underline; text-underline-offset: .2em; }
+.browse { display: inline-flex; align-items: center; min-height: 2.75rem; margin-top: .35rem; color: var(--takeme-dark-green); font-size: .8rem; font-weight: 600; text-decoration: none; padding-inline: .5rem; border-radius: .5rem; }
 @media (min-width: 768px) { .notice { top: 1.25rem; padding: 1.25rem; } .content p { font-size: .875rem; } }

@@ -62,7 +62,8 @@ function PrivateHub({ uid, tab }: { uid: string; tab: SavedTab }) {
   return tab === "sellers" ? <SellersPanel uid={uid} /> : tab === "searches" ? <SearchesPanel /> : <ListingsPanel uid={uid} tab={tab} />;
 }
 function ListingsPanel({ uid, tab }: { uid: string; tab: "items" | "auctions" }) {
-  const feed = usePrivatePage(fetchSaved, "Couldn’t load your saved items. Please try again.", tab);
+  // Items and Auctions filter the same owner-scoped page; changing the tab is not a new read.
+  const feed = usePrivatePage(fetchSaved, "Couldn’t load your saved items. Please try again.");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const now = useCurrentTime(60_000);

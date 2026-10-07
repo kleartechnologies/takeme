@@ -83,7 +83,7 @@ test("owner density keeps tier requirements and moves reviews into the compact m
   assert.equal((reputation.match(/How TAKEME tiers work/g) ?? []).length, 1);
   assert.match(reputation, /Private to you\./);
   assert.match(reputation, /aria-valuemin=\{currentThreshold\} aria-valuemax=\{nextThreshold\}/);
-  assert.match(reputation, /nextThreshold - count/);
+  assert.match(source("src/lib/reputation-progress.ts"), /nextThreshold - count/);
   assert.match(reputation, /getPublicReviews\(uid\)/);
   assert.match(reputation, /reportPublicReview\(reviewId, reason, details\)/);
   assert.doesNotMatch(reputation, /My published reviews/);
