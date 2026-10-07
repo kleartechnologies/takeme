@@ -263,7 +263,8 @@ test("Reserved V2 services are not described as current collection or processing
 
 test("English draft retains every legal-review topic without staging or invented date text", () => {
   for (const topic of [/service providers/i, /international.*cross.border/i, /^retention$/i, /account deletion/i, /legal holds.*disputes/i, /^security$/i, /(?:user|your) rights/i, /^contact$/i]) assert.match(copy(topic), /LEGAL REVIEW REQUIRED|LEGAL REVIEW \/ OWNER INPUT REQUIRED/, String(topic));
-  assert.match(allCopy(), /final English.*LEGAL REVIEW REQUIRED|LEGAL REVIEW REQUIRED.*final English|English.*legal approval/i);
+  assert.match(privacyDocument.reviewNotice, /English owner draft for Malaysian legal review/);
+  assert.match(allCopy(), /A Bahasa Melayu version of this Privacy Notice is also available\./);
   assert.match(allCopy(), /Bahasa Melayu|BM Privacy/i);
   assert.match(allCopy(), /LEGAL REVIEW REQUIRED/);
   assert.match(privacyDocument.reviewNotice, /draft|review/i);

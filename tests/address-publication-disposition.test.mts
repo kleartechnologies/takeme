@@ -78,12 +78,14 @@ test("unresolved, invented and malformed omission states fail closed before any 
 });
 
 test("all approved non-address legal wording, section order, lists and links match the reviewed checkpoint", () => {
-  // SHA-256 of the approved 67e8971 section models, excluding only the address
-  // block authorised for omission in this task. No legal prose is regenerated.
+  // Terms/Prohibited Items retain the reviewed 67e8971 non-address models.
+  // Privacy hashes include only the separately owner-approved publication-copy
+  // correction; substantive obligations/caveats are checked by Privacy tests.
+  // The omitted address block is excluded from all four section models.
   const reviewed: [typeof termsSections, string][] = [
     [termsSections, "29ed594a2ff84c08dbe9c04b6befbb46e74b56f2fb3e964abead2925da07d067"],
-    [privacySections, "05f6ccb422500301e708416ca4413ac55a36496bf439ffcad0f5ba91d7a1eae6"],
-    [bmPrivacySections, "5e6c01a427eced752c1240ec9e277a4cee7c9715326322c411c3bdf69b34ad1a"],
+    [privacySections, "407c3b1586246da63f23c2f7fb11362a7154d1d79cdd5956357fe7c452f65bd6"],
+    [bmPrivacySections, "7378f3a9658a6e0185652f0844f9308a694a0010b134f08d13611bea7f58a4ef"],
     [prohibitedItemsSections, "bf4d6387ac86c7d7bfa2b0ce87d4cad68371807e9ccd09ee75bdc73f6b02ef34"],
   ];
   for (const [sections, hash] of reviewed) {
@@ -145,6 +147,11 @@ test("all four actual public legal routes omit the address block while preservin
     assert.match(html, /KT0622373-U/);
     assert.match(html, /support\.takeme@gmail\.com/);
     assert.match(html, /dateTime="2026-10-12"/i);
+    if (file.includes("/privacy/")) {
+      assert.match(html, /(?:Version|Versi) 1\.0/);
+      assert.doesNotMatch(html, /owner draft|draf pemilik|not approved for publication|belum diluluskan untuk penerbitan|publication remains separately gated|penerbitan belum diluluskan|OUTSTANDING|Working draft|>Owner review<|>Semakan pemilik</i);
+      assert.match(html, /LEGAL REVIEW REQUIRED|SEMAKAN UNDANG-UNDANG DIPERLUKAN/);
+    }
     assert.doesNotMatch(html, /Business or publishable address:|Business\/correspondence address:|Business or correspondence address:|Alamat perniagaan\/surat-menyurat:/);
     assert.doesNotMatch(html, /\[ADDRESS REQUIRED\]|OWNER INPUT REQUIRED|INPUT PEMILIK DIPERLUKAN|NOT_PUBLISHED_FOR_V1|>null</);
   }
