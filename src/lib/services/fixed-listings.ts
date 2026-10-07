@@ -9,7 +9,7 @@ async function call<Request, Response>(name: string, data: Request): Promise<Res
     return (await marketplaceCallable<Request, Response>(functions, name)(data)).data;
   } catch (error) {
     if (protectedWriteMaintenanceMessage(error)) throw error;
-    if (error instanceof Error) throw new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""));
+    if (error instanceof Error) throw new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""), { cause: error });
     throw new Error("The listing request could not be completed. Please try again.");
   }
 }

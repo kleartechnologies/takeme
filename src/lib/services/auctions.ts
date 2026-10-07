@@ -21,7 +21,7 @@ function requireFunctions() {
 function callableError(error: unknown) {
   if (protectedWriteMaintenanceMessage(error)) return error;
   if (typeof error === "object" && error && "message" in error && typeof error.message === "string") {
-    return new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""));
+    return new Error(error.message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[^)]+\)\.?$/i, ""), { cause: error });
   }
   return new Error("The auction request could not be completed. Please try again.");
 }

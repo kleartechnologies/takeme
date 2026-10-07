@@ -1,4 +1,5 @@
 import type { SellValues } from "./sell-flow.ts";
+import { validListingSubmission, type ListingSubmissionCheckpoint } from "./listing-submission.ts";
 import type { PendingMessageSend } from "./message-send-request.ts";
 
 export const RECOVERY_TTL_MS = 30 * 60_000;
@@ -8,7 +9,7 @@ const MAX_RECORDS = 8;
 const MAX_BYTES = 16_384;
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 export type RecoveryDraft =
-  | { kind: "sell"; values: SellValues; step: number; photoCount: number }
+  | { kind: "sell"; values: SellValues; step: number; photoCount: number; flowVersion?: 2; submission?: ListingSubmissionCheckpoint }
   | { kind: "offer"; listingId: string; amount: string; method: string; sheet: "make" | "counter"; offerId: string | null }
   | { kind: "message"; body: string; request: PendingMessageSend | null };
 type RecordValue = { owner: string | null; scope: string; expiresAt: number; draft: RecoveryDraft };
@@ -38,8 +39,9 @@ export function validRecoveryDraft(value: unknown): value is RecoveryDraft {
     && text(value.listingId, 128) && typeof value.amount === "string" && /^\d{0,10}(\.\d{0,2})?$/.test(value.amount)
     && ["cod", "bank_transfer", "external", "other"].includes(String(value.method))
     && ["make", "counter"].includes(String(value.sheet)) && (value.offerId === null || text(value.offerId, 128));
-  if (value.kind !== "sell" || !exact(value, ["kind", "values", "step", "photoCount"]) || !isObject(value.values)
-    || !Number.isInteger(value.step) || Number(value.step) < 0 || Number(value.step) > 7
+  if (value.kind !== "sell" || !exact(value, ["kind", "values", "step", "photoCount", ...(value.flowVersion === 2 ? ["flowVersion"] : []), ...(value.submission !== undefined ? ["submission"] : [])]) || !isObject(value.values)
+    || !Number.isInteger(value.step) || Number(value.step) < 0 || Number(value.step) > (value.flowVersion === 2 ? 3 : 7)
+    || value.submission !== undefined && (!validListingSubmission(value.submission) || value.submission.type !== value.values.listingType)
     || !Number.isInteger(value.photoCount) || Number(value.photoCount) < 0 || Number(value.photoCount) > 8) return false;
   const limits = { title: 80, categoryId: 128, condition: 20, description: 1200, price: 24, districtOrCity: 80, state: 80,
     meetupLocationId: 128, listingType: 16, startingBid: 24, minimumBidIncrement: 24, auctionStartAt: 32, auctionEndAt: 32, startMode: 16 };

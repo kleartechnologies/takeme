@@ -9,20 +9,20 @@ export interface SellValues {
   listingType: 'buy_now' | 'auction'; startingBid: string; minimumBidIncrement: string;
   auctionStartAt: string; auctionEndAt: string; startMode: 'now' | 'scheduled';
 }
-export const SELL_STEPS = ['Listing type', 'Photos', 'Category', 'Details', 'Condition', 'Pricing', 'Meet-up & location', 'Preview'] as const;
+export const SELL_STEPS = ['Photos', 'Category', 'Item details', 'Review / Publish'] as const;
 export type SellErrors = Partial<Record<keyof SellValues, string>>;
 
 /** Presentation validation mirrors the existing listing/callable contract. */
 export function validateSellStep(values: SellValues, step: number, now = Date.now()): SellErrors {
   const errors: SellErrors = {};
   if (step === 0 && !['buy_now', 'auction'].includes(values.listingType)) errors.listingType = 'Choose how you want to sell.';
-  if (step === 2 && !categories.some(category => category.id === values.categoryId)) errors.categoryId = 'Choose a category.';
-  if (step === 3) {
+  if (step === 1 && !categories.some(category => category.id === values.categoryId)) errors.categoryId = 'Choose a category.';
+  if (step === 2) {
     if (values.title.trim().length < 6 || values.title.trim().length > 80) errors.title = 'Use between 6 and 80 characters.';
     if (values.description.trim().length < 20 || values.description.trim().length > 1200) errors.description = 'Share between 20 and 1,200 characters.';
   }
-  if (step === 4 && !LISTING_CONDITIONS.includes(values.condition)) errors.condition = 'Choose a condition.';
-  if (step === 5) {
+  if (step === 2 && !LISTING_CONDITIONS.includes(values.condition)) errors.condition = 'Choose a condition.';
+  if (step === 2) {
     if (values.listingType === 'buy_now') {
       if (ringgitToSen(values.price) === null) errors.price = 'Enter a positive MYR price with up to 2 decimal places (maximum RM10,000,000).';
     } else {
@@ -41,7 +41,7 @@ export function validateSellStep(values: SellValues, step: number, now = Date.no
       }
     }
   }
-  if (step === 6) {
+  if (step === 2) {
     if (!makePublicLocation(values.districtOrCity, 'Kedah')) errors.districtOrCity = values.districtOrCity.trim() ? 'Use a general district or city, without a street address.' : 'Add your district or city.';
     if (!(MALAYSIAN_STATES as readonly string[]).includes(values.state)) errors.state = 'Choose a Malaysian state.';
   }
@@ -52,4 +52,17 @@ export function sellInput(values: SellValues, now = Date.now()): ListingInput {
   if (!publicLocation) throw new Error('Please add your general location.');
   const base = { title: values.title.trim(), description: values.description.trim(), categoryId: values.categoryId, condition: values.condition, publicLocation, meetupLocationId: values.meetupLocationId || null };
   return values.listingType === 'auction' ? { ...base, listingType: 'auction', startingBid: ringgitToSen(values.startingBid)!, minimumBidIncrement: ringgitToSen(values.minimumBidIncrement)!, auctionStartAt: new Date(values.startMode === 'now' ? now : values.auctionStartAt).toISOString(), auctionEndAt: new Date(values.auctionEndAt).toISOString() } : { ...base, listingType: 'buy_now', price: Number(values.price) };
+}
+
+/** Old eight-step browser drafts stay resumable without landing on an invalid stage. */
+export function restoredSellStep(step: number, flowVersion?: number) {
+  if (flowVersion === 2) return Math.min(3, Math.max(0, step));
+  return step <= 1 ? 0 : step === 2 ? 1 : step === 7 ? 3 : 2;
+}
+export function incompatibleSellFields(values: SellValues, type: SellValues['listingType']) {
+  if (values.listingType === type) return false;
+  return values.listingType === 'buy_now' ? Boolean(values.price.trim()) : Boolean(values.startingBid.trim() || values.minimumBidIncrement.trim());
+}
+export function switchedSellValues(values: SellValues, type: SellValues['listingType']): SellValues {
+  return { ...values, listingType: type, price: '', startingBid: '', minimumBidIncrement: '' };
 }

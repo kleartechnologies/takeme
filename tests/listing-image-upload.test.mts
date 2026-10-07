@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { newListingSubmission } from "../src/lib/listing-submission.ts";
 import { PROTECTED_WRITE_MAINTENANCE_MESSAGE, ProtectedWriteMaintenanceError, protectedWriteMaintenanceMessage } from "../src/lib/protected-write-maintenance.ts";
 import {
   ListingImagePipelineError,
@@ -224,5 +225,91 @@ test("upload and download failures have distinct stages and never proceed to pub
     assert.equal(calls.includes("download"), stage === "download");
     assert.ok(!calls.includes("publish"));
     assert.equal(calls.includes("remove"), stage === "download");
+  }
+});
+
+test("checkpoint retry verifies and reuses a completed immutable upload after a lost URL response", async () => {
+  const calls: string[] = [], state = newListingSubmission("buy_now");
+  state.id = "listing"; state.creationAttempted = true;
+  const adapter = uploadAdapter(calls);
+  let exists = false, first = true;
+  adapter.exists = async () => exists;
+  const upload = adapter.upload, download = adapter.downloadUrl;
+  adapter.upload = async (...args) => { await upload(...args); exists = true; };
+  adapter.downloadUrl = async reference => { if (first) { first = false; throw Error("lost response"); } return download(reference); };
+  await assert.rejects(uploadListingImagesWith("seller", "listing", [original], adapter, state));
+  assert.equal(state.uploads.length, 1);
+  const result = await uploadListingImagesWith("seller", "listing", [original], adapter, state);
+  assert.equal(result[0].fullPath, state.uploads[0].path);
+  assert.equal(calls.filter(value => value === "upload").length, 1);
+  assert.ok(!calls.includes("remove"));
+});
+
+test("upload recovery refuses foreign ownership and failed metadata reads without a replacement upload", async () => {
+  for (const foreign of [true, false]) {
+    const calls: string[] = [], state = newListingSubmission("buy_now");
+    state.id = "listing"; state.creationAttempted = true;
+    const adapter = uploadAdapter(calls);
+    adapter.exists = async () => { throw Error("read denied"); };
+    const digest = Buffer.from(await crypto.subtle.digest("SHA-256", await webp().arrayBuffer())).toString("hex");
+    state.uploads = [{ digest, path: `users/${foreign ? "other" : "seller"}/listings/listing/retained.webp` }];
+    await assert.rejects(uploadListingImagesWith("seller", "listing", [original], adapter, state));
+    assert.ok(!calls.includes("upload"));
+    assert.ok(!calls.includes("remove"));
+    assert.equal(state.uploads.length, 1);
+  }
+});
+
+function nativeHeic() {
+  const box = (kind: string, data: Uint8Array) => {
+    const bytes = new Uint8Array(data.length + 8);
+    new DataView(bytes.buffer).setUint32(0, bytes.length);
+    bytes.set(Buffer.from(kind), 4); bytes.set(data, 8); return bytes;
+  };
+  const size = new Uint8Array(12);
+  new DataView(size.buffer).setUint32(4, 800); new DataView(size.buffer).setUint32(8, 600);
+  return new File([new Uint8Array([
+    ...box('ftyp', new Uint8Array([...Buffer.from('heic'), 0, 0, 0, 0, ...Buffer.from('mif1')])),
+    ...box('meta', new Uint8Array([...new Uint8Array(4), ...box('iprp', box('ipco', box('ispe', size)))])),
+  ])], 'synthetic.heic', {type:'image/heic'});
+}
+
+test('native HEIC success normalizes pixels; native failure stays local and isolated', async () => {
+  const { NATIVE_HEIC_UNAVAILABLE_MESSAGE } = await import('../src/lib/consumer-photo.ts');
+  const keys = ['createImageBitmap', 'document', 'Worker', 'fetch'] as const;
+  const previous = keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+  let closed = 0, encoded = 0, nativeRejects = false;
+  const source = nativeHeic();
+  try {
+    Object.defineProperty(globalThis, 'createImageBitmap', { configurable:true, value: async (file: File, options: ImageBitmapOptions) => {
+      assert.equal(options.imageOrientation, 'from-image');
+      if (file === source && nativeRejects) throw new Error('native format unavailable');
+      return {width:800,height:600,close:()=>closed++};
+    }});
+    Object.defineProperty(globalThis, 'document', { configurable:true, value: { createElement: () => ({
+      width:0,height:0,getContext:()=>({drawImage:()=>{}}),
+      toBlob:(callback:BlobCallback,type:string,quality:number)=>{assert.equal(type,'image/webp');assert.equal(quality,0.82);encoded++;callback(webp());},
+    }) }});
+    Object.defineProperty(globalThis, 'Worker', { configurable:true, value: class { constructor(){assert.fail('No decoder worker is permitted');} } });
+    Object.defineProperty(globalThis, 'fetch', { configurable:true, value: ()=>assert.fail('No conversion endpoint is permitted') });
+    const prepared = await prepareListingImage(source);
+    assert.notEqual(prepared.blob,source);assert.equal(prepared.contentType,'image/webp');assert.equal(closed,1);assert.equal(encoded,1);
+    nativeRejects = true;
+    // Use a fresh File to avoid the deliberate successful preparation cache.
+    const failing = nativeHeic();
+    Object.defineProperty(globalThis,'createImageBitmap',{configurable:true,value:async(file:File)=>{
+      if(file===failing)throw new Error('native format unavailable');
+      return {width:800,height:600,close:()=>closed++};
+    }});
+    const calls:string[]=[];
+    await assert.rejects(uploadListingImagesWith('seller','listing',[failing],uploadAdapter(calls,prepareListingImage)),error=>{
+      assert.ok(error instanceof ListingImagePipelineError);assert.equal(error.stage,'processing');assert.equal(error.message,NATIVE_HEIC_UNAVAILABLE_MESSAGE);return true;
+    });
+    assert.deepEqual(calls,[],'unsupported originals must never reach reference/permit/upload');
+    const png = new Uint8Array(33); png.set([137,80,78,71,13,10,26,10]); png.set(Buffer.from('IHDR'),12); new DataView(png.buffer).setUint32(16,800); new DataView(png.buffer).setUint32(20,600);
+    const outcomes=await Promise.allSettled([prepareListingImage(failing),prepareListingImage(new File([png],'valid.png',{type:'image/png'}))]);
+    assert.equal(outcomes[0].status,'rejected');assert.equal(outcomes[1].status,'fulfilled');
+  } finally {
+    for(const [key,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}
   }
 });

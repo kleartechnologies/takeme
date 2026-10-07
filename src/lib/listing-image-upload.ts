@@ -1,6 +1,8 @@
+import type { ListingSubmissionCheckpoint } from "./listing-submission.ts";
 import { MAX_IMAGE_BYTES } from "./listing-validation.ts";
 import { cadenceErrorMessage } from "./cadence-error.ts";
 import { protectedWriteMaintenanceMessage } from "./protected-write-maintenance.ts";
+import { inspectConsumerPhoto, MAX_CONSUMER_PHOTO_BYTES, NATIVE_HEIC_UNAVAILABLE_MESSAGE, PHOTO_PROCESSING_TIMEOUT_MS, requirePhotoDimensions } from "./consumer-photo.ts";
 
 export type ListingImageStage = "processing" | "upload" | "download";
 
@@ -22,11 +24,23 @@ export interface ImageProcessingAdapter {
 }
 
 const browserImageAdapter: ImageProcessingAdapter = {
-  decode(file) {
-    if (typeof createImageBitmap !== "function") {
-      throw new Error("Image decoding is unavailable.");
+  async decode(file) {
+    if (!file.size || file.size > MAX_CONSUMER_PHOTO_BYTES) throw new Error("Choose a photo smaller than 30 MB.");
+    const header = inspectConsumerPhoto(new Uint8Array(await file.arrayBuffer()));
+    try {
+      if (typeof createImageBitmap !== "function") throw new Error("Image decoding is unavailable.");
+      return await new Promise<ImageBitmap>((resolve, reject) => {
+        let expired = false;
+        const timer = setTimeout(() => { expired = true; reject(new Error("Photo processing timed out.")); }, PHOTO_PROCESSING_TIMEOUT_MS);
+        createImageBitmap(file, { imageOrientation: "from-image" }).then(bitmap => {
+          clearTimeout(timer); if (expired) bitmap.close(); else resolve(bitmap);
+        }, error => { clearTimeout(timer); reject(error); });
+      });
     }
-    return createImageBitmap(file);
+    catch (error) {
+      if (header.format === "heic") throw new ListingImagePipelineError("processing", NATIVE_HEIC_UNAVAILABLE_MESSAGE, { cause: error });
+      throw error;
+    }
   },
   renderWebp(bitmap, width, height) {
     const canvas = document.createElement("canvas");
@@ -35,9 +49,27 @@ const browserImageAdapter: ImageProcessingAdapter = {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas rendering is unavailable.");
     context.drawImage(bitmap as ImageBitmap, 0, 0, width, height);
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { canvas.width = canvas.height = 0; reject(new Error("Photo rendering timed out.")); }, PHOTO_PROCESSING_TIMEOUT_MS);
+      canvas.toBlob(blob => { clearTimeout(timer); canvas.width = canvas.height = 0; resolve(blob); }, "image/webp", 0.82);
+    });
   },
 };
+
+type PreparedListingImage = { blob: Blob; contentType: "image/webp"; extension: "webp" };
+const photoFingerprints = new WeakMap<File, string>();
+export const preparedPhotoFingerprint = (file: File) => photoFingerprints.get(file);
+const preparedPhotos = new WeakMap<File, PreparedListingImage>();
+const preparingPhotos = new WeakMap<File, Promise<PreparedListingImage>>();
+
+/** Early preparation produces a genuine normalized File; permits still apply at upload time. */
+export async function prepareConsumerPhoto(file: File) {
+  const prepared = await prepareListingImage(file);
+  const normalized = new File([prepared.blob], "listing-photo.webp", { type: prepared.contentType });
+  preparedPhotos.set(normalized, prepared);
+  photoFingerprints.set(normalized, Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await prepared.blob.arrayBuffer())), byte => byte.toString(16).padStart(2, "0")).join(""));
+  return normalized;
+}
 
 async function requireEncodedWebp(blob: Blob | null, original: File): Promise<Blob> {
   if (!blob || blob === original || blob.type !== "image/webp" || blob.size < 12 || blob.size > MAX_IMAGE_BYTES) {
@@ -116,19 +148,44 @@ async function requireEncodedWebp(blob: Blob | null, original: File): Promise<Bl
 }
 
 export async function prepareListingImage(file: File, adapter: ImageProcessingAdapter = browserImageAdapter) {
+  if (adapter === browserImageAdapter) {
+    const cached = preparedPhotos.get(file);
+    if (cached) return cached;
+    const pending = preparingPhotos.get(file);
+    if (pending) return pending;
+    const promise = prepareWith(file, adapter).then(value => { preparedPhotos.set(file, value); return value; }).finally(() => preparingPhotos.delete(file));
+    preparingPhotos.set(file, promise);
+    return promise;
+  }
+  return prepareWith(file, adapter);
+}
+
+async function prepareWith(file: File, adapter: ImageProcessingAdapter): Promise<PreparedListingImage> {
   let bitmap: DecodedImage | undefined;
   try {
     bitmap = await adapter.decode(file);
     if (!Number.isFinite(bitmap.width) || !Number.isFinite(bitmap.height) || bitmap.width <= 0 || bitmap.height <= 0) {
       throw new Error("The image dimensions are invalid.");
     }
+    requirePhotoDimensions(bitmap.width, bitmap.height);
     const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));
+    if (adapter === browserImageAdapter && file.type === "image/webp" && bitmap.width <= 1600 && bitmap.height <= 1600 && file.size <= 512 * 1024) {
+      try {
+        const clean = await requireEncodedWebp(new Blob([file], { type: "image/webp" }), file);
+        // A source colour profile needs decoded-pixel conversion through the sRGB canvas.
+        // Only already metadata-free WebP can bypass encoding without changing colours.
+        if (clean.size !== file.size) throw new Error("Source colour profile needs conversion.");
+        return { blob: clean, contentType: "image/webp", extension: "webp" };
+      }
+      catch { /* Metadata-bearing or awkward WebP is re-encoded from decoded pixels. */ }
+    }
     const blob = await requireEncodedWebp(await adapter.renderWebp(bitmap, width, height), file);
     return { blob, contentType: "image/webp" as const, extension: "webp" as const };
   } catch (cause) {
-    throw new ListingImagePipelineError("processing", "This photo could not be prepared safely. Try another photo or browser.", { cause });
+    if (cause instanceof ListingImagePipelineError) throw cause;
+    throw new ListingImagePipelineError("processing", "We couldn’t process this photo. Tap to replace it.", { cause });
   } finally {
     bitmap?.close();
   }
@@ -141,6 +198,7 @@ export interface ListingImageUploadAdapter<TReference extends { fullPath: string
   downloadUrl(reference: TReference): Promise<string>;
   remove(reference: TReference): Promise<unknown>;
   uniqueId(): string;
+  exists?(reference: TReference, blob: Blob): Promise<boolean>;
 }
 
 export async function uploadListingImagesWith<TReference extends { fullPath: string }>(
@@ -148,6 +206,8 @@ export async function uploadListingImagesWith<TReference extends { fullPath: str
   listingId: string,
   files: File[],
   adapter: ListingImageUploadAdapter<TReference>,
+  checkpoint?: ListingSubmissionCheckpoint,
+  onCheckpoint?: () => void,
 ) {
   const uploaded: { url: string; fullPath: string; reference: TReference }[] = [];
   try {
@@ -160,9 +220,22 @@ export async function uploadListingImagesWith<TReference extends { fullPath: str
       } catch (cause) {
         throw new ListingImagePipelineError("processing", "This photo could not be prepared safely. Try another photo or browser.", { cause });
       }
-      const reference = adapter.reference(`users/${uid}/listings/${listingId}/${adapter.uniqueId()}.webp`);
+      let path = `users/${uid}/listings/${listingId}/${adapter.uniqueId()}.webp`;
+      if (checkpoint) {
+        const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await prepared.blob.arrayBuffer())), byte => byte.toString(16).padStart(2, "0")).join("");
+        const retained = checkpoint.uploads.find(image => image.digest === digest);
+        if (retained) {
+          if (!retained.path.startsWith(`users/${uid}/listings/${listingId}/`)) throw new Error("Recovered upload ownership does not match.");
+          path = retained.path;
+        } else {
+          if (checkpoint.uploads.length >= 24) throw new Error("Review this draft in My Listings before adding more replacement uploads.");
+          checkpoint.uploads.push({ digest, path }); onCheckpoint?.();
+        }
+      }
+      const reference = adapter.reference(path);
       try {
-        await adapter.upload(reference, prepared.blob, "image/webp");
+        if (checkpoint && !adapter.exists) throw new Error("Upload recovery is unavailable.");
+        if (!checkpoint || !await adapter.exists!(reference, prepared.blob)) await adapter.upload(reference, prepared.blob, "image/webp");
       } catch (cause) {
         throw new ListingImagePipelineError("upload", protectedWriteMaintenanceMessage(cause) ?? cadenceErrorMessage(cause) ?? "The prepared photo could not be uploaded. Check your connection and try again.", { cause });
       }
@@ -175,7 +248,7 @@ export async function uploadListingImagesWith<TReference extends { fullPath: str
       }
     }
   } catch (error) {
-    await Promise.allSettled(uploaded.map((item) => adapter.remove(item.reference)));
+    if (!checkpoint) await Promise.allSettled(uploaded.map((item) => adapter.remove(item.reference)));
     throw error;
   }
   return uploaded.map(({ url, fullPath }) => ({ url, fullPath }));

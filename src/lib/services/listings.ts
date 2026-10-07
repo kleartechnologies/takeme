@@ -6,7 +6,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, getMetadata, ref, uploadBytes } from "firebase/storage";
 import { auth, db, functions, storage } from "@/lib/firebase/client";
 import {
   MAX_LISTING_IMAGES,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/listing-validation";
 import type { Listing, ListingInput } from "@/types/marketplace";
 import { formatPublicLocation, parsePublicLocation } from "@/lib/general-location";
+import { runListingSubmission, type ListingSubmissionCheckpoint } from "@/lib/listing-submission";
 import { prepareListingImage, uploadListingImagesWith } from "@/lib/listing-image-upload";
 import { cancelAuctionListing, createAuctionDraft, publishAuction, saveAuction } from "@/lib/services/auctions";
 import { createFixedDraft, publishFixed, removeFixed, updateFixed } from "@/lib/services/fixed-listings";
@@ -164,7 +165,7 @@ export async function getListingsBySeller(sellerId: string, includeRemoved = fal
   return result.data.listings;
 }
 
-async function uploadListingImages(uid: string, listingId: string, files: File[]) {
+async function uploadListingImages(uid: string, listingId: string, files: File[], checkpoint?: ListingSubmissionCheckpoint, onCheckpoint?: () => void) {
   const services = requireServices();
   return uploadListingImagesWith(uid, listingId, files, {
     prepare: prepareListingImage,
@@ -176,7 +177,38 @@ async function uploadListingImages(uid: string, listingId: string, files: File[]
     downloadUrl: getDownloadURL,
     remove: deleteObject,
     uniqueId: () => crypto.randomUUID(),
-  });
+    exists: async (objectRef, blob) => {
+      try {
+        const metadata = await getMetadata(objectRef);
+        if (metadata.fullPath !== objectRef.fullPath || metadata.size !== blob.size || metadata.contentType !== "image/webp") throw new Error("The retained upload does not match this photo.");
+        return true;
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "storage/object-not-found") return false;
+        throw error;
+      }
+    },
+  }, checkpoint, onCheckpoint);
+}
+
+/** Sell V1.1 retries retain known drafts and immutable uploads, without changing server contracts. */
+export async function submitListingWithRecovery(input: ListingInput, files: File[], checkpoint: ListingSubmissionCheckpoint, saveDraft: boolean, onCheckpoint: () => void) {
+  const services = requireServices();
+  const errors = [...validateListingInput(input), ...validateImageFiles(files)];
+  if (errors.length) throw new Error(errors[0]);
+  if (checkpoint.type !== input.listingType) throw new Error("Resume the existing draft's listing type in My Listings.");
+  if (saveDraft && input.listingType === "auction" && Date.parse(input.auctionStartAt) <= Date.now()) throw new Error("Schedule for later to save a resumable auction draft.");
+  return runListingSubmission(checkpoint, {
+    create: () => input.listingType === "auction" ? createAuctionDraft(input) : createFixedDraft(input),
+    read: async id => {
+      const current = await getListing(id);
+      if (!current || current.sellerId !== services.user.uid || current.listingType !== input.listingType) return "unavailable";
+      return current.status === "draft" ? "draft" : current.status === "active" ? "published" : "unavailable";
+    },
+    upload: async id => (await uploadListingImages(services.user.uid, id, files, checkpoint, onCheckpoint)).map(image => image.url),
+    save: (id, urls) => input.listingType === "auction" ? saveAuction(id, input, urls) : updateFixed(id, input, urls),
+    publish: (id, urls) => input.listingType === "auction" ? publishAuction(id, urls) : publishFixed(id, urls),
+    checkpoint: onCheckpoint,
+  }, saveDraft);
 }
 
 export async function createListing(input: ListingInput, files: File[]) {
