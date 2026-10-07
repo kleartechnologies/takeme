@@ -56,3 +56,16 @@ functions-debug.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Explicit local-only profiling, evidence and export directories
+/.qualification-output/
+/.profiling-output/
+/.screenshots/
+/.emulator-exports/
+/.release-bundles/
+/.private-receipts/
+*.cpuprofile
+*.heapprofile
+*.heapsnapshot
+*.p12
+*.pfx
