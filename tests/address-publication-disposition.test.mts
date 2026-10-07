@@ -15,6 +15,7 @@ import { privacyDocument, privacySections } from "../src/content/privacy.ts";
 import { bmPrivacyDocument, bmPrivacySections } from "../src/content/privacy-bm.ts";
 import { prohibitedItemsIntro, prohibitedItemsPolicy, prohibitedItemsReviewNotice, prohibitedItemsSections } from "../src/content/marketplace-rules.ts";
 import { currentV1LaunchApprovals } from "../src/lib/v1-legal-launch-gate.ts";
+import { publicLegalParagraph } from "../src/lib/legal-review-presentation.ts";
 
 const candidateReadiness = { ...legalPublicationReadiness, publicationApproved: true, finalContentApproved: true, bmPrivacyNoticeApproved: true, productionRoutesReviewed: true };
 const candidatePolicy = { ...productionReleasePolicy, publicationApproved: true };
@@ -121,6 +122,7 @@ const information = loadTsx<Record<string, ComponentType>>("../src/components/pu
   "next/link": Link, "@/components/layout/logo": { Logo: () => null },
   "@/components/layout/footer-social-links": { FooterSocialLinks: () => null },
   "@/content/operator-disclosure": { legalSectionParagraphs },
+  "@/lib/legal-review-presentation": { publicLegalParagraph },
   "@/lib/public-information": { isLegalInformationAvailable: () => true, isProductionLegalPublication: () => true,
     legalDocumentState: () => ({ version: "1.0", production: true, lastUpdated: "2026-10-12", effectiveDate: "2026-10-12" }) },
   "./public-information.module.css": {},
@@ -140,7 +142,8 @@ const pages: [string, Record<string, unknown>][] = [
 ];
 
 test("all four actual public legal routes omit the address block while preserving contacts and V1 dates", () => {
-  for (const [file, mocks] of pages) {
+  const sectionModels = [termsSections, privacySections, bmPrivacySections, prohibitedItemsSections];
+  for (const [index, [file, mocks]] of pages.entries()) {
     const { default: Page } = loadTsx<{ default: ComponentType }>(file, { ...common, ...mocks });
     const html = renderToStaticMarkup(createElement(Page));
     assert.match(html, /TAKEME TECHNOLOGIES/);
@@ -150,7 +153,11 @@ test("all four actual public legal routes omit the address block while preservin
     // Final publication presentation applies to every legal route.
     assert.match(html, /(?:Version|Versi) 1\.0/);
     assert.doesNotMatch(html, /owner draft|draf pemilik|not approved for publication|belum diluluskan untuk penerbitan|publication remains separately gated|penerbitan belum diluluskan|unpublished|not in effect|pending publication|Draft Status|OUTSTANDING|Working draft|>Owner review<|>Semakan pemilik</i);
-    assert.match(html, /LEGAL REVIEW REQUIRED|SEMAKAN UNDANG-UNDANG DIPERLUKAN/);
+    assert.doesNotMatch(html, /LEGAL REVIEW REQUIRED|SEMAKAN UNDANG-UNDANG DIPERLUKAN|counsel review required/i);
+    // Every approved paragraph still renders; only workflow-label presentation changes.
+    for (const paragraph of sectionModels[index].flatMap(section => legalSectionParagraphs(section))) {
+      assert.ok(html.includes(renderToStaticMarkup(createElement("p", null, publicLegalParagraph(paragraph, true)))));
+    }
     assert.doesNotMatch(html, /Business or publishable address:|Business\/correspondence address:|Business or correspondence address:|Alamat perniagaan\/surat-menyurat:/);
     assert.doesNotMatch(html, /\[ADDRESS REQUIRED\]|OWNER INPUT REQUIRED|INPUT PEMILIK DIPERLUKAN|NOT_PUBLISHED_FOR_V1|>null</);
   }

@@ -10,6 +10,7 @@ import { legalSectionParagraphs } from "../src/content/operator-disclosure.ts";
 import { isAuthPath } from "../src/lib/auth-routing.ts";
 import { isSettingsUtilityPath } from "../src/lib/settings-routes.ts";
 import { isPublicInformationPath } from "../src/lib/public-information.ts";
+import { publicLegalParagraph } from "../src/lib/legal-review-presentation.ts";
 
 // Render the actual TSX with only Next's route hooks and legal availability stubbed.
 // No browser, SDK, network, compiled output or third-party test package is required.
@@ -39,6 +40,7 @@ const information = loadTsx<{ PublicInformationFooter: ComponentType; PublicInfo
     "next/link": Link, "@/components/layout/logo": { Logo },
     "@/components/layout/footer-social-links": { FooterSocialLinks },
     "@/content/operator-disclosure": { legalSectionParagraphs },
+    "@/lib/legal-review-presentation": { publicLegalParagraph },
     "@/lib/public-information": { isLegalInformationAvailable: () => legalAvailable },
     "./public-information.module.css": { footer: "footer", footerInner: "footerInner", footerTop: "footerTop", footerBottom: "footerBottom", footerLinks: "footerLinks" },
   },

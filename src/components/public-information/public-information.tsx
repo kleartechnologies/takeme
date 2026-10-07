@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Logo } from "@/components/layout/logo";
 import { FooterSocialLinks } from "@/components/layout/footer-social-links";
 import { legalSectionParagraphs } from "@/content/operator-disclosure";
+import { publicLegalParagraph } from "@/lib/legal-review-presentation";
 import { isLegalInformationAvailable, isProductionLegalPublication, legalDocumentState } from "@/lib/public-information";
 import styles from "./public-information.module.css";
 
@@ -55,5 +56,8 @@ export function PublicInformationPage({ title, intro, draft = false, policy, sec
 
 export function PolicySections({ sections }: { sections: InformationSection[] }) {
   const published = isProductionLegalPublication();
-  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{legalSectionParagraphs(section).map(text => <p key={text}>{text}</p>)}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{published ? link.label.replace(/\s+draft\b/gi, "") : link.label}</Link>)}</div>}</section>)}</>;
+  return <>{sections.map(section => <section className={styles.section} key={section.id} aria-labelledby={section.id}><h2 id={section.id} tabIndex={-1}>{section.title}</h2>{legalSectionParagraphs(section).map(text => {
+    const paragraph = publicLegalParagraph(text, published);
+    return <p key={paragraph}>{paragraph}</p>;
+  })}{section.bullets && <ul>{section.bullets.map(text => <li key={text}>{text}</li>)}</ul>}{section.links && <div className={styles.links}>{section.links.map(link => <Link href={link.href} key={link.href}>{published ? link.label.replace(/\s+draft\b/gi, "") : link.label}</Link>)}</div>}</section>)}</>;
 }
