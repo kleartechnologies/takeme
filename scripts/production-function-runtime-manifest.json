@@ -1,0 +1,486 @@
+{
+  "schemaVersion": 1,
+  "releaseTarget": "production",
+  "projectId": "takeme-52b80",
+  "projectNumber": "367115645204",
+  "region": "asia-southeast1",
+  "storageBucket": "takeme-52b80.firebasestorage.app",
+  "runtime": "nodejs22",
+  "requiredPolicyPins": {
+    "TAKEME_RELEASE_TARGET": "production",
+    "TAKEME_FIREBASE_PROJECT_ID": "takeme-52b80"
+  },
+  "functions": [
+    {
+      "name": "getAccountSetupStatus",
+      "source": "functions/src/auth-onboarding.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "acceptWebPolicies",
+      "source": "functions/src/auth-onboarding.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "completeFirstTimeProfile",
+      "source": "functions/src/auth-onboarding.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "finishAccountWelcome",
+      "source": "functions/src/auth-onboarding.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "requestUploadPermits",
+      "source": "functions/src/upload-permits.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "getAuctionViewerState",
+      "source": "functions/src/public-listings.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getConversation",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getConversationMessages",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getConversations",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getFollowState",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getFollowing",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getListingDealState",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getMarketplaceDiscovery",
+      "source": "functions/src/discovery.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "getMarketplaceRecommendations",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "getMarketplaceSimilar",
+      "source": "functions/src/discovery.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "getMyListingHistory",
+      "source": "functions/src/public-listings.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getMyTransactions",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getNotificationPreferences",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getNotifications",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getPublicListingDetail",
+      "source": "functions/src/public-listings.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getPublicListingPage",
+      "source": "functions/src/public-listings.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getPublicReviews",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getPublicSellerSummaries",
+      "source": "functions/src/public-sellers.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getReputationPolicy",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getSavedSearches",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getTransactionDetail",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "getUnreadCount",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onAuctionWonCreateTransaction",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onBidEngagementCreated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onListingEngagementChanged",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onMessageEngagementCreated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onOfferEngagementCreated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onOfferEngagementUpdated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onSavedWatchChanged",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onTransactionConversationCreated",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onTransactionEngagementCreated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "onTransactionEngagementUpdated",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "cancelAuction",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "confirmTransactionCompletion",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "createAuctionListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "createFixedListingDraft",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "declineTransactionCancellation",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "deleteSavedSearch",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "disputeTransaction",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "markAllNotificationsRead",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "markConversationSeen",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "markNotificationRead",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onAuctionBidCreated",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onCompletedTransactionInterest",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onConversationMessageCreated",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onConversationStarted",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onSavedListingCreated",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "onSavedListingDeleted",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "openListingConversation",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "openNotification",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "openTransactionConversation",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "placeBid",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "publishAuctionListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "publishFixedListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "removeFixedListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "reportPublicReview",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "requestTransactionCancellation",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "respondToOffer",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "saveSearch",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "sendConversationMessage",
+      "source": "functions/src/messaging.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "setNotificationPreference",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "setSellerFollow",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "submitMarketplaceReport",
+      "source": "functions/src/reports.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "submitOffer",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "submitTransactionReview",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "trackMarketplaceEvent",
+      "source": "functions/src/intelligence.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "updateAuctionListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "updateFixedListing",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": true,
+      "reason": "production policy/eligibility dependency"
+    },
+    {
+      "name": "advanceAuctionLifecycle",
+      "source": "functions/src/index.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "processEngagementJobs",
+      "source": "functions/src/engagement.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "expireOffers",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    },
+    {
+      "name": "releaseExpiredReviews",
+      "source": "functions/src/transactions.ts",
+      "requiresPolicyIdentity": false,
+      "reason": "read or unscoped derived work; no production policy-context invocation"
+    }
+  ],
+  "runtimeContractSourceHashes": {
+    "functions/src/account-eligibility.ts": "6c4e802edd9120cf18cbca5ca72ba436a84362bcbde4c19127b4820e58afe92b",
+    "functions/src/account-lifecycle.ts": "2cb607d744d452109c497f2a486760d86adf65bbc87b67300a852b6b944d8217",
+    "functions/src/policy-runtime.ts": "dbdddc768f033f7c6d69fa61b7556c652ab79310d1cc882ffca0fd4bf1518dce",
+    "functions/src/protected-write-maintenance-runtime.ts": "7a6e54acdb5164218e4c6e524de4862ba232150be9713d00460adca2bac9bca1",
+    "functions/src/deletion-config.ts": "03e58bf4a7e88310fe6b818faafab19ac75dbd105026cd19a379bca9b7f1b9d8",
+    "functions/src/message-request.ts": "329b9a5b7a5af1e90e9a891f88f850034e8f0b5908a4bf7f05ac737774ee273d",
+    "functions/src/payments/stripe-connect-provider.ts": "dbafc73a9f7c3b70f43eec75f6f24417c710bd617e10a87d66885a5ff7f1f14c"
+  }
+}
