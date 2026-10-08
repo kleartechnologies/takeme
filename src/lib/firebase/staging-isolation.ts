@@ -66,3 +66,17 @@ export function isStagingMediaUrl(value: string) {
       && url.searchParams.get("alt") === "media" && !!url.searchParams.get("token");
   } catch { return false; }
 }
+
+/** Published editorial PNGs use Storage-rule access, never download tokens.
+ * Keep this separate from the existing listing/avatar media contract. */
+export function isStagingEditorialAssetUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.origin !== "https://firebasestorage.googleapis.com" || url.username || url.password || url.hash) return false;
+    if ([...url.searchParams.keys()].some(key => key !== "alt")
+      || url.searchParams.getAll("alt").length !== 1 || url.searchParams.get("alt") !== "media") return false;
+    const path = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
+    if (!path || path[1] !== stagingEnvironment.storageBucket) return false;
+    return /^admin-assets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/image\.png$/.test(decodeURIComponent(path[2]));
+  } catch { return false; }
+}

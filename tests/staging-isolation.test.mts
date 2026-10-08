@@ -3,7 +3,7 @@ import test from "node:test";
 import { stagingEnvironment } from "../functions/src/staging-environment.ts";
 import { productionReleasePolicy } from "../functions/src/release-policy.ts";
 import { releaseProofPrefix } from "../src/lib/release-proof.ts";
-import { assertFirebaseAppIdentity, firebaseAppIdentityMatches, isStagingMediaUrl, metadataEndpoint, type MetadataEnvironment } from "../src/lib/firebase/staging-isolation.ts";
+import { assertFirebaseAppIdentity, firebaseAppIdentityMatches, isStagingMediaUrl, isStagingEditorialAssetUrl, metadataEndpoint, type MetadataEnvironment } from "../src/lib/firebase/staging-isolation.ts";
 import { getPublicListingForMetadata } from "../src/lib/firebase/public-listing-server.ts";
 import { buildListingMetadata } from "../src/lib/listing-metadata.ts";
 
@@ -30,6 +30,17 @@ function fixture() {
 
 const stageImage = `https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/users%2Ftest-seller%2Flistings%2Ftest-listing%2Fphoto.png?alt=media&token=synthetic-media-token`;
 const productionImage = "https://firebasestorage.googleapis.com/v0/b/takeme-52b80.firebasestorage.app/o/photo.png?alt=media&token=synthetic-media-token";
+
+test("token-free staging editorial assets are restricted to the exact bucket and PNG namespace", () => {
+  const image = `https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/admin-assets%2F12345678-abcd-4321-abcd-123456789abc%2Fimage.png?alt=media`;
+  assert.equal(isStagingEditorialAssetUrl(image), true);
+  assert.equal(isStagingMediaUrl(image), false, "Listing/avatar media still require their existing token contract");
+  for (const value of [image.replace(stagingEnvironment.storageBucket, "takeme-52b80.firebasestorage.app"),
+    image.replace("admin-assets", "users"), image.replace("image.png", "other.png"), image.replace("image.png", "..%2Fimage.png"),
+    image.replace("12345678-abcd-4321-abcd-123456789abc", "unknown"), image.replace("https:", "http:"),
+    image.replace("https://", "https://user:password@"), image + "&alt=media", image + "&token=unexpected", image + "&redirect=/", image + "#fragment"])
+    assert.equal(isStagingEditorialAssetUrl(value), false, value);
+});
 
 test("reused Firebase SDK apps must match all six actual identity fields", () => {
   const { env } = fixture();

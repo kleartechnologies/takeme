@@ -22,6 +22,12 @@
     { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "sellerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
     ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "buyerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "amountSen", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "transactions", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "sellerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "amountSen", "order": "ASCENDING" }
+    ]},
     { "collectionGroup": "trustSummaries", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "buyer.completedCount", "order": "ASCENDING" }, { "fieldPath": "seller.completedCount", "order": "ASCENDING" }
     ]},

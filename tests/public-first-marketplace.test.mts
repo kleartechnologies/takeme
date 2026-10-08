@@ -121,6 +121,16 @@ test("anonymous server feed rejects identity drift, redirects, foreign media and
     assert.equal(requests[0].init?.redirect, "manual");
     assert.equal(requests[0].init?.cache, "no-store");
     assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { data: { filters: { sort: "newest", pageSize: 8 }, cursor: null, includeHomepage: true } });
+    const banner = { placement: "desktop_hero", url: `https://firebasestorage.googleapis.com/v0/b/${stage.storageBucket}/o/admin-assets%2F12345678-abcd-4321-abcd-123456789abc%2Fimage.png?alt=media`, alt: "Synthetic campaign", ctaLabel: "Explore", destination: "/explore", order: 0, startAt: null, endAt: null };
+    const homepage = { schemaVersion: 1, version: 1, categories: [], sections: [{ sectionId: "hero", type: "hero", title: "Campaign", source: "MANUAL", startAt: null, endAt: null, products: [], sellers: [], categories: [], banners: [banner], announcement: null, cta: null }] };
+    payload = { listings: [publicItem], homepage };
+    const beforeEditorial = requests.length;
+    assert.deepEqual((await getPublicHomePage())?.homepage, homepage);
+    assert.equal(requests.length - beforeEditorial, 1, "Editorial projection shares the anonymous feed request");
+    payload = { listings: [publicItem], homepage: { ...homepage, sections: [{ ...homepage.sections[0], banners: [{ ...banner, url: banner.url.replace(stage.storageBucket, "foreign.firebasestorage.app") }] }] } };
+    const rejectedBanner = await getPublicHomePage();
+    assert.equal(rejectedBanner?.homepage, null);
+    assert.equal(rejectedBanner?.listings[0]?.id, listing.id, "Invalid editorial media does not discard the public feed");
     payload = { listings: [publicItem] };
     await anonymousPublicRead("getPublicListingPage", { filters: { sort: "newest" }, cursor: null });
     assert.equal(requests.at(-1)?.init?.credentials, "omit");

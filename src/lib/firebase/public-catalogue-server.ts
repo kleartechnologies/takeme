@@ -2,7 +2,7 @@ import { parseHomepage } from "../../../functions/src/homepage-projection.ts";
 import { cache } from "react";
 import { publicListingEndpoint } from "./public-listing-server.ts";
 import { parsePublicCatalogueListing, parsePublicCataloguePage, parseAnonymousBids } from "../public-catalogue.ts";
-import { isStagingMediaUrl } from "./staging-isolation.ts";
+import { isStagingMediaUrl, isStagingEditorialAssetUrl } from "./staging-isolation.ts";
 import { stagingEnvironment } from "../../../functions/src/staging-environment.ts";
 
 async function readPublic(name: "getPublicListingPage" | "getPublicListingDetail", data: object): Promise<unknown> {
@@ -37,10 +37,13 @@ export async function getPublicHomePage() {
   const result = await readPublic("getPublicListingPage", { filters: { sort: "newest", pageSize: 8 }, cursor: null, includeHomepage: true }) as { homepage?: unknown } | null;
   const page = parsePublicCataloguePage(result);
   const parsed = parseHomepage(result?.homepage);
-  const images = parsed?.sections.flatMap(section => [...section.products.map(v => v.imageUrl), ...section.banners.map(v => v.url)]).filter(Boolean) ?? [];
+  const images = parsed?.sections.flatMap(section => section.products.map(v => v.imageUrl)).filter(Boolean) ?? [];
+  const banners = parsed?.sections.flatMap(section => section.banners.map(v => v.url)) ?? [];
+  const safeBanners = banners.every(value => process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === stagingEnvironment.projectId
+    ? isStagingEditorialAssetUrl(value) : safeImages({ imageUrls: [value] }));
   const avatars = parsed?.sections.flatMap(section => section.sellers.flatMap(v => v.photoURL ? [v.photoURL] : [])) ?? [];
   const safeAvatars = avatars.every(value => safeImages({imageUrls:[value]}) || (()=>{try {const url=new URL(value); return url.origin==="https://lh3.googleusercontent.com" && !url.username && !url.password;} catch{return false;}})());
-  const homepage = parsed && safeImages({ imageUrls: images }) && safeAvatars ? parsed : null;
+  const homepage = parsed && safeImages({ imageUrls: images }) && safeBanners && safeAvatars ? parsed : null;
   return page && page.listings.every(safeImages) ? { ...page, homepage } : null;
 }
 
