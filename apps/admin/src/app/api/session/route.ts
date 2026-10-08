@@ -45,7 +45,10 @@ export async function POST(request: Request) {
   }
   const session =
     typeof token === "string" ? await verifyAdminToken(token) : null;
-  if (!session) {
+  const maxAge = session
+    ? Math.min(3600, Math.floor(session.expiresAt - Date.now() / 1000))
+    : 0;
+  if (!session || maxAge <= 0) {
     (await cookies()).delete(adminSessionCookie);
     return new Response(null, { status: 403 });
   }
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
     secure: new URL(request.url).protocol === "https:",
     sameSite: "strict",
     path: "/",
-    maxAge: Math.min(3600, Math.floor(session.expiresAt - Date.now() / 1000)),
+    maxAge,
   });
   return Response.json(
     { uid: session.uid },

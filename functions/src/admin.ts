@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { AggregateField, getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { adminAudit } from "./editorial";
+import { verifyAdminIdentity } from "./admin-auth";
 import { publicSellerSummary } from "./public-seller-domain";
 import { publicProfileLocation, isPublicListingSafe } from "./general-location";
 import { ADMIN_SECTIONS, adminRange, averageSen, ctr, tierDistribution, type AdminRange, type AdminSection } from "./admin-domain";
@@ -15,10 +16,8 @@ type Breakdown = { label: string; count: number; amountSen?: number };
 type Series = { label: string; points: { label: string; count: number; amountSen?: number }[] };
 interface Metrics { section: AdminSection; range: { label: string; start: string | null; end: string }; cards: Card[]; breakdowns: { label: string; items: Breakdown[] }[]; series: Series[]; unavailable: string[]; note?: string }
 
-function requireAdmin(request: CallableRequest<unknown>) {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to access admin operations.");
-  if (request.auth.token.admin !== true) throw new HttpsError("permission-denied", "Administrator access is required.");
-  return request.auth.uid;
+async function requireAdmin(request: CallableRequest<unknown>) {
+  return (await verifyAdminIdentity(request)).uid;
 }
 function requiredId(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new HttpsError("invalid-argument", "Invalid record ID.");
@@ -239,7 +238,7 @@ async function overviewMetrics(range: AdminRange): Promise<Metrics> {
 }
 
 export const getAdminMetrics = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const selected = section(request.data?.section);
   let range: AdminRange;
   try { range = adminRange(request.data ?? {}); } catch (error) { throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "Invalid date range."); }
@@ -340,7 +339,7 @@ async function sellerRows(rows: ReturnType<typeof publicRow>[]) {
 }
 
 export const getAdminPage = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const selected = pageSection(request.data?.section);
   const cursor = request.data?.cursor ? requiredId(request.data.cursor) : null;
   const status = request.data?.status;
@@ -441,7 +440,7 @@ export const getAdminPage = onCall(async (request) => {
 });
 
 export const getAdminRecord = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const selected = pageSection(request.data?.section);
   const recordId = requiredId(request.data?.id);
   const ref = db.collection(PAGE_COLLECTIONS[selected]).doc(recordId);
@@ -551,7 +550,7 @@ export const getAdminRecord = onCall(async (request) => {
 });
 
 export const updateAdminReport = marketplaceMutationCall(async (request) => {
-  const adminId = requireAdmin(request);
+  const adminId = await requireAdmin(request);
   const reportId = requiredId(request.data?.reportId);
   const status = request.data?.status;
   if (!["submitted", "reviewing", "resolved", "dismissed"].includes(status))
@@ -590,7 +589,7 @@ export const updateAdminReport = marketplaceMutationCall(async (request) => {
 
 /** Explicit report-specific bounded context. No generic conversation browser. */
 export const loadAdminReportContext = onCall(async (request) => {
-  const uid = requireAdmin(request),
+  const uid = await requireAdmin(request),
     reportId = requiredId(request.data?.reportId);
   const purpose =
     typeof request.data?.purpose === "string"

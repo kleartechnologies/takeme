@@ -8,7 +8,7 @@ Reuse `getAdminPage`, `getAdminRecord`, `updateAdminReport` and the existing adm
 
 New callables: `getAdminSession`, `getAdminControlOverview`, `getAdminEditorialPage`, `getAdminEditorialRecord`, `mutateAdminEditorial`, `previewAdminHomepage`, `publishAdminHomepage`, `getPublicHomepage`, `requestAdminAssetPermit`, `finalizeAdminAsset`, `loadAdminReportContext`. Three new invalidation triggers cover listing, public seller profile and account-lifecycle changes. `getPublicListingPage` adds an optional, strictly boolean `includeHomepage`; omitted means no editorial read.
 
-All administrative endpoints require the verified Firebase token claim `admin === true`. No email allowlist or request-body admin flag grants access. Editorial mutations reuse server policy, account and maintenance checks, including transactional rechecks. The explicit report-context action audits access without changing marketplace state.
+All Admin MVP editorial and marketplace-admin endpoints require revocation-aware Firebase ID-token verification, verified `admin === true` and a fresh current Auth admin claim. The dedicated-app cookie is revalidated through the same boundary on each protected server read. See [admin session security and operator-removal procedure](admin-session-security.md). No email allowlist or request-body admin flag grants access. Editorial mutations reuse server policy, account and maintenance checks, including transactional rechecks. The explicit report-context action audits access without changing marketplace state.
 
 ## Private data model
 

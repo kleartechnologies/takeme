@@ -42,6 +42,8 @@ export async function verifyAdminToken(token: string) {
     return null;
   }
 }
+// This is an ID-token cookie, not a Firebase createSessionCookie() credential.
+// Reverify through the revocation-aware backend on every protected server read.
 export async function readAdminSession() {
   const token = (await cookies()).get(COOKIE)?.value;
   return token ? verifyAdminToken(token) : null;

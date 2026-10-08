@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { verifyAdminIdentity } from "./admin-auth";
 import { getApp } from "firebase-admin/app";
 import { getStorage } from "firebase-admin/storage";
 import {
@@ -47,12 +48,8 @@ import {
 const db = getFirestore();
 const collection = (kind: EditorialKind) => db.collection(`editorial_${kind}`);
 const liveRef = db.doc("homepagePublished/current");
-export function requireEditorialAdmin(request: CallableRequest<unknown>) {
-  if (!request.auth)
-    throw new HttpsError("unauthenticated", "Sign in to TAKEME Admin.");
-  if (request.auth.token.admin !== true)
-    throw new HttpsError("permission-denied", "Administrator access required.");
-  return request.auth.uid;
+export async function requireEditorialAdmin(request: CallableRequest<unknown>) {
+  return (await verifyAdminIdentity(request)).uid;
 }
 function kind(v: unknown): EditorialKind {
   if (!EDITORIAL_KINDS.includes(v as EditorialKind))
@@ -116,7 +113,7 @@ function record(k: EditorialKind, recordId: string, data: DocumentData) {
   };
 }
 export const getAdminEditorialPage = marketplaceCall(async (request) => {
-  requireEditorialAdmin(request);
+  await requireEditorialAdmin(request);
   const k = kind(request.data?.kind);
   let q = collection(k).orderBy("__name__").limit(31);
   if (request.data?.cursor) q = q.startAfter(checkedId(request.data.cursor));
@@ -127,7 +124,7 @@ export const getAdminEditorialPage = marketplaceCall(async (request) => {
   };
 });
 export const getAdminEditorialRecord = marketplaceCall(async (request) => {
-  requireEditorialAdmin(request);
+  await requireEditorialAdmin(request);
   const k = kind(request.data?.kind),
     recordId = checkedId(request.data?.id);
   const result = await collection(k).doc(recordId).get();
@@ -191,7 +188,7 @@ async function validateReferences(tx: Transaction, content: DocumentData) {
   }
 }
 export const mutateAdminEditorial = marketplaceMutationCall(async (request) => {
-  const uid = requireEditorialAdmin(request),
+  const uid = await requireEditorialAdmin(request),
     k = kind(request.data?.kind),
     recordId = checkedId(request.data?.id),
     expected = version(request.data?.expectedVersion);
@@ -550,7 +547,7 @@ async function compileHomepage(
   };
 }
 export const previewAdminHomepage = marketplaceCall(async (request) => {
-  requireEditorialAdmin(request);
+  await requireEditorialAdmin(request);
   let content: Homepage;
   try {
     content = parseContent("homepage", request.data?.content) as Homepage;
@@ -563,7 +560,7 @@ export const previewAdminHomepage = marketplaceCall(async (request) => {
   }));
 });
 export const publishAdminHomepage = marketplaceMutationCall(async (request) => {
-  const uid = requireEditorialAdmin(request),
+  const uid = await requireEditorialAdmin(request),
     expected = version(request.data?.expectedVersion),
     expectedLive = version(request.data?.expectedLiveVersion);
   return runGuardedTransaction(db, async (tx) => {
@@ -695,7 +692,7 @@ export const invalidateEditorialLifecycle = onDocumentWritten(
 );
 export const requestAdminAssetPermit = marketplaceMutationCall(
   async (request) => {
-    const uid = requireEditorialAdmin(request),
+    const uid = await requireEditorialAdmin(request),
       sizeBytes = request.data?.sizeBytes;
     if (
       !Number.isSafeInteger(sizeBytes) ||
@@ -739,7 +736,7 @@ export const requestAdminAssetPermit = marketplaceMutationCall(
   },
 );
 export const finalizeAdminAsset = marketplaceMutationCall(async (request) => {
-  const uid = requireEditorialAdmin(request),
+  const uid = await requireEditorialAdmin(request),
     assetId = checkedId(request.data?.assetId),
     ref = db.doc(`adminAssets/${assetId}`);
   const asset = (await ref.get()).data();
@@ -791,7 +788,7 @@ export const finalizeAdminAsset = marketplaceMutationCall(async (request) => {
   return { assetId, path: asset.path, url, ...dimensions };
 });
 export const getAdminControlOverview = marketplaceCall(async (request) => {
-  const uid = requireEditorialAdmin(request);
+  const uid = await requireEditorialAdmin(request);
   const total = async (query: FirebaseFirestore.Query) =>
     (await query.count().get()).data().count;
   const [listings, auctions, freshUsers, reports, campaigns, live, audits] =
@@ -858,6 +855,5 @@ export const getAdminControlOverview = marketplaceCall(async (request) => {
 
 /** Small claim-guarded handshake for the dedicated app's HttpOnly session boundary. */
 export const getAdminSession = marketplaceCall(async (request) => {
-  const uid = requireEditorialAdmin(request);
-  return { uid, expiresAt: Number(request.auth!.token.exp) };
+  return verifyAdminIdentity(request);
 });
