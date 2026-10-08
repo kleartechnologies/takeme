@@ -10,6 +10,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "apps/admin/.next/**",
+    "apps/admin/.open-next/**",
+    "apps/admin/.wrangler/**",
     ".open-next/**",
     ".wrangler/**",
     "out/**",

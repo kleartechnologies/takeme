@@ -1,0 +1,31 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "takeme-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+    "redact_query_string": true,
+    "traces": {
+      "enabled": false,
+    },
+  },
+  "account_id": "3ade68940865285d676a83971b23b4d4",
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "takeme-admin",
+    },
+  ],
+}
