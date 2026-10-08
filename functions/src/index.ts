@@ -530,7 +530,7 @@ export {
   reportPublicReview,
 } from "./transactions";
 
-export { getAdminMetrics, getAdminPage, getAdminRecord, updateAdminReport } from "./admin";
+export { getAdminMetrics, getAdminPage, getAdminRecord, updateAdminReport, loadAdminReportContext } from "./admin";
 
 export {
   getUnreadCount, getNotifications, markNotificationRead, openNotification, markAllNotificationsRead,
@@ -562,3 +562,5 @@ export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, fin
 
 export { requestUploadPermits } from "./upload-permits";
 export { getProtectedWriteStatus } from "./protected-write-maintenance-runtime.ts";
+
+export { getAdminSession, getAdminEditorialPage, getAdminEditorialRecord, mutateAdminEditorial, previewAdminHomepage, publishAdminHomepage, getPublicHomepage, requestAdminAssetPermit, finalizeAdminAsset, getAdminControlOverview, invalidateEditorialListing, invalidateEditorialSeller, invalidateEditorialLifecycle } from "./editorial";

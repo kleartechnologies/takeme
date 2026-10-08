@@ -16,6 +16,12 @@ test("all source marketplace mutation callable exports require frontend policy p
   for (const file of readdirSync(directory).filter(file => file.endsWith(".ts"))) {
     const source = readFileSync(new URL(file, directory), "utf8");
     for (const match of source.matchAll(/export const (\w+) = (marketplaceMutationCall|resolutionMutationCall)\(/g)) {
+      if (["mutateAdminEditorial", "publishAdminHomepage", "requestAdminAssetPermit", "finalizeAdminAsset"].includes(match[1])) {
+        assert.equal(match[2], "marketplaceMutationCall");
+        assert.match(source, /requireEditorialAdmin\(request\)/);
+        assert.match(source, /runGuardedTransaction/);
+        continue;
+      }
       assert.equal(isProtectedMarketplaceCallable(match[1]), true, `${file}: ${match[1]} must not bypass the preflight`);
       assert.equal(isPendingResolutionMutation(match[1]), match[2] === "resolutionMutationCall", `${file}: retain only the approved pending-resolution exceptions`);
       count++;

@@ -2,6 +2,7 @@ import { marketplaceCall as onCall } from "./account-lifecycle";
 import { getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isPublicListingSafe, publishableLocation, validatePublicLocation } from "./general-location";
+import { readPublishedHomepage } from "./editorial";
 import { publicListing } from "./intelligence";
 
 type Sort = "newest" | "price_low" | "price_high";
@@ -85,7 +86,7 @@ export const getMyListingHistory = onCall(async (request) => {
 function parseRequest(value: unknown): { filters: Filters; cursor: string | null } {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpsError("invalid-argument", "Listing filters are invalid.");
   const input = value as Record<string, unknown>;
-  if (Object.keys(input).some((key) => !["filters", "cursor"].includes(key))) throw new HttpsError("invalid-argument", "Listing filters are invalid.");
+  if (Object.keys(input).some((key) => !["filters", "cursor", "includeHomepage"].includes(key))) throw new HttpsError("invalid-argument", "Listing filters are invalid.");
   const raw = input.filters ?? {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new HttpsError("invalid-argument", "Listing filters are invalid.");
   const fields = raw as Record<string, unknown>;
@@ -141,6 +142,8 @@ function matches(data: DocumentData, filters: Filters) {
 /** Public browse is a field-whitelisted callable. Raw listing collection queries remain owner/admin-only. */
 export const getPublicListingPage = onCall(async (request) => {
   const { filters, cursor } = parseRequest(request.data);
+  if (request.data?.includeHomepage !== undefined && typeof request.data.includeHomepage !== "boolean") throw new HttpsError("invalid-argument", "Invalid homepage request.");
+  const homepage = request.data?.includeHomepage === true ? readPublishedHomepage().catch(() => null) : null;
   const db = getFirestore();
   let source: Query = db.collection("listings").where("status", "==", "active").where("privacyVersion", "==", 2);
   if (filters.sellerId) {
@@ -173,5 +176,5 @@ export const getPublicListingPage = onCall(async (request) => {
     }
     if (!hasMore) break;
   }
-  return { listings, cursor: lastRead?.id ?? null, hasMore };
+  return { listings, cursor: lastRead?.id ?? null, hasMore, ...(homepage ? { homepage: await homepage } : {}) };
 });

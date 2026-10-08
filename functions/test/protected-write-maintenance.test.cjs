@@ -248,7 +248,7 @@ test("signed-out mutations retain authentication rejection without private state
   assert.deepEqual(reads, []); assert.equal(authReads, 0); assert.deepEqual(writes, []);
 });
 
-test("every one of the 102 deployed exports has an explicit maintenance classification", () => {
+test("every callable/trigger export has an explicit maintenance classification", () => {
   const fs = require("node:fs");
   const path = require("node:path");
   const ts = require("typescript");
@@ -260,25 +260,27 @@ test("every one of the 102 deployed exports has an explicit maintenance classifi
       publishAuctionListing publishFixedListing removeFixedListing reportPublicReview requestTransactionCancellation respondToOffer
       saveSearch sendConversationMessage setNotificationPreference setSellerFollow submitMarketplaceReport submitOffer
       submitTransactionReview trackMarketplaceEvent trackPromotionEngagement updateAdminReport updateAuctionListing updateFixedListing
-      requestUploadPermits createProtectedPayment respondToProtectedDispute addProtectedDisputeEvidence`.split(/\s+/),
+      requestUploadPermits createProtectedPayment respondToProtectedDispute addProtectedDisputeEvidence
+      mutateAdminEditorial publishAdminHomepage requestAdminAssetPermit finalizeAdminAsset`.split(/\s+/),
     readOnly: `getAdminMetrics getAdminPage getAdminRecord getAuctionViewerState getConversation getConversationMessages
       getConversations getFeaturedPromotions getFollowState getFollowing getListingDealState getMarketplaceDiscovery
       getMarketplaceRecommendations getMarketplaceSimilar getMyListingHistory getMyPromotionRequests getMyTransactions
       getNotificationPreferences getNotifications getPromotionPackages getPromotionPlacements getPublicListingDetail getPublicListingPage
       getPublicReviews getPublicSellerSummaries getReputationPolicy getSavedSearches getTransactionDetail getUnreadCount
       getAccountSetupStatus getAccountDeletionAvailability getAccountDeletionStatus getProtectedPaymentPolicy getSellerPaymentOnboarding
-      getProtectedWriteStatus`.split(/\s+/),
-    specialWrite: `acceptWebPolicies completeFirstTimeProfile finishAccountWelcome requestAccountDeletion retryAccountDeletion`.split(/\s+/),
+      getProtectedWriteStatus getAdminEditorialPage getAdminEditorialRecord previewAdminHomepage getPublicHomepage getAdminControlOverview getAdminSession`.split(/\s+/),
+    specialWrite: `acceptWebPolicies completeFirstTimeProfile finishAccountWelcome requestAccountDeletion retryAccountDeletion loadAdminReportContext`.split(/\s+/),
     derived: `onSavedListingCreated onSavedListingDeleted onAuctionBidCreated onConversationStarted onConversationMessageCreated
       onCompletedTransactionInterest onAuctionWonCreateTransaction onBidEngagementCreated onListingEngagementChanged
       onMessageEngagementCreated onOfferEngagementCreated onOfferEngagementUpdated onPromotedListingUpdated onSavedWatchChanged
-      onTransactionConversationCreated onTransactionEngagementCreated onTransactionEngagementUpdated`.split(/\s+/),
+      onTransactionConversationCreated onTransactionEngagementCreated onTransactionEngagementUpdated
+      invalidateEditorialListing invalidateEditorialSeller invalidateEditorialLifecycle`.split(/\s+/),
     schedules: `advanceAuctionLifecycle processEngagementJobs expireOffers releaseExpiredReviews queueEndingAuctionAlerts
       expirePromotions processAccountDeletions`.split(/\s+/),
   };
-  assert.deepEqual(Object.values(groups).map(names => names.length), [38, 35, 5, 17, 7]);
+  assert.deepEqual(Object.values(groups).map(names => names.length), [42, 41, 6, 20, 7]);
   const classified = Object.values(groups).flat();
-  assert.equal(new Set(classified).size, 102, "No classification may overlap or omit an export.");
+  assert.equal(new Set(classified).size, 116, "No classification may overlap or omit an export.");
   const constructors = new Map(), helpers = new Map(), exported = new Set();
   for (const file of fs.readdirSync(sourceDir).filter(name => name.endsWith(".ts"))) {
     const source = ts.createSourceFile(file, fs.readFileSync(path.join(sourceDir, file), "utf8"), ts.ScriptTarget.Latest, true);

@@ -2,6 +2,9 @@ import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransacti
 import { getAuth } from "firebase-admin/auth";
 import { AggregateField, getFirestore, Timestamp, type DocumentData, type Query } from "firebase-admin/firestore";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
+import { adminAudit } from "./editorial";
+import { publicSellerSummary } from "./public-seller-domain";
+import { publicProfileLocation, isPublicListingSafe } from "./general-location";
 import { ADMIN_SECTIONS, adminRange, averageSen, ctr, tierDistribution, type AdminRange, type AdminSection } from "./admin-domain";
 
 const db = getFirestore();
@@ -260,12 +263,80 @@ function pageSection(value: unknown): PageSection {
 }
 function publicRow(sectionName: PageSection, id: string, data: DocumentData) {
   const common = { id, createdAt: iso(data.createdAt) };
-  if (sectionName === "users") return { ...common, displayName: data.displayName ?? "TAKEME member", location: data.location ?? "" };
-  if (sectionName === "listings") return { ...common, title: data.title, categoryId: data.categoryId, sellerId: data.sellerId, listingType: data.listingType, status: data.status, price: data.price };
-  if (sectionName === "transactions") return { ...common, listingTitle: data.listingTitle, buyerId: data.buyerId, sellerId: data.sellerId, status: data.status, type: data.type, settlementMode: data.settlementMode ?? "standard", amountSen: data.amountSen, completedAt: iso(data.completedAt) };
-  if (sectionName === "promotions") return { ...common, listingId: data.listingId, type: data.type, status: data.status, paymentStatus: data.paymentStatus, impressions: data.impressions ?? 0, clicks: data.clicks ?? 0 };
-  if (sectionName === "reviews") return { ...common, reviewedUserId: data.reviewedUserId, reviewerRole: data.reviewerRole, rating: data.rating, tags: data.tags ?? [], publishedAt: iso(data.publishedAt) };
-  return { ...common, targetType: data.targetType, targetId: data.targetId, reason: data.reason, status: data.status, reporterId: data.reporterId };
+  if (sectionName === "users")
+    return {
+      ...common,
+      displayName: data.displayName ?? "TAKEME member",
+      location: publicProfileLocation(data.location),
+      accountState: data.disabled === true ? "disabled" : data.status === "removed" ? "removed" : "active",
+    };
+  if (sectionName === "listings")
+    return {
+      ...common,
+      title: data.title,
+      categoryId: data.categoryId,
+      sellerId: data.sellerId,
+      listingType: data.listingType,
+      status: data.status,
+      price: data.price ?? 0,
+      imageUrl: data.imageUrls?.[0] ?? "",
+      auctionStatus: data.auctionStatus ?? null,
+      auctionStartAt: iso(data.auctionStartAt),
+      auctionEndAt: iso(data.auctionEndAt),
+      currentBid: data.currentBid ?? null,
+    };
+  if (sectionName === "transactions")
+    return {
+      ...common,
+      listingTitle: data.listingTitle,
+      buyerId: data.buyerId,
+      sellerId: data.sellerId,
+      status: data.status,
+      type: data.type,
+      settlementMode: data.settlementMode ?? "standard",
+      amountSen: data.amountSen,
+      completedAt: iso(data.completedAt),
+    };
+  if (sectionName === "promotions")
+    return {
+      ...common,
+      listingId: data.listingId,
+      type: data.type,
+      status: data.status,
+      paymentStatus: data.paymentStatus,
+      impressions: data.impressions ?? 0,
+      clicks: data.clicks ?? 0,
+    };
+  if (sectionName === "reviews")
+    return {
+      ...common,
+      reviewedUserId: data.reviewedUserId,
+      reviewerRole: data.reviewerRole,
+      rating: data.rating,
+      tags: data.tags ?? [],
+      publishedAt: iso(data.publishedAt),
+    };
+  return {
+    ...common,
+    targetType: data.targetType,
+    targetId: data.targetId,
+    reason: data.reason,
+    status: data.status,
+    reporterId: data.reporterId,
+  };
+}
+
+async function sellerRows(rows: ReturnType<typeof publicRow>[]) {
+  if (!rows.length) return rows;
+  const summaries = await db.getAll(...rows.map(row => db.doc(`trustSummaries/${row.id}`)));
+  return Promise.all(rows.map(async (row, index) => {
+    const [activeListings, reports] = await Promise.all([
+      count(db.collection("listings").where("sellerId", "==", row.id).where("status", "==", "active")),
+      count(db.collection("reports").where("targetType", "==", "user").where("targetId", "==", row.id)),
+    ]);
+    const summary = publicSellerSummary(row.id, row, summaries[index]?.data());
+    return { ...row, activeListings, reports, sellerRating: summary?.sellerRating ?? null, sellerReviewCount: summary?.sellerReviewCount ?? 0 };
+  }));
 }
 
 export const getAdminPage = onCall(async (request) => {
@@ -273,17 +344,100 @@ export const getAdminPage = onCall(async (request) => {
   const selected = pageSection(request.data?.section);
   const cursor = request.data?.cursor ? requiredId(request.data.cursor) : null;
   const status = request.data?.status;
-  if (status !== undefined && (selected !== "reports" || !["submitted", "reviewing", "resolved", "dismissed"].includes(status))) throw new HttpsError("invalid-argument", "Invalid report filter.");
+  const allowedStatus =
+    selected === "reports"
+      ? ["submitted", "reviewing", "resolved", "dismissed"]
+      : selected === "listings"
+        ? ["active", "sold", "draft", "removed", "ended"]
+        : [];
+  if (status && !allowedStatus.includes(status))
+    throw new HttpsError("invalid-argument", "Invalid state filter.");
+  const title =
+    typeof request.data?.search === "string"
+      ? request.data.search.trim().toLowerCase().slice(0, 40)
+      : "";
+  const sellerId = request.data?.sellerId
+    ? requiredId(request.data.sellerId)
+    : null;
+  const categoryId = request.data?.categoryId;
+  if (categoryId && !CATEGORIES.includes(categoryId))
+    throw new HttpsError("invalid-argument", "Invalid category filter.");
+  const auction = request.data?.auction === true;
+  const auctionStatus = request.data?.auctionStatus;
+  if (
+    auctionStatus &&
+    !["scheduled", "active", "ended", "cancelled"].includes(auctionStatus)
+  )
+    throw new HttpsError("invalid-argument", "Invalid auction state.");
   const collection = db.collection(PAGE_COLLECTIONS[selected]);
-  let query: Query = status ? collection.where("status", "==", status) : collection;
-  query = query.orderBy("createdAt", "desc").limit(21);
+  const featureEligible = (data: DocumentData) => request.data?.featureEligibleOnly !== true || (selected === "users" ? data.status !== "removed" && data.disabled !== true : data.status === "active" && isPublicListingSafe(data) && (data.listingType === "buy_now" || ["active","scheduled"].includes(data.auctionStatus) && data.auctionEndAt?.toMillis?.() > Date.now()));
+  const includeSellerSummary = selected === "users" && request.data?.sellerSummary === true;
+  if (selected === "listings" && request.data?.reported === true) {
+    let reportsQuery = db.collection("reports").where("targetType", "==", "listing").orderBy("__name__").limit(21);
+    if (cursor) reportsQuery = reportsQuery.startAfter(cursor);
+    const reports = await reportsQuery.get();
+    const ids = [...new Set(reports.docs.slice(0,20).map(d => d.data().targetId).filter(v => typeof v === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(v)))];
+    const records = ids.length ? await db.getAll(...ids.map(id => collection.doc(id))) : [];
+    return { rows: records.filter(d=>d.exists).map(d=>publicRow(selected,d.id,d.data()!)), nextCursor: reports.size > 20 ? reports.docs[19]!.id : null };
+  }
+  if (request.data?.recordId) {
+    const item = await collection.doc(requiredId(request.data.recordId)).get();
+    return {
+      rows: item.exists && featureEligible(item.data()!) ? await (includeSellerSummary ? sellerRows([publicRow(selected, item.id, item.data()!)]) : Promise.resolve([publicRow(selected, item.id, item.data()!)])) : [],
+      nextCursor: null,
+    };
+  }
+  // One selective indexed predicate, then bounded page filtering. Never scan a collection.
+  let query: Query = collection;
+  if (selected === "listings" && title.length >= 2)
+    query = query.where("searchTokens", "array-contains", title);
+  else if (selected === "users" && title)
+    query = query
+      .orderBy("displayName")
+      .startAt(request.data.search.trim())
+      .endAt(request.data.search.trim() + "\uf8ff");
+  else if (selected === "listings" && sellerId)
+    query = query.where("sellerId", "==", sellerId);
+  else if (selected === "listings" && categoryId)
+    query = query.where("categoryId", "==", categoryId);
+  else if (status) query = query.where("status", "==", status);
+  else if (selected === "listings" && auctionStatus)
+    query = query.where("auctionStatus", "==", auctionStatus);
+  else if (selected === "listings" && auction)
+    query = query.where("listingType", "in", [
+      "auction",
+      "buy_now_and_auction",
+    ]);
+  query = query.orderBy("__name__").limit(21);
   if (cursor) {
     const anchor = await collection.doc(cursor).get();
-    if (!anchor.exists) throw new HttpsError("invalid-argument", "Page cursor expired. Refresh this list.");
+    if (!anchor.exists)
+      throw new HttpsError(
+        "invalid-argument",
+        "Page cursor expired. Refresh this list.",
+      );
     query = query.startAfter(anchor);
   }
   const page = await query.get();
-  return { rows: page.docs.slice(0, 20).map((item) => publicRow(selected, item.id, item.data())), nextCursor: page.docs.length > 20 ? page.docs[19]?.id ?? null : null };
+  const rows = page.docs
+      .slice(0, 20)
+      .filter((item) => {
+        const d = item.data();
+        return (
+          featureEligible(d) &&
+          (!status || d.status === status) &&
+          (!sellerId || d.sellerId === sellerId) &&
+          (!categoryId || d.categoryId === categoryId) &&
+          (!auction ||
+            ["auction", "buy_now_and_auction"].includes(d.listingType)) &&
+          (!auctionStatus || d.auctionStatus === auctionStatus)
+        );
+      })
+      .map((item) => publicRow(selected, item.id, item.data()));
+  return {
+    rows: includeSellerSummary ? await sellerRows(rows) : rows,
+    nextCursor: page.docs.length > 20 ? (page.docs[19]?.id ?? null) : null,
+  };
 });
 
 export const getAdminRecord = onCall(async (request) => {
@@ -296,18 +450,55 @@ export const getAdminRecord = onCall(async (request) => {
   const data = snapshot.data()!;
   const row = publicRow(selected, recordId, data);
   if (selected === "users") {
-    const authUser = await getAuth().getUser(recordId).catch(() => null);
-    const [listings, buying, selling, summary, reviews, reports, paymentProfile] = await Promise.all([
-      count(db.collection("listings").where("sellerId", "==", recordId)),
-      sum(db.collection("transactions").where("buyerId", "==", recordId).where("status", "==", "completed"), "amountSen"),
-      sum(db.collection("transactions").where("sellerId", "==", recordId).where("status", "==", "completed"), "amountSen"),
-      db.collection("trustSummaries").doc(recordId).get(),
-      count(db.collection("publicReviews").where("reviewedUserId", "==", recordId)),
-      count(db.collection("reports").where("targetType", "==", "user").where("targetId", "==", recordId)),
-      db.collection("sellerPaymentProfiles").doc(recordId).get(),
-    ]);
-    return { row, detail: { email: authUser?.email ?? null, listings, completedPurchases: buying.count, completedSales: selling.count, completedBuyerValueSen: buying.value, completedSellerValueSen: selling.value, buyerTier: summary.data()?.buyer?.tier ?? null, sellerTier: summary.data()?.seller?.tier ?? null, reviews, reports,
-      protectedPaymentOnboarding: paymentProfile.exists ? { provider: paymentProfile.data()?.provider, status: paymentProfile.data()?.status, providerAccountReference: paymentProfile.data()?.providerAccountReference ?? null, chargesEnabled: paymentProfile.data()?.chargesEnabled === true, payoutsEnabled: paymentProfile.data()?.payoutsEnabled === true, requirementsStatus: paymentProfile.data()?.requirementsStatus ?? null, lastCheckedAt: iso(paymentProfile.data()?.lastCheckedAt) } : { status: "not_started" } } };
+    const authUser = await getAuth()
+      .getUser(recordId)
+      .catch(() => null);
+    const [listings, buying, selling, summary, reviews, reports] =
+      await Promise.all([
+        count(db.collection("listings").where("sellerId", "==", recordId)),
+        sum(
+          db
+            .collection("transactions")
+            .where("buyerId", "==", recordId)
+            .where("status", "==", "completed"),
+          "amountSen",
+        ),
+        sum(
+          db
+            .collection("transactions")
+            .where("sellerId", "==", recordId)
+            .where("status", "==", "completed"),
+          "amountSen",
+        ),
+        db.collection("trustSummaries").doc(recordId).get(),
+        count(
+          db
+            .collection("publicReviews")
+            .where("reviewedUserId", "==", recordId),
+        ),
+        count(
+          db
+            .collection("reports")
+            .where("targetType", "==", "user")
+            .where("targetId", "==", recordId),
+        ),
+      ]);
+    return {
+      row,
+      detail: {
+        accountState: authUser?.disabled ? "disabled" : "active",
+        listings,
+        completedPurchases: buying.count,
+        completedSales: selling.count,
+        completedBuyerValueSen: buying.value,
+        completedSellerValueSen: selling.value,
+        buyerTier: summary.data()?.buyer?.tier ?? null,
+        sellerTier: summary.data()?.seller?.tier ?? null,
+        sellerRating: publicSellerSummary(recordId, data, summary.data())?.sellerRating ?? null,
+        reviews,
+        reports,
+      },
+    };
   }
   if (selected === "listings") {
     const [views, saves, bids, offers, promotions, reports] = await Promise.all([
@@ -337,15 +528,23 @@ export const getAdminRecord = onCall(async (request) => {
       financialActionsEnabled: false } };
   }
   if (selected === "reports") {
-    const retainedEvidence = data.deletionEvidenceId ? await db.collection(`accountDeletionEvidence/${data.deletionEvidenceId}/records`).limit(25).get() : null;
-    const conversation = data.conversationId ? await db.collection("conversations").doc(data.conversationId).get() : null;
-    const message = data.targetType === "message" && conversation?.exists ? await conversation.ref.collection("messages").doc(data.targetId).get() : null;
-    const contextMessages = conversation?.exists ? await conversation.ref.collection("messages").orderBy("createdAt", "desc").limit(20).get() : null;
-    return { row, detail: { retainedEvidence: retainedEvidence?.docs.map((item) => ({ ...item.data(), createdAt: iso(item.data().createdAt) })) ?? [], details: data.details ?? "", updatedAt: iso(data.updatedAt), listingId: data.listingId ?? null, userId: data.userId ?? null, conversationId: data.conversationId ?? null,
-      conversation: conversation?.exists ? { listingId: conversation.data()?.listingId, buyerId: conversation.data()?.buyerId, sellerId: conversation.data()?.sellerId } : null,
-      reportedMessage: message?.exists ? { senderId: message.data()?.senderId, body: message.data()?.body, createdAt: iso(message.data()?.createdAt) } : null,
-      recentConversationMessages: contextMessages?.docs.map((item) => ({ id: item.id, senderId: item.data().senderId, body: item.data().body, createdAt: iso(item.data().createdAt) })) ?? [],
-      resolution: data.resolution ?? "", internalNotes: data.internalNotes ?? "", moderationActionAvailable: true } };
+    return {
+      row,
+      detail: {
+        details:
+          typeof data.details === "string" ? data.details.slice(0, 2000) : "",
+        updatedAt: iso(data.updatedAt),
+        listingId: data.listingId ?? null,
+        userId: data.userId ?? null,
+        conversationId: data.conversationId ?? null,
+        resolution: data.resolution ?? "",
+        internalNotes: data.internalNotes ?? "",
+        moderationActionAvailable: true,
+        explicitContextAvailable:
+          data.targetType === "message" &&
+          typeof data.conversationId === "string",
+      },
+    };
   }
   if (selected === "promotions") return { row, detail: { packageId: data.packageId, priceSen: data.priceSen, currency: data.currency, startAt: iso(data.startAt), endAt: iso(data.endAt), refundReviewRequired: data.refundReviewRequired ?? false } };
   return { row, detail: { tags: data.tags ?? [], comment: data.comment ?? "", publishedAt: iso(data.publishedAt) } };
@@ -355,12 +554,113 @@ export const updateAdminReport = marketplaceMutationCall(async (request) => {
   const adminId = requireAdmin(request);
   const reportId = requiredId(request.data?.reportId);
   const status = request.data?.status;
-  if (!["submitted", "reviewing", "resolved", "dismissed"].includes(status)) throw new HttpsError("invalid-argument", "Invalid report status.");
-  const resolution = typeof request.data?.resolution === "string" ? request.data.resolution.trim() : "";
-  const internalNotes = typeof request.data?.internalNotes === "string" ? request.data.internalNotes.trim() : "";
-  if (resolution.length > 2000 || internalNotes.length > 4000) throw new HttpsError("invalid-argument", "Moderation notes are too long.");
-  if (status === "resolved" && !resolution) throw new HttpsError("invalid-argument", "A resolution is required.");
+  if (!["submitted", "reviewing", "resolved", "dismissed"].includes(status))
+    throw new HttpsError("invalid-argument", "Invalid report status.");
+  const resolution =
+    typeof request.data?.resolution === "string"
+      ? request.data.resolution.trim()
+      : "";
+  const internalNotes =
+    typeof request.data?.internalNotes === "string"
+      ? request.data.internalNotes.trim()
+      : "";
+  if (resolution.length > 2000 || internalNotes.length > 4000)
+    throw new HttpsError("invalid-argument", "Moderation notes are too long.");
+  if (status === "resolved" && !resolution)
+    throw new HttpsError("invalid-argument", "A resolution is required.");
   const ref = db.collection("reports").doc(reportId);
-  await runGuardedTransaction(db, async (tx) => { const report = await tx.get(ref); if (!report.exists) throw new HttpsError("not-found", "Report not found."); tx.update(ref, { status, resolution, internalNotes, moderatedBy: adminId, ...(["resolved", "dismissed"].includes(status) && !["resolved", "dismissed"].includes(report.data()?.status) ? { resolvedAt: Timestamp.now() } : {}), updatedAt: Timestamp.now() }); });
+  await runGuardedTransaction(db, async (tx) => {
+    const report = await tx.get(ref);
+    if (!report.exists) throw new HttpsError("not-found", "Report not found.");
+    adminAudit(tx, adminId, "report-triage", "report", reportId, { status });
+    tx.update(ref, {
+      status,
+      resolution,
+      internalNotes,
+      moderatedBy: adminId,
+      ...(["resolved", "dismissed"].includes(status) &&
+      !["resolved", "dismissed"].includes(report.data()?.status)
+        ? { resolvedAt: Timestamp.now() }
+        : {}),
+      updatedAt: Timestamp.now(),
+    });
+  });
   return { updated: true };
+});
+
+/** Explicit report-specific bounded context. No generic conversation browser. */
+export const loadAdminReportContext = onCall(async (request) => {
+  const uid = requireAdmin(request),
+    reportId = requiredId(request.data?.reportId);
+  const purpose =
+    typeof request.data?.purpose === "string"
+      ? request.data.purpose.trim()
+      : "";
+  if (purpose.length < 10 || purpose.length > 200)
+    throw new HttpsError(
+      "invalid-argument",
+      "Explain why this report needs message context (10–200 characters).",
+    );
+  const report = (await db.doc(`reports/${reportId}`).get()).data();
+  if (!report || report.targetType !== "message" || !report.conversationId)
+    throw new HttpsError(
+      "failed-precondition",
+      "This report has no reported message relationship.",
+    );
+  const conversationId = requiredId(report.conversationId),
+    messageId = requiredId(report.targetId);
+  const conversation = await db.doc(`conversations/${conversationId}`).get();
+  const messageRef = db.doc(
+      `conversations/${conversationId}/messages/${messageId}`,
+    ),
+    message = await messageRef.get();
+  if (
+    !conversation.exists ||
+    !message.exists ||
+    ![conversation.data()?.buyerId, conversation.data()?.sellerId].includes(
+      report.reporterId,
+    )
+  )
+    throw new HttpsError(
+      "permission-denied",
+      "The report relationship could not be verified.",
+    );
+  const stamp = message.data()?.createdAt;
+  if (!(stamp instanceof Timestamp))
+    throw new HttpsError(
+      "failed-precondition",
+      "Reported message timestamp is unavailable.",
+    );
+  const messages = messageRef.parent;
+  const [before, after] = await Promise.all([
+    messages
+      .where("createdAt", "<", stamp)
+      .orderBy("createdAt", "desc")
+      .limit(2)
+      .get(),
+    messages.where("createdAt", ">", stamp).orderBy("createdAt").limit(2).get(),
+  ]);
+  await db.runTransaction(async (tx) => {
+    const current = await tx.get(db.doc(`reports/${reportId}`));
+    if (
+      current.data()?.conversationId !== conversationId ||
+      current.data()?.targetId !== messageId ||
+      current.data()?.reporterId !== report.reporterId
+    )
+      throw new HttpsError("aborted", "Report changed. Reload.");
+    adminAudit(tx, uid, "load-reported-context", "report", reportId, {
+      purpose,
+      messageCount: before.size + after.size + 1,
+    });
+  });
+  return {
+    messages: [...before.docs.reverse(), message, ...after.docs].map((d) => ({
+      id: d.id,
+      senderId: d.data()?.senderId ?? null,
+      body:
+        typeof d.data()?.body === "string" ? d.data()!.body.slice(0, 4000) : "",
+      createdAt: iso(d.data()?.createdAt),
+      reported: d.id === messageId,
+    })),
+  };
 });

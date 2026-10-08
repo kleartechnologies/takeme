@@ -73,6 +73,22 @@ service firebase.storage {
         );
     }
 
+    // Editorial namespace: short exact permits, admin claim, create-only assets.
+    match /admin-assets/{assetId}/image.png {
+      function asset() { return firestore.get(/databases/(default)/documents/adminAssets/$(assetId)).data; }
+      allow read: if asset().published == true
+        || (request.auth != null && request.auth.token.admin == true && request.auth.uid == asset().uid);
+      allow create: if request.auth != null && request.auth.token.admin == true
+        && resource == null && configuredStorageBucket(bucket)
+        && asset().uid == request.auth.uid && asset().state == 'pending'
+        && request.time < asset().expiresAt
+        && asset().path == 'admin-assets/' + assetId + '/image.png'
+        && request.resource.contentType == 'image/png'
+        && request.resource.size == asset().sizeBytes
+        && request.resource.size > 0 && request.resource.size <= 2 * 1024 * 1024;
+      allow update, delete: if false;
+    }
+
     match /users/{uid}/profile/{fileName} {
       allow read: if true;
       allow create: if resource == null && eligibleOwner(uid) && validImage()
