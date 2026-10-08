@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { BannerList, HomepageTabs } from "@admin/components/homepage-workspace";
 import { ContentList } from "@admin/components/editorial";
 import {
   EDITORIAL_KINDS,
@@ -11,5 +12,11 @@ export default async function Page({
 }) {
   const { kind } = await params;
   if (!EDITORIAL_KINDS.includes(kind as EditorialKind)) notFound();
-  return <ContentList key={kind} kind={kind as EditorialKind} />;
+  if (kind === "banners") return <BannerList />;
+  return (
+    <>
+      {kind === "announcements" && <HomepageTabs selected="announcements" />}
+      <ContentList key={kind} kind={kind as EditorialKind} />
+    </>
+  );
 }

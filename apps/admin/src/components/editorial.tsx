@@ -1,6 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { DestinationPicker } from "./destination-picker";
+import { CATEGORY_LABELS, destinationLabel } from "@admin/lib/banner-workflow";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getBytes, ref, uploadBytes } from "firebase/storage";
@@ -86,10 +88,11 @@ export function ContentList({ kind }: { kind: EditorialKind }) {
     <>
       <p className="eyebrow">Content</p>
       <h1>{labels[kind]}</h1>
-      <p className="muted">
-        Editorial content is separate from paid seller promotions. Saves do not
-        publish homepage changes.
-      </p>
+      {kind === "campaigns" && (
+        <p className="muted">
+          Coordinate featured content across your homepage.
+        </p>
+      )}
       <div className="toolbar">
         <Link href={`/content/${kind}/new`}>
           + Create {kind === "banners" ? "banner" : kind.slice(0, -1)}
@@ -103,7 +106,6 @@ export function ContentList({ kind }: { kind: EditorialKind }) {
             <tr>
               <th>Title</th>
               <th>State</th>
-              <th>Version</th>
               <th>Updated · Malaysia</th>
             </tr>
           </thead>
@@ -114,7 +116,6 @@ export function ContentList({ kind }: { kind: EditorialKind }) {
                   <Link href={`/content/${kind}/${row.id}`}>
                     {row.content.title}
                   </Link>
-                  <small>{row.id}</small>
                 </td>
                 <td>
                   <span className="badge">
@@ -130,7 +131,6 @@ export function ContentList({ kind }: { kind: EditorialKind }) {
                           : "Draft")}
                   </span>
                 </td>
-                <td>{row.version}</td>
                 <td>{date(row.updatedAt)}</td>
               </tr>
             ))}
@@ -502,12 +502,15 @@ function AssetUpload({
 function Fields({
   content,
   change,
+  friendly = false,
 }: {
   content: Record<string, unknown>;
   change: (key: string, value: unknown) => void;
+  friendly?: boolean;
 }) {
   const fields = Object.entries(content).filter(
     ([key]) =>
+      !(friendly && ["order", "destination"].includes(key)) &&
       ![
         "sections",
         "categories",
@@ -664,6 +667,12 @@ function Fields({
           ))}
         </fieldset>
       )}
+      {friendly && (
+        <DestinationPicker
+          value={String(content.destination ?? "")}
+          onChange={(v) => change("destination", v)}
+        />
+      )}
       <References content={content} change={change} />
     </>
   );
@@ -739,7 +748,6 @@ export function HomepagePreview({
               {current?.sections.some((v) => v.sectionId === s.sectionId)
                 ? "Active now"
                 : "Scheduled / ended"}{" "}
-              · {s.source}
             </span>
             <h3>{s.title}</h3>
             {s.banners
@@ -754,22 +762,22 @@ export function HomepagePreview({
                 <div key={i}>
                   <AdminAssetImage url={b.url} alt={b.alt} />
                   <p>
-                    {b.ctaLabel} → {b.destination}
+                    {b.ctaLabel} → {destinationLabel(b.destination)}
                   </p>
                 </div>
               ))}
             {s.products.map((v) => (
               <p key={v.id}>
-                {v.title} · RM {v.price} · {v.id}
+                {v.title} · RM {v.price}
               </p>
             ))}
             {s.sellers.map((v) => (
               <p key={v.id}>{v.displayName}</p>
             ))}
-            {s.categories.length > 0 && <p>{s.categories.join(" · ")}</p>}
+            {s.categories.length > 0 && <p>{s.categories.map(id => CATEGORY_LABELS[id] ?? id).join(" · ")}</p>}
             {s.cta && (
               <p>
-                {s.cta.label} → {s.cta.destination}
+                {s.cta.label} → {destinationLabel(s.cta.destination)}
               </p>
             )}
             {s.announcement && <p>{s.announcement.title}</p>}
@@ -914,7 +922,7 @@ export function ContentEditor({
         { expectedVersion: revision, expectedLiveVersion: liveVersion },
       );
       setLiveVersion(result.liveVersion);
-      setNotice(`Homepage published as live version ${result.liveVersion}.`);
+      setNotice("Homepage published");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -928,11 +936,14 @@ export function ContentEditor({
       <h1>
         {recordId === "new" ? "New draft" : content.title || labels[kind]}
       </h1>
-      <p className="muted">
-        Version {revision}{" "}
-        {kind === "homepage" && `· Live version ${liveVersion}`} · Times are
-        Asia/Kuala_Lumpur. Public changes require explicit homepage publication.
-      </p>
+      <p className="muted">Malaysia time · Asia/Kuala_Lumpur</p>
+      <details className="advanced">
+        <summary>Technical details</summary>
+        <p>
+          Revision {revision}
+          {kind === "homepage" && ` · Published revision ${liveVersion}`}
+        </p>
+      </details>
       <div className="toolbar">
         {!["homepage", "categories"].includes(kind) && (
           <Link href={`/content/${kind}`}>
@@ -1008,6 +1019,7 @@ export function ContentEditor({
         <Fields
           content={content as unknown as Record<string, unknown>}
           change={change}
+          friendly={kind === "announcements"}
         />
         {kind === "homepage" && (
           <>

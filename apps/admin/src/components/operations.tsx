@@ -33,8 +33,7 @@ export function Overview() {
       <p className="eyebrow">TAKEME marketplace</p>
       <h1>Control room</h1>
       <p className="muted">
-        Create weekly campaigns, curate discovery and review marketplace
-        reports.
+        Manage Homepage banners, curate discovery and review marketplace reports.
       </p>
       {error && <p role="alert">{error}</p>}
       {!data && !error && (
@@ -52,18 +51,18 @@ export function Overview() {
           </div>
           <div className="panel toolbar">
             <div>
-              <h2>Homepage · live version {data.liveVersion}</h2>
+              <h2>Homepage</h2>
               <p className="muted">
                 {data.liveValid
-                  ? "Published configuration available"
+                  ? "Published Homepage is available"
                   : "Existing marketplace fallback is active"}
               </p>
             </div>
-            <Link href="/content/homepage/current">Edit homepage →</Link>
-            <Link href="/content/campaigns">Manage campaigns →</Link>
+            <Link href="/homepage">Manage Homepage →</Link>
+            <Link href="/content/campaigns">Advanced campaigns →</Link>
           </div>
-          <section className="panel">
-            <h2>Recent admin activity</h2>
+          <details className="panel">
+            <summary>Recent admin activity · technical audit</summary>
             <div className="table-wrap">
               <table className="audit">
                 <thead>
@@ -94,7 +93,7 @@ export function Overview() {
               </table>
             </div>
             {!data.audits.length && <p>No admin changes recorded yet.</p>}
-          </section>
+          </details>
         </>
       )}
     </>

@@ -58,11 +58,9 @@ const groups = [
   {
     title: "Content",
     links: [
-      ["/content/homepage/current", "Homepage"],
-      ["/content/banners", "Banners"],
-      ["/content/campaigns", "Campaigns"],
+      ["/homepage", "Homepage"],
+      ["/content/campaigns", "Advanced Campaigns"],
       ["/content/collections", "Collections"],
-      ["/content/announcements", "Announcements"],
     ],
   },
   {
@@ -79,7 +77,7 @@ const groups = [
   { title: "", links: [["/settings", "Settings"]] },
 ];
 export function AdminGate({ children }: { children: React.ReactNode }) {
-  const { user, state } = useAdminSession(),
+  const { state } = useAdminSession(),
     router = useRouter(),
     path = usePathname();
   const [expanded, setExpanded] = useState(false);
@@ -126,6 +124,10 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
                   onClick={() => setExpanded(false)}
                   aria-current={
                     path === href ||
+                    (href === "/homepage" &&
+                      /^\/content\/(banners|homepage|announcements)(\/|$)/.test(
+                        path,
+                      )) ||
                     (href !== "/" && path.startsWith(href + "/"))
                       ? "page"
                       : undefined
@@ -150,7 +152,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           </button>
           <span>Marketplace operations</span>
           <span className="operator">
-            Admin verified · {user?.uid.slice(0, 8)}
+            Admin verified
           </span>
           <button onClick={() => void signOut(auth!)}>Sign out</button>
         </header>

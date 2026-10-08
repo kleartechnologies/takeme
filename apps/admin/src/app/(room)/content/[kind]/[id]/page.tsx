@@ -1,4 +1,9 @@
 import { notFound } from "next/navigation";
+import {
+  BannerEditor,
+  HomepageSections,
+  HomepageTabs,
+} from "@admin/components/homepage-workspace";
 import { ContentEditor } from "@admin/components/editorial";
 import {
   EDITORIAL_KINDS,
@@ -15,11 +20,16 @@ export default async function Page({
     !/^[A-Za-z0-9_-]{1,128}$/.test(id)
   )
     notFound();
+  if (kind === "banners") return <BannerEditor key={id} recordId={id} />;
+  if (kind === "homepage" && id === "current") return <HomepageSections />;
   return (
-    <ContentEditor
-      key={`${kind}/${id}`}
-      kind={kind as EditorialKind}
-      recordId={id}
-    />
+    <>
+      {kind === "announcements" && <HomepageTabs selected="announcements" />}
+      <ContentEditor
+        key={`${kind}/${id}`}
+        kind={kind as EditorialKind}
+        recordId={id}
+      />
+    </>
   );
 }

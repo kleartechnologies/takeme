@@ -25,6 +25,10 @@ import {
   id,
   parseContent,
   effectiveState,
+  bannerState,
+  transitionBanner,
+  placeBanner,
+  newContent,
   type EditorialKind,
   type Campaign,
   type Banner,
@@ -109,7 +113,9 @@ function record(k: EditorialKind, recordId: string, data: DocumentData) {
     updatedAt: iso(data.updatedAt),
     ...(k === "campaigns"
       ? { effectiveState: effectiveState(data.content, Date.now()) }
-      : {}),
+      : k === "banners"
+        ? { effectiveState: bannerState(data.content, Date.now()) }
+        : {}),
   };
 }
 export const getAdminEditorialPage = marketplaceCall(async (request) => {
@@ -132,12 +138,37 @@ export const getAdminEditorialRecord = marketplaceCall(async (request) => {
     return {
       record: null,
       liveVersion: (await liveRef.get()).data()?.version ?? 0,
+      homepageVersion:
+        (await collection("homepage").doc("current").get()).data()?.version ??
+        0,
     };
   return {
     record: record(k, result.id, result.data()!),
     liveVersion: (await liveRef.get()).data()?.version ?? 0,
+    homepageVersion:
+      (await collection("homepage").doc("current").get()).data()?.version ?? 0,
+    assets:
+      k === "banners"
+        ? await bannerAssets(result.data()!.content as Banner)
+        : [],
   };
 });
+async function bannerAssets(b: Banner) {
+  return Promise.all(
+    [b.assetId, b.mobileAssetId].filter(Boolean).map(async (value) => {
+      const a = (await db.doc(`adminAssets/${value}`).get()).data();
+      return a?.state === "ready"
+        ? {
+            id: value,
+            url: a.url,
+            width: a.width,
+            height: a.height,
+            sizeBytes: a.sizeBytes,
+          }
+        : null;
+    }),
+  );
+}
 async function validateReferences(tx: Transaction, content: DocumentData) {
   const sections = Array.isArray(content.sections)
     ? content.sections
@@ -194,8 +225,16 @@ export const mutateAdminEditorial = marketplaceMutationCall(async (request) => {
     expected = version(request.data?.expectedVersion);
   const action = request.data?.action ?? "save";
   if (
-    !["save", "schedule", "publish", "end", "duplicate"].includes(action) ||
-    (k !== "campaigns" && action !== "save")
+    ![
+      "save",
+      "schedule",
+      "publish",
+      "end",
+      "duplicate",
+      "pause",
+      "activate",
+    ].includes(action) ||
+    (k !== "campaigns" && k !== "banners" && action !== "save")
   )
     throw new HttpsError("invalid-argument", "Invalid content action.");
   let content;
@@ -204,6 +243,17 @@ export const mutateAdminEditorial = marketplaceMutationCall(async (request) => {
   } catch (error) {
     throw new HttpsError("invalid-argument", (error as Error).message);
   }
+  if (k === "banners")
+    return mutateBanner(
+      request,
+      uid,
+      recordId,
+      expected,
+      content as Banner,
+      action,
+    );
+  if (k === "campaigns" && ["pause", "activate"].includes(action))
+    throw new HttpsError("invalid-argument", "Invalid campaign action.");
   if (k === "homepage" || k === "categories") {
     if (recordId !== "current")
       throw new HttpsError(
@@ -264,19 +314,6 @@ export const mutateAdminEditorial = marketplaceMutationCall(async (request) => {
     const revokedAssets = invalidate
       ? await readLiveAssets(tx, live!.data()!)
       : [];
-    if (k === "banners") {
-      const banner = content as Banner,
-        asset = (await tx.get(db.doc(`adminAssets/${banner.assetId}`))).data();
-      if (
-        !asset ||
-        asset.state !== "ready" ||
-        !assetFits(banner.placement, asset.width, asset.height)
-      )
-        throw new HttpsError(
-          "failed-precondition",
-          "Choose a validated asset matching this placement's aspect ratio.",
-        );
-    }
     const target =
       action === "duplicate" ? collection(k).doc(randomUUID()) : ref;
     const next = action === "duplicate" ? 1 : expected + 1,
@@ -304,6 +341,173 @@ export const mutateAdminEditorial = marketplaceMutationCall(async (request) => {
     return { id: target.id, version: next };
   });
 });
+async function validateBannerDestination(tx: Transaction, b: Banner) {
+  const product = /^\/listings\/([A-Za-z0-9_-]{1,128})$/.exec(b.destination),
+    seller = /^\/sellers\/([A-Za-z0-9_-]{1,128})$/.exec(b.destination);
+  if (product) await validateReferences(tx, { productIds: [product[1]] });
+  if (seller) await validateReferences(tx, { sellerIds: [seller[1]] });
+}
+
+async function mutateBanner(
+  request: CallableRequest<DocumentData>,
+  uid: string,
+  recordId: string,
+  expected: number,
+  input: Banner,
+  action: string,
+) {
+  let content: Banner;
+  try {
+    content = transitionBanner(input, action, Date.now());
+  } catch (e) {
+    throw new HttpsError("invalid-argument", (e as Error).message);
+  }
+  if (content.mobileAssetId && content.placement !== "desktop_hero")
+    throw new HttpsError(
+      "invalid-argument",
+      "Paired artwork requires a desktop banner.",
+    );
+  const publishes = !["save", "duplicate"].includes(action);
+  return runGuardedTransaction(db, async (tx) => {
+    const ref = collection("banners").doc(recordId),
+      previous = await tx.get(ref);
+    conflict(previous.data()?.version, expected);
+    if (!previous.exists && ["pause", "activate", "duplicate"].includes(action))
+      throw new HttpsError("failed-precondition", "Save this banner first.");
+    for (const variant of action === "pause"
+      ? []
+      : [
+          { id: content.assetId, placement: content.placement },
+          ...(content.mobileAssetId
+            ? [{ id: content.mobileAssetId, placement: "mobile_hero" as const }]
+            : []),
+        ]) {
+      const asset = (await tx.get(db.doc(`adminAssets/${variant.id}`))).data();
+      if (
+        !asset ||
+        asset.state !== "ready" ||
+        !assetFits(variant.placement, asset.width, asset.height)
+      )
+        throw new HttpsError(
+          "failed-precondition",
+          "Choose validated artwork with the recommended aspect ratio.",
+        );
+    }
+    let publication: {
+      home: Homepage;
+      compiled: Awaited<ReturnType<typeof compileHomepage>>;
+      assets: Awaited<ReturnType<typeof readLiveAssets>>;
+      draftVersion: number;
+      liveVersion: number;
+      newHomepage: boolean;
+    } | null = null;
+    if (publishes) {
+      const homeDoc = await tx.get(collection("homepage").doc("current")),
+        live = await tx.get(liveRef);
+      conflict(
+        homeDoc.data()?.version,
+        version(request.data?.expectedHomepageVersion),
+      );
+      conflict(
+        live.data()?.version,
+        version(request.data?.expectedLiveVersion),
+      );
+      if (
+        live.exists &&
+        (live.data()?.valid !== true ||
+          homeDoc.data()?.version !== live.data()?.draftVersion)
+      )
+        throw new HttpsError(
+          "failed-precondition",
+          "Review and publish the pending Homepage Sections changes first.",
+        );
+      let home: Homepage;
+      try {
+        home = placeBanner(
+          homeDoc.exists
+            ? (parseContent("homepage", homeDoc.data()!.content) as Homepage)
+            : (newContent("homepage") as Homepage),
+          recordId,
+          content,
+        );
+      } catch (e) {
+        throw new HttpsError("failed-precondition", (e as Error).message);
+      }
+      const liveVersion = (live.data()?.version ?? 0) + 1,
+        draftVersion = (homeDoc.data()?.version ?? 0) + 1;
+      const compiled = await compileHomepage(tx, home, liveVersion, {
+        id: recordId,
+        content,
+      });
+      const assets = await Promise.all(
+        [
+          ...new Set([...(live.data()?.assetIds ?? []), ...compiled.assetIds]),
+        ].map((value) => tx.get(db.doc(`adminAssets/${value}`))),
+      );
+      publication = { home, compiled, assets, draftVersion, liveVersion, newHomepage: !homeDoc.exists };
+    }
+    if (action !== "pause") await validateBannerDestination(tx, content);
+    const target =
+        action === "duplicate" ? collection("banners").doc(randomUUID()) : ref,
+      next = action === "duplicate" ? 1 : expected + 1,
+      now = Timestamp.now();
+    tx.set(target, {
+      content,
+      version: next,
+      createdAt:
+        action === "duplicate" || !previous.exists
+          ? now
+          : previous.data()!.createdAt,
+      createdBy:
+        action === "duplicate" || !previous.exists
+          ? uid
+          : previous.data()!.createdBy,
+      updatedAt: now,
+      updatedBy: uid,
+    });
+    if (publication) {
+      const { home, compiled, assets, draftVersion, liveVersion } = publication;
+      tx.set(
+        collection("homepage").doc("current"),
+        {
+          content: home,
+          version: draftVersion,
+          ...(publication.newHomepage ? { createdAt: now, createdBy: uid } : {}),
+          updatedAt: now,
+          updatedBy: uid,
+        },
+        { merge: true },
+      );
+      for (const asset of assets)
+        if (asset.exists)
+          tx.update(asset.ref, {
+            published: compiled.assetIds.includes(asset.id),
+          });
+      tx.set(liveRef, {
+        ...compiled,
+        version: liveVersion,
+        draftVersion,
+        valid: true,
+        publishedAt: now,
+      });
+    }
+    adminAudit(tx, uid, action, "banners", target.id, {
+      version: next,
+      published: publishes,
+    });
+    return {
+      id: target.id,
+      version: next,
+      ...(publication
+        ? {
+            liveVersion: publication.liveVersion,
+            homepageVersion: publication.draftVersion,
+          }
+        : {}),
+    };
+  });
+}
+
 function maxDate(a: string | null, b: string | null) {
   return a && b ? (a > b ? a : b) : (a ?? b);
 }
@@ -314,6 +518,7 @@ async function compileHomepage(
   tx: Transaction,
   content: Homepage,
   nextVersion: number,
+  bannerOverride?: { id: string; content: Banner },
 ) {
   await validateReferences(tx, content);
   const campaignIds = new Set<string>();
@@ -322,6 +527,8 @@ async function compileHomepage(
     listingIds = new Set<string>(),
     sellerIds = new Set<string>();
   const read = async (k: EditorialKind, value: string) => {
+    if (k === "banners" && bannerOverride?.id === value)
+      return bannerOverride.content;
     const doc = await tx.get(collection(k).doc(value));
     if (!doc.exists)
       throw new HttpsError(
@@ -435,6 +642,21 @@ async function compileHomepage(
     for (const bannerId of bannerIds) {
       const b = (await read("banners", bannerId)) as Banner;
       if (!b.enabled) continue;
+      await validateBannerDestination(tx, b);
+      const productDestination = /^\/listings\/([A-Za-z0-9_-]{1,128})$/.exec(
+          b.destination,
+        ),
+        sellerDestination = /^\/sellers\/([A-Za-z0-9_-]{1,128})$/.exec(
+          b.destination,
+        );
+      if (productDestination) {
+        const d = (
+          await tx.get(db.doc(`listings/${productDestination[1]}`))
+        ).data()!;
+        listingIds.add(productDestination[1]!);
+        sellerIds.add(d.sellerId);
+      }
+      if (sellerDestination) sellerIds.add(sellerDestination[1]!);
       const boundCampaign = b.campaignId
         ? ((await read("campaigns", b.campaignId)) as Campaign)
         : null;
@@ -443,27 +665,42 @@ async function compileHomepage(
         ["DRAFT", "ENDED"].includes(effectiveState(boundCampaign, Date.now()))
       )
         continue;
-      const asset = (await tx.get(db.doc(`adminAssets/${b.assetId}`))).data();
-      if (
-        !asset ||
-        asset.state !== "ready" ||
-        !assetFits(b.placement, asset.width, asset.height)
-      )
+      const variants = [
+        { assetId: b.assetId, placement: b.placement },
+        ...(b.mobileAssetId
+          ? [{ assetId: b.mobileAssetId, placement: "mobile_hero" as const }]
+          : []),
+      ];
+      if (b.mobileAssetId && b.placement !== "desktop_hero")
         throw new HttpsError(
-          "failed-precondition",
-          "Banner asset is unavailable.",
+          "invalid-argument",
+          "Paired artwork requires a desktop banner.",
         );
-      assetIds.add(b.assetId);
-      section.banners.push({
-        placement: b.placement,
-        url: asset.url,
-        alt: b.alt,
-        ctaLabel: b.ctaLabel,
-        destination: b.destination,
-        order: b.order,
-        startAt: boundCampaign?.startAt ?? null,
-        endAt: boundCampaign?.endAt ?? null,
-      });
+      for (const variant of variants) {
+        const asset = (
+          await tx.get(db.doc(`adminAssets/${variant.assetId}`))
+        ).data();
+        if (
+          !asset ||
+          asset.state !== "ready" ||
+          !assetFits(variant.placement, asset.width, asset.height)
+        )
+          throw new HttpsError(
+            "failed-precondition",
+            "Banner artwork is unavailable or has the wrong shape.",
+          );
+        assetIds.add(variant.assetId);
+        section.banners.push({
+          placement: variant.placement,
+          url: asset.url,
+          alt: b.alt,
+          ctaLabel: b.ctaLabel,
+          destination: b.destination,
+          order: b.order,
+          startAt: maxDate(b.startAt ?? null, boundCampaign?.startAt ?? null),
+          endAt: minDate(b.endAt ?? null, boundCampaign?.endAt ?? null),
+        });
+      }
     }
     if (collectionData?.assetId) {
       const asset = (
@@ -495,6 +732,11 @@ async function compileHomepage(
         endAt: null,
       });
     }
+    if (section.banners.length > 4)
+      throw new HttpsError(
+        "invalid-argument",
+        "Use at most four artwork representations per section.",
+      );
     section.banners.sort((a, b) => a.order - b.order);
     if (s.announcementId) {
       const a = (await read("announcements", s.announcementId)) as Announcement;

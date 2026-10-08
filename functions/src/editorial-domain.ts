@@ -57,7 +57,9 @@ export interface Campaign extends Schedule {
   categoryIds: string[];
   bannerIds: string[];
 }
-export interface Banner {
+export interface Banner extends Partial<Schedule> {
+  /** Absent on legacy, single-artwork records. */
+  mobileAssetId?: string | null;
   title: string;
   placement: "desktop_hero" | "mobile_hero" | "promo_strip" | "secondary_card";
   assetId: string;
@@ -278,6 +280,9 @@ export function parseContent(kind: EditorialKind, value: unknown): Content {
       "order",
       "enabled",
       "campaignId",
+      "mobileAssetId",
+      "startAt",
+      "endAt",
     ]);
     if (
       ![
@@ -298,6 +303,10 @@ export function parseContent(kind: EditorialKind, value: unknown): Content {
       order: integer(o.order),
       enabled: bool(o.enabled),
       campaignId: optionalId(o.campaignId),
+      ...(o.mobileAssetId !== undefined
+        ? { mobileAssetId: optionalId(o.mobileAssetId) }
+        : {}),
+      ...(o.startAt !== undefined || o.endAt !== undefined ? schedule(o) : {}),
     };
   }
   if (kind === "collections") {
@@ -524,4 +533,81 @@ export function malaysiaTimestamp(value: string) {
   )
     throw new Error("Invalid Malaysia time.");
   return date.toISOString();
+}
+
+/** Legacy records keep their single artwork and campaign relationship. */
+export function bannerState(
+  b: Banner,
+  now: number,
+): "LIVE" | "SCHEDULED" | "INACTIVE" | "ENDED" {
+  if (!b.enabled) return "INACTIVE";
+  if (b.endAt && Date.parse(b.endAt) <= now) return "ENDED";
+  if (b.startAt && Date.parse(b.startAt) > now) return "SCHEDULED";
+  return "LIVE";
+}
+export function transitionBanner(
+  b: Banner,
+  action: string,
+  now: number,
+): Banner {
+  const next = { ...b };
+  if (action === "save") return next;
+  if (action === "duplicate")
+    return { ...next, enabled: false, startAt: null, endAt: null };
+  if (action === "pause") return { ...next, enabled: false };
+  if (action === "schedule") {
+    if (
+      !next.startAt ||
+      Date.parse(next.startAt) <= now ||
+      !next.endAt ||
+      Date.parse(next.endAt) <= Date.parse(next.startAt)
+    )
+      throw new Error("Choose a future start and a later end time.");
+    return { ...next, enabled: true };
+  }
+  if (action === "publish" || action === "activate")
+    return {
+      ...next,
+      enabled: true,
+      startAt: new Date(now).toISOString(),
+      endAt: next.endAt && Date.parse(next.endAt) > now ? next.endAt : null,
+    };
+  throw new Error("Invalid banner action.");
+}
+/** Keep legacy placements intact; a new paired hero is one logical placement. */
+export function placeBanner(
+  home: Homepage,
+  bannerId: string,
+  b: Banner,
+): Homepage {
+  const sections = [...home.sections];
+  if (!sections.some((s) => s.bannerIds.includes(bannerId)) && b.enabled) {
+    const section: Section = {
+      ...(newContent("homepage") as Homepage).sections[0]!,
+      sectionId: "banner_" + bannerId,
+      title: b.title,
+      order: 0,
+      bannerIds: [bannerId],
+    };
+    sections.unshift(section);
+  }
+  const match = /^\/#collection_([A-Za-z0-9_-]{1,128})$/.exec(b.destination);
+  if (
+    b.enabled &&
+    match &&
+    !sections.some((s) => s.sectionId === "collection_" + match[1])
+  )
+    sections.push({
+      ...(newContent("homepage") as Homepage).sections[0]!,
+      sectionId: "collection_" + match[1],
+      type: "products",
+      title: b.title,
+      source: "MANUAL",
+      collectionId: match[1]!,
+    });
+  if (sections.length > 16)
+    throw new Error(
+      "The homepage is full. Remove a section before adding another banner.",
+    );
+  return { ...home, sections: sections.map((s, order) => ({ ...s, order })) };
 }

@@ -563,6 +563,11 @@ const sellerPage = await call(operator, "getAdminPage", {
 });
 assert.equal(sellerPage.rows[0].activeListings, 1);
 assert.equal(sellerPage.rows[0].sellerRating, null);
+const namedSellers = await call(operator,"getAdminPage",{section:"users",search:"Synthetic",featureEligibleOnly:true,sellerSummary:true});
+assert.ok(namedSellers.rows.some(r=>r.id===sellerId));
+const namedProducts = await call(operator,"getAdminPage",{section:"listings",recordId:listingId,featureEligibleOnly:true});
+assert.equal(namedProducts.rows[0].sellerName,"Synthetic seller");
+assert.ok(!JSON.stringify(namedProducts).includes("private@example.test"));
 check();
 await db.doc(`reports/listing-report-${suffix}`).set({
   targetType: "listing",
@@ -645,6 +650,164 @@ const audit = await db
 assert.ok(audit.docs.some((d) => d.data().action === "load-reported-context"));
 assert.ok(audit.docs.some((d) => d.data().action === "report-triage"));
 check();
+// A paired banner owns two art representations, one record and one public slot.
+// It can publish without Campaign Manager, while all three versions stay guarded.
+const mobileHeader = Buffer.from(ihdr);
+mobileHeader.writeUInt32BE(900);
+mobileHeader.writeUInt32BE(1000, 4);
+const mobilePng = Buffer.concat([
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  chunk("IHDR", mobileHeader),
+  chunk("IDAT", zlib.deflateSync(Buffer.alloc((900 * 3 + 1) * 1000))),
+  chunk("IEND", Buffer.alloc(0)),
+]);
+const mobilePermit = await call(operator, "requestAdminAssetPermit", {
+  sizeBytes: mobilePng.length,
+  contentType: "image/png",
+});
+await uploadBytes(ref(operator.storage, mobilePermit.path), mobilePng, {
+  contentType: "image/png",
+});
+await call(operator, "finalizeAdminAsset", { assetId: mobilePermit.assetId });
+check();
+// First resolve the deliberately unpublished Homepage edit from the earlier concurrency check.
+const homeState = await call(operator, "getAdminEditorialRecord", {
+  kind: "homepage",
+  id: "current",
+});
+await call(operator, "publishAdminHomepage", {
+  expectedVersion: homeState.record.version,
+  expectedLiveVersion: homeState.liveVersion,
+});
+const pairedId = "paired-" + suffix;
+const paired = {
+  ...banner,
+  title: "Electronics Week",
+  campaignId: null,
+  mobileAssetId: mobilePermit.assetId,
+  enabled: false,
+  destination: "/explore?category=electronics",
+  startAt: null,
+  endAt: null,
+};
+await mutate("banners", pairedId, paired, 0);
+check();
+const updateBanner = async (action, content = paired, expected) => {
+  const r = await call(operator, "getAdminEditorialRecord", {
+    kind: "banners",
+    id: pairedId,
+  });
+  return call(operator, "mutateAdminEditorial", {
+    kind: "banners",
+    id: pairedId,
+    expectedVersion: expected ?? r.record.version,
+    expectedHomepageVersion: r.homepageVersion,
+    expectedLiveVersion: r.liveVersion,
+    action,
+    content,
+  });
+};
+const firstPublished = await updateBanner("publish");
+check();
+const bannerLive = (await call(anonymous, "getPublicHomepage")).homepage;
+const pairedSection = bannerLive.sections.find(
+  (s) => s.sectionId === "banner_" + pairedId,
+);
+assert.equal(pairedSection.banners.length, 2);
+assert.deepEqual(
+  pairedSection.banners.map((b) => b.placement),
+  ["desktop_hero", "mobile_hero"],
+);
+check();
+assert.ok(!JSON.stringify(bannerLive).includes(operator.uid));
+check();
+assert.equal(
+  (await getBytes(ref(anonymous.storage, mobilePermit.path))).byteLength,
+  mobilePng.length,
+);
+check();
+await assert.rejects(() => updateBanner("pause", paired, 1), /changed/);
+check();
+await updateBanner("pause");
+check();
+assert.ok(
+  !(await call(anonymous, "getPublicHomepage")).homepage.sections.some((s) =>
+    s.banners.some((b) => b.url.includes(encodeURIComponent(mobilePermit.path))),
+  ),
+);
+check();
+await assert.rejects(
+  () => getBytes(ref(anonymous.storage, mobilePermit.path)),
+  /unauthorized|permission/,
+);
+check();
+await updateBanner("schedule", {
+  ...paired,
+  startAt: new Date(Date.now() + 3600000).toISOString(),
+  endAt: new Date(Date.now() + 7200000).toISOString(),
+});
+check();
+assert.ok(
+  !(await call(anonymous, "getPublicHomepage")).homepage.sections.some((s) =>
+    s.banners.some((b) => b.url.includes(encodeURIComponent(mobilePermit.path))),
+  ),
+);
+check();
+await updateBanner("activate");
+check();
+const copy = await updateBanner("duplicate");
+const copyRecord = await call(operator, "getAdminEditorialRecord", {
+  kind: "banners",
+  id: copy.id,
+});
+assert.equal(copyRecord.record.content.enabled, false);
+assert.equal(copyRecord.record.content.startAt, null);
+check();
+const currentHome = await call(operator, "getAdminEditorialRecord", {
+  kind: "homepage",
+  id: "current",
+});
+await mutate(
+  "homepage",
+  "current",
+  { ...currentHome.record.content, title: "Pending section changes" },
+  currentHome.record.version,
+);
+await assert.rejects(() => updateBanner("pause"), /pending Homepage/);
+check();
+await call(operator, "publishAdminHomepage", {
+  expectedVersion: currentHome.record.version + 1,
+  expectedLiveVersion: currentHome.liveVersion,
+});
+// Collections become a real existing Home anchor, never an invented public route.
+await updateBanner("publish", {
+  ...paired,
+  destination: "/#collection_" + collId,
+});
+assert.ok(
+  (await call(anonymous, "getPublicHomepage")).homepage.sections.some(
+    (s) => s.sectionId === "collection_" + collId,
+  ),
+);
+check();
+await assert.rejects(
+  () =>
+    updateBanner("publish", {
+      ...paired,
+      destination: "/listings/missing-public-product",
+    }),
+  /available|eligible|Choose/,
+);
+check();
+const pairedAudit = await db
+  .collection("adminAuditEvents")
+  .where("resourceId", "==", pairedId)
+  .get();
+assert.ok(pairedAudit.docs.some((d) => d.data().action === "pause"));
+assert.ok(pairedAudit.docs.some((d) => d.data().action === "schedule"));
+check();
+assert.ok(firstPublished.liveVersion > 0);
+
 // An operator must still be able to end a campaign after a featured item is removed.
 await db.doc(`listings/${listingId}`).update({ status: "removed" });
 await mutate("campaigns", campaignId, campaign, 4, "end");

@@ -266,6 +266,7 @@ function publicRow(sectionName: PageSection, id: string, data: DocumentData) {
     return {
       ...common,
       displayName: data.displayName ?? "TAKEME member",
+      photoURL: data.photoURL ?? null,
       location: publicProfileLocation(data.location),
       accountState: data.disabled === true ? "disabled" : data.status === "removed" ? "removed" : "active",
     };
@@ -338,6 +339,13 @@ async function sellerRows(rows: ReturnType<typeof publicRow>[]) {
   }));
 }
 
+async function pickerListingRows(rows: ReturnType<typeof publicRow>[]) {
+  const sellerIds = [...new Set(rows.map(row => "sellerId" in row ? row.sellerId : null).filter((value): value is string => typeof value === "string"))];
+  const profiles = sellerIds.length ? await db.getAll(...sellerIds.map(value => db.doc(`users/${value}`))) : [];
+  const names = new Map(profiles.map(profile => [profile.id, String(profile.data()?.displayName ?? "TAKEME seller").slice(0,80)]));
+  return rows.map(row => ({...row, sellerName: "sellerId" in row ? names.get(row.sellerId) ?? "TAKEME seller" : undefined}));
+}
+
 export const getAdminPage = onCall(async (request) => {
   await requireAdmin(request);
   const selected = pageSection(request.data?.section);
@@ -382,17 +390,19 @@ export const getAdminPage = onCall(async (request) => {
   if (request.data?.recordId) {
     const item = await collection.doc(requiredId(request.data.recordId)).get();
     return {
-      rows: item.exists && featureEligible(item.data()!) ? await (includeSellerSummary ? sellerRows([publicRow(selected, item.id, item.data()!)]) : Promise.resolve([publicRow(selected, item.id, item.data()!)])) : [],
+      rows: item.exists && featureEligible(item.data()!) ? await (includeSellerSummary ? sellerRows([publicRow(selected, item.id, item.data()!)]) : selected === "listings" && request.data?.featureEligibleOnly === true ? pickerListingRows([publicRow(selected, item.id, item.data()!)]) : Promise.resolve([publicRow(selected, item.id, item.data()!)])) : [],
       nextCursor: null,
     };
   }
   // One selective indexed predicate, then bounded page filtering. Never scan a collection.
   let query: Query = collection;
+  const namePrefix = selected === "users" && Boolean(title);
   if (selected === "listings" && title.length >= 2)
     query = query.where("searchTokens", "array-contains", title);
   else if (selected === "users" && title)
     query = query
       .orderBy("displayName")
+      .orderBy("__name__")
       .startAt(request.data.search.trim())
       .endAt(request.data.search.trim() + "\uf8ff");
   else if (selected === "listings" && sellerId)
@@ -407,7 +417,7 @@ export const getAdminPage = onCall(async (request) => {
       "auction",
       "buy_now_and_auction",
     ]);
-  query = query.orderBy("__name__").limit(21);
+  query = (namePrefix ? query : query.orderBy("__name__")).limit(21);
   if (cursor) {
     const anchor = await collection.doc(cursor).get();
     if (!anchor.exists)
@@ -415,6 +425,7 @@ export const getAdminPage = onCall(async (request) => {
         "invalid-argument",
         "Page cursor expired. Refresh this list.",
       );
+    if (namePrefix && !String(anchor.data()?.displayName ?? "").startsWith(request.data.search.trim())) throw new HttpsError("invalid-argument", "Refresh this seller search before continuing.");
     query = query.startAfter(anchor);
   }
   const page = await query.get();
@@ -434,7 +445,7 @@ export const getAdminPage = onCall(async (request) => {
       })
       .map((item) => publicRow(selected, item.id, item.data()));
   return {
-    rows: includeSellerSummary ? await sellerRows(rows) : rows,
+    rows: includeSellerSummary ? await sellerRows(rows) : selected === "listings" && request.data?.featureEligibleOnly === true ? await pickerListingRows(rows) : rows,
     nextCursor: page.docs.length > 20 ? (page.docs[19]?.id ?? null) : null,
   };
 });

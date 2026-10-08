@@ -40,7 +40,7 @@ export function PublishedHome({
     : undefined;
   return (
     <>
-      {!homepage.sections.some((s) => s.type === "hero") && (
+      {!homepage.sections.some((s) => s.type === "hero" && (s.source === "AUTOMATIC" || s.banners.length > 0)) && (
         <h1 className="sr-only">TAKEME marketplace</h1>
       )}
       {homepage.sections.map((section) => {
@@ -89,6 +89,12 @@ export function PublishedHome({
               </DeferredMarketplace>
             );
         }
+        if (
+          section.source === "MANUAL" &&
+          !section.banners.length && !section.products.length &&
+          !section.sellers.length && !section.categories.length &&
+          !section.cta && !section.announcement
+        ) return null;
         const desktop = section.banners.find(
             (b) => b.placement === "desktop_hero",
           ),
@@ -97,6 +103,7 @@ export function PublishedHome({
         return (
           <section
             key={section.sectionId}
+            id={section.sectionId}
             className="discovery-section"
             aria-label={section.title}
           >
