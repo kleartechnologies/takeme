@@ -41,7 +41,7 @@
 .footerBottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .footerLinks { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 12px; font-size: 13px; }
 .footerLinks a { display: inline-flex; align-items: center; min-height: 44px; color: #006233; }
-.header a:focus-visible, .page a:focus-visible, .footer a:focus-visible, .page summary:focus-visible { outline: 2px solid #006233; outline-offset: 4px; border-radius: 3px; }
+.header a:focus-visible, .page a:focus-visible, .footer a:focus-visible, .page summary:focus-visible { outline: 2px solid #006233; outline-offset: 2px; }
 @media (max-width: 900px) {
   .headerInner { min-height: 56px; padding: 0 20px; }
   .headerNav { gap: 16px; font-size: 12px; }

@@ -169,7 +169,7 @@ export function ExploreBrowser() {
     }
   }}>
     <form onSubmit={submitSearch} role="search" aria-label="Search marketplace listings" className="explore-search-row">
-      <div className="explore-search-field"><button type="submit" aria-label="Search TAKEME" className="icon-button shrink-0"><Search size={19} /></button><label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={selectedCategory ? `Search in ${selectedCategory}…` : "Search TAKEME"} /></label></div>
+      <div className="explore-search-field control-shell"><button type="submit" aria-label="Search TAKEME" className="icon-button shrink-0"><Search size={19} /></button><label className="min-w-0 flex-1"><span className="sr-only">Search listing titles</span><input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={selectedCategory ? `Search in ${selectedCategory}…` : "Search TAKEME"} /></label></div>
       <button type="button" onClick={() => setOpen(true)} className="explore-filter-button icon-button" aria-label={activeCount ? `Filters (${activeCount})` : "Filters"} aria-expanded={open}><SlidersHorizontal size={21} />{activeCount > 0 && <span className="explore-filter-count" aria-hidden="true">{activeCount}</span>}</button>
     </form>
     {searchError && <p className="field-error mt-2" role="alert">{searchError}</p>}
@@ -177,7 +177,7 @@ export function ExploreBrowser() {
     <CategoryGrid compact selectedId={filters.category} />
     <div className="explore-heading-row">
       <div className="min-w-0"><h2 className="explore-heading">{selectedCategory ?? "Explore"}</h2><p className="explore-count" role="status">{loading ? "Finding items…" : state.error ? "Items unavailable" : `${state.page.listings.length}${state.page.hasMore ? "+" : ""} items`}</p></div>
-      <label className="explore-sort"><ArrowUpDown size={15} aria-hidden="true" /><span className="sr-only">Sort listings</span><select value={filters.sort} onChange={(event) => update({ sort: event.target.value as ListingSort })}><option value="newest" disabled={Boolean(filters.price)}>Latest first</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></label>
+      <label className="explore-sort control-shell"><ArrowUpDown size={15} aria-hidden="true" /><span className="sr-only">Sort listings</span><select value={filters.sort} onChange={(event) => update({ sort: event.target.value as ListingSort })}><option value="newest" disabled={Boolean(filters.price)}>Latest first</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></label>
     </div>
     <div className="explore-chips banner-track" role="group" aria-label="Quick listing filters">
       <button type="button" aria-pressed={!filters.condition && !filters.type && !filters.auction} onClick={() => update({ condition: "", type: "", auction: "" })}>All</button>

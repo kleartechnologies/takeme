@@ -10,6 +10,9 @@
 .rows { overflow: hidden; border: 1px solid #e6eae8; border-radius: 14px; background: white; }
 .row { display: flex; align-items: center; gap: 12px; padding: 10px 13px; min-height: 57px; width: 100%; font-size: 13px; font-weight: 500; text-align: left; }
 .row + .row { border-top: 1px solid #eef0ef; }
+.row:first-child { border-radius: 13px 13px 0 0; }
+.row:last-child { border-radius: 0 0 13px 13px; }
+.row:only-child { border-radius: 13px; }
 .row svg:first-child { flex: 0 0 auto; color: #66756d; width: 19px; height: 19px; }
 .row svg:last-child { margin-left: auto; color: #929c96; flex: 0 0 auto; }
 .row:hover, .back:hover { background: #f6f9f7; }
@@ -64,6 +67,7 @@
 .legal h1 { font-size: 24px; font-weight: 700; margin: 16px 0; }
 .legal p { font-size: 14px; line-height: 1.8; color: var(--takeme-gray); }
 .shell a:focus-visible, .shell button:focus-visible, .shell summary:focus-visible { outline: 2px solid var(--takeme-dark-green); outline-offset: 3px; }
+.shell .row:focus-visible { outline-offset: -3px; }
 .shell button:disabled { opacity: .55; cursor: wait; }
 @media (min-width: 640px) { .twoColumns { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1024px) {

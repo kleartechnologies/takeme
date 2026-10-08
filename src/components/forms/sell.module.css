@@ -5,7 +5,7 @@
 .progressHeader h1 { font-size:22px; font-weight:750; letter-spacing:-.6px; }
 .progressHeader p { font-size:12px; color:var(--takeme-gray); margin-top:4px; }
 .progressHeader p span { color:var(--takeme-dark-green); }
-.textButton { display:inline-flex; align-items:center; justify-content:center; min-height:44px; gap:6px; font-size:12px; font-weight:650; color:var(--takeme-dark-green); }
+.textButton { display:inline-flex; align-items:center; justify-content:center; min-height:44px; gap:6px; border-radius:8px; font-size:12px; font-weight:650; color:var(--takeme-dark-green); }
 .textButton:disabled { opacity:.5; }
 .progress { display:flex; gap:6px; margin:17px 0 28px; }
 .progress span { height:5px; border-radius:8px; flex:1; background:#e5e7eb; }
@@ -47,7 +47,8 @@
 .photoControls button { min-height:44px; display:grid; place-items:center; background:#f5f7f6; font-size:10px; color:var(--takeme-dark-green); border-radius:7px; }
 .photoControls button:disabled { opacity:.4; }
 .addPhoto { min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:9px; border:1.5px dashed #83cfa2; background:#f1fcf5; color:var(--takeme-dark-green); border-radius:16px; cursor:pointer; padding:12px; }
-.addPhoto:focus-within { outline:3px solid var(--takeme-dark-green); outline-offset:3px; }
+.addPhoto:has(input:focus-visible) { outline:2px solid var(--takeme-dark-green); outline-offset:2px; }
+.addPhoto input:focus-visible, .replacePhoto input:focus-visible { outline:none; }
 .addPhoto strong { font-size:13px; }.addPhoto span { font-size:10px; }
 .categoryGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; }
 .categoryGrid button { display:flex; min-height:76px; align-items:center; gap:10px; padding:10px; border:1px solid var(--takeme-border); border-radius:14px; text-align:left; font-size:12px; font-weight:550; }
@@ -96,8 +97,8 @@
 .conditionChoices button { min-height:64px; padding:10px; gap:8px; }.conditionChoices strong { font-size:13px; }.conditionChoices small { font-size:10px; }
 .fields > .fieldStack + .fieldStack { margin-top:26px; }
 .photoStatus { padding:6px 8px 0; font-size:11px; color:var(--takeme-dark-green); }
-.replacePhoto { display:flex; justify-content:center; align-items:center; min-height:44px; cursor:pointer; font-size:11px; color:var(--takeme-dark-green); }
-.replacePhoto:focus-within { outline:2px solid var(--takeme-dark-green); outline-offset:-2px; }
+.replacePhoto { display:flex; justify-content:center; align-items:center; min-height:44px; border-radius:8px; cursor:pointer; font-size:11px; color:var(--takeme-dark-green); }
+.replacePhoto:has(input:focus-visible) { outline:2px solid var(--takeme-dark-green); outline-offset:-2px; }
 .publishSummary { padding:14px; margin-top:16px; border-radius:12px; background:var(--takeme-light-green); font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
 .confirmActions { flex-wrap:wrap; }.confirmActions button { min-width:110px; }
 @media(max-width:600px) { .typeOption { min-height:64px; padding:10px 8px; gap:6px; }.typeIcon { width:24px; height:24px; }.typeOption strong { font-size:13px; }.conditionChoices button { min-height:76px; }.photoGrid { gap:8px; } }

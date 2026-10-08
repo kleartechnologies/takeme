@@ -65,12 +65,13 @@
 .sheetAmount { border: 1px solid #e5e7eb; border-radius: 14px; background: #f9fafb; display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
 .sheetAmount span { font-size: 14px; color: #4b5563; }
 .sheetAmount input { font-size: 26px; font-weight: 600; min-width: 0; width: 100%; min-height: 44px; outline: none; }
-.sheetAmount:focus-within { outline: 2px solid var(--takeme-dark-green); outline-offset: 2px; }
+.sheetAmount:has(input:focus-visible) { outline: 2px solid var(--takeme-dark-green); outline-offset: 2px; }
+.sheetAmount input:focus-visible { outline: none; }
 .sheetActions { display: grid; gap: 10px; margin-top: 20px; }
 .sheetActions :global(.button-secondary) { border-color: var(--takeme-dark-green); color: var(--takeme-dark-green); }
 .sheetActions button:disabled { opacity: .55; cursor: not-allowed; }
 .decline { min-height: 44px; border: 1px solid #d1d5db; border-radius: 999px; color: #b91c1c; font-size: 13px; font-weight: 600; background: white; }
-.shell :is(a,button,input,textarea,summary,select):focus-visible { outline: 2px solid var(--takeme-dark-green); outline-offset: 3px; }
+.shell :is(a,button,input,textarea,summary,select):focus-visible { outline-offset: 2px; }
 @media (min-width: 1024px) {
   .shell { display: grid; grid-template-columns: 360px minmax(0,1fr); height: var(--messaging-available-height, calc(100dvh - 68px)); min-height: 0; border-inline: 1px solid #e5e7eb; }
   .inboxRoute .chatPanel, .chatRoute .inboxPanel { display: block; }

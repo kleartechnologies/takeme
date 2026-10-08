@@ -26,7 +26,7 @@ test("small auth control and auction badge retain accessible target/contrast tre
   assert.match(source("src/components/auth/auth.module.css"), /\.password button[^}]*width: 44px/);
   assert.match(source("src/components/listings/listing-card.tsx"), /bg-orange-700 text-white/);
   assert.match(source("src/components/forms/sell-form.tsx"), /aria-label="Meet-up location \(optional\)"/);
-  assert.match(source("src/app/globals.css"), /\.form-field > select:focus-visible, \.form-field > textarea:focus-visible \{ outline: 3px solid var\(--takeme-dark-green\)/);
+  assert.match(source("src/app/globals.css"), /\.form-field > select:focus-visible, \.form-field > textarea:focus-visible \{ outline: 2px solid var\(--takeme-dark-green\)/);
   assert.match(source("src/components/listings/standard-product-detail.tsx"), /<dt>Condition<\/dt><dd>/);
 });
 
