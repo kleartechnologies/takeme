@@ -277,10 +277,11 @@ test("every callable/trigger export has an explicit maintenance classification",
       invalidateEditorialListing invalidateEditorialSeller invalidateEditorialLifecycle`.split(/\s+/),
     schedules: `advanceAuctionLifecycle processEngagementJobs expireOffers releaseExpiredReviews queueEndingAuctionAlerts
       expirePromotions processAccountDeletions`.split(/\s+/),
+    syntheticOperational: ["cleanupApprovedSyntheticFixture"],
   };
-  assert.deepEqual(Object.values(groups).map(names => names.length), [42, 41, 6, 20, 7]);
+  assert.deepEqual(Object.values(groups).map(names => names.length), [42, 41, 6, 20, 7, 1]);
   const classified = Object.values(groups).flat();
-  assert.equal(new Set(classified).size, 116, "No classification may overlap or omit an export.");
+  assert.equal(new Set(classified).size, 117, "No classification may overlap or omit an export.");
   const constructors = new Map(), helpers = new Map(), exported = new Set();
   for (const file of fs.readdirSync(sourceDir).filter(name => name.endsWith(".ts"))) {
     const source = ts.createSourceFile(file, fs.readFileSync(path.join(sourceDir, file), "utf8"), ts.ScriptTarget.Latest, true);
@@ -300,6 +301,12 @@ test("every callable/trigger export has an explicit maintenance classification",
     }
   }
   assert.deepEqual([...exported].sort(), [...classified].sort(), "A new export requires explicit maintenance classification.");
+  const cleanup = constructors.get(groups.syntheticOperational[0]);
+  assert.equal(cleanup?.constructor, "onCall");
+  assert.match(cleanup.source, /verifyAdminIdentity\(request\)/);
+  assert.match(cleanup.source, /approvedFixtureRequest\(request.data\)/);
+  assert.match(cleanup.source, /fixtureMatches\(record.data\(\)\)/);
+  assert.doesNotMatch(cleanup.source, /assertMarketplaceEligibility|acceptWebPolicies|\.delete\(.*listing/);
   for (const name of groups.protected) {
     const entry = constructors.get(name);
     assert.ok(["marketplaceMutationCall", "resolutionMutationCall"].includes(entry?.constructor), `${name} must use a protected mutation wrapper.`);

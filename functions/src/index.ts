@@ -563,4 +563,6 @@ export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, fin
 export { requestUploadPermits } from "./upload-permits";
 export { getProtectedWriteStatus } from "./protected-write-maintenance-runtime.ts";
 
+export { cleanupApprovedSyntheticFixture } from "./synthetic-fixture-cleanup";
+
 export { getAdminSession, getAdminEditorialPage, getAdminEditorialRecord, mutateAdminEditorial, previewAdminHomepage, publishAdminHomepage, getPublicHomepage, requestAdminAssetPermit, finalizeAdminAsset, getAdminControlOverview, invalidateEditorialListing, invalidateEditorialSeller, invalidateEditorialLifecycle } from "./editorial";
