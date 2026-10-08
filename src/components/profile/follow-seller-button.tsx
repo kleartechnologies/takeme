@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
+import { usePublicAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { getFollowState, setSellerFollow } from "@/lib/services/engagement";
 import type { FollowChange } from "@/lib/marketplace-state-events";
 
 export function FollowSellerButton({ sellerId }: { sellerId: string }) {
-  const { user } = useAuth();
+  const { user, loading } = usePublicAuth();
   const requireAction = useProtectedMarketplaceAction();
   const [state, setState] = useState<{ sellerId: string; viewer: string; following: boolean; followerCount: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,6 +51,7 @@ export function FollowSellerButton({ sellerId }: { sellerId: string }) {
     }
   }
   if (user?.uid === sellerId) return current ? <span className="text-sm text-[var(--takeme-gray)]">{current.followerCount} followers</span> : null;
+  if (loading) return <button type="button" disabled className="button-secondary min-h-11 px-4">Follow seller</button>;
   if (!user) return <Link href={`/login?next=${encodeURIComponent(`/sellers/${sellerId}`)}&intent=follow`} className="button-secondary min-h-11 px-4">Log in to follow</Link>;
   return <div className="flex flex-wrap items-center gap-3"><button type="button" disabled={busy || !current} aria-pressed={current?.following ?? false} onClick={() => void toggle()} className="button-secondary min-h-11 px-5">{current?.following ? "Following" : "Follow seller"}</button>{current && <span className="text-sm text-[var(--takeme-gray)]">{current.followerCount} followers</span>}{error && <span role="alert" className="text-xs text-red-700">{error}</span>}</div>;
 }

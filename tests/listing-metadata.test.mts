@@ -43,6 +43,6 @@ test("unavailable and draft listings do not fabricate public preview content", (
 test("the App Router generates listing previews on the server for each request", () => {
   const route = readFileSync(new URL("../src/app/listings/[id]/page.tsx", import.meta.url), "utf8");
   assert.match(route, /export const dynamic = "force-dynamic"/);
-  assert.match(route, /buildListingMetadata\(id, await getPublicListingForMetadata\(id\), siteUrl\)/);
+  assert.match(route, /buildListingMetadata\(id, \(await getPublicProductSnapshot\(id\)\)\?\.listing \?\? null, siteUrl\)/);
   assert.ok(!route.includes("use client"));
 });

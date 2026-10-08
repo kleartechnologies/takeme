@@ -65,7 +65,7 @@ test("Home discovery previews stay one compact row without changing inventory qu
   assert.match(css, /\.home-discovery-preview > :nth-child\(-n \+ 4\)/);
   assert.match(css, /\.discovery-product-image \{ aspect-ratio: 4 \/ 3; \}/);
   const home = source("src/components/home/home-marketplace.tsx");
-  assert.match(home, /getActiveListings\(\{ sort: "newest", pageSize: 8 \}\)/);
+  assert.match(source("src/lib/firebase/public-catalogue-server.ts"), /filters: \{ sort: "newest", pageSize: 8 \}/);
   assert.match(home, /getHomeRecommendations\(\)/);
   assert.match(home, /href="\/explore"/);
   assert.doesNotMatch(home, /Load more|Top Picks|Saved searches|listings loaded/);

@@ -1,3 +1,5 @@
+import { anonymousPublicRead } from "@/lib/firebase/public-read";
+import { parsePublicCataloguePage } from "@/lib/public-catalogue";
 import { createInFlightRead } from "@/lib/in-flight-read";
 import {
   Timestamp,
@@ -106,12 +108,12 @@ export function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { i
 }
 
 export async function getActiveListings(filters: ListingQuery = {}, cursor?: string | null): Promise<ListingPage> {
-  if (!functions) throw new Error("Firebase Functions is not configured. Add the required environment variables first.");
-  // Public callers never query original listing documents as a collection.
-  // The callable validates each source document and returns public fields only.
+  // This field-whitelisted public contract never needs a viewer token.
   const definedFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined && value !== null));
-  const result = await httpsCallable<{ filters: ListingQuery; cursor: string | null }, ListingPage>(functions, "getPublicListingPage")({ filters: definedFilters, cursor: cursor ?? null });
-  return result.data;
+  const data = await anonymousPublicRead<unknown>("getPublicListingPage", { filters: definedFilters, cursor: cursor ?? null });
+  const page = parsePublicCataloguePage(data, filters.pageSize ?? 12);
+  if (!page) throw new Error("Public listings are unavailable. Please try again.");
+  return page;
 }
 
 export async function getListing(id: string) {
@@ -140,7 +142,7 @@ async function readPublicListingDetail(id: string): Promise<PublicListingDetail>
   return result.data;
 }
 
-export function subscribeToListing(id: string, onChange: (listing: Listing | null, bids: PublicAuctionBid[]) => void, onError: (error: Error) => void) {
+export function subscribeToListing(id: string, onChange: (listing: Listing | null, bids: PublicAuctionBid[]) => void, onError: (error: Error) => void, options: { initialListing?: Listing | null; initialBids?: PublicAuctionBid[]; allowPrivate?: boolean } = {}) {
   let active = true;
   let pending = false;
   async function refresh() {
@@ -150,7 +152,7 @@ export function subscribeToListing(id: string, onChange: (listing: Listing | nul
       const result = await getPublicListingDetail(id);
       if (active) onChange(result.listing as Listing, result.bids);
     } catch (error) {
-      if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found") && auth?.currentUser) {
+      if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found") && options.allowPrivate && auth?.currentUser) {
         try { const listing = await getListing(id); if (active) onChange(listing, []); }
         catch (nextError) { if (active) onError(nextError as Error); }
       } else if (typeof error === "object" && error && "code" in error && String(error.code).includes("not-found")) {
@@ -158,7 +160,9 @@ export function subscribeToListing(id: string, onChange: (listing: Listing | nul
       } else if (active) onError(error as Error);
     } finally { pending = false; }
   }
-  void refresh();
+  // Server snapshot is already public and fresh. Polling/bid refresh retain authoritative reads.
+  if (options.initialListing) onChange(options.initialListing, options.initialBids ?? []);
+  else void refresh();
   const timer = setInterval(() => void refresh(), 10_000);
   return () => { active = false; clearInterval(timer); };
 }

@@ -58,10 +58,10 @@ export function StandardProductDetail({ listing, related, userId, created, share
         {!auction && <p className={styles.price}>{money.format(listing.price)}{listing.status !== "active" && <small>Listed price</small>}</p>}
         <div className={styles.badges}><span>{listing.condition}</span>{!auction && listing.status !== "active" && <span className={styles.statusBadge}>{statusLabels[listing.status]}</span>}</div>
         <p className={styles.area}><MapPin size={14} aria-hidden="true" />{location}</p>
-        {auction && <AuctionPanel listing={listing} userId={userId} owner={owner} onChange={onAuctionChange} previewMode={previewMode} />}
+        {auction && <AuctionPanel key={`${listing.id}:${userId ?? "guest"}`} listing={listing} userId={userId} owner={owner} onChange={onAuctionChange} previewMode={previewMode} />}
         {!auction && <p className={styles.preview}>{listing.description.replace(/\s+/g, " ").trim()}</p>}<a href="#product-description" className={styles.textLink}>Read description <ArrowRight size={14} /></a>
         <ProductSeller uid={listing.sellerId} previewMode={previewMode} />
-        {!previewMode && !auction && <ProductActionBar listing={listing} userId={userId} />}
+        {!previewMode && !auction && <ProductActionBar key={`${listing.id}:${userId ?? "guest"}`} listing={listing} userId={userId} />}
       </section>
     </div>
     <div className={styles.content}>

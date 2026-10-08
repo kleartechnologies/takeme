@@ -7,43 +7,54 @@ import { ListingCard } from "@/components/listings/listing-card";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { ErrorState, ListingSkeleton } from "@/components/ui/states";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
-import { getHomeRecommendations, type CandidateSource } from "@/lib/services/intelligence";
+import { getHomeRecommendations, type RecommendationPage } from "@/lib/services/intelligence";
 import { getActiveListings, type ListingPage } from "@/lib/services/listings";
+
+import { parsePublicCataloguePage, type PublicCataloguePage } from "@/lib/public-catalogue";
 
 import { DiscoveryEmptyState, DiscoverySectionHeader } from "./discovery-section";
 
-type Discovery = { page: ListingPage; personalized: boolean; sources: Record<string, CandidateSource>; sessionId: string | null };
 const emptyPage: ListingPage = { listings: [], cursor: null, hasMore: false };
 
-// Home previews one row (2/3/4 cards by viewport). See all keeps inventory browsing
-// and pagination on Explore; discovery requests and their ranking stay unchanged.
-
-export function HomeMarketplace() {
-  const { user } = useAuth();
-  const [state, setState] = useState<Discovery & { loading: boolean; error: string }>({ page: emptyPage, personalized: false, sources: {}, sessionId: null, loading: true, error: "" });
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    if (!isFirebaseConfigured) return;
-    let active = true;
-    const load = async (): Promise<Discovery> => {
-      if (user) {
-        try {
-          const recommended = await getHomeRecommendations();
-          return { page: { listings: recommended.listings, cursor: null, hasMore: false }, personalized: recommended.personalized, sources: recommended.candidateSources, sessionId: recommended.sessionId };
-        } catch { /* Continue with recent public discovery when recommendations are unavailable. */ }
-      }
-      return { page: await getActiveListings({ sort: "newest", pageSize: 8 }), personalized: false, sources: {}, sessionId: null };
-    };
-    load().then((result) => { if (active) setState({ ...result, loading: false, error: "" }); })
-      .catch(() => { if (active) setState({ page: emptyPage, personalized: false, sources: {}, sessionId: null, loading: false, error: "Fresh finds couldn’t be loaded. Please try again." }); });
-    return () => { active = false; };
-  }, [user, retry]);
-
+/** Public first row is stable across account changes. Personalization never replaces it. */
+export function HomeMarketplace({ initialPage }: { initialPage: PublicCataloguePage | null }) {
+  const [state, setState] = useState({ page: initialPage ?? emptyPage, error: initialPage ? "" : "Fresh finds couldn’t be loaded. Please try again." });
+  const [retrying, setRetrying] = useState(false);
+  async function retry() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const response = await fetch("/api/public-catalogue", { credentials: "omit", cache: "no-store" });
+      const page = response.ok ? parsePublicCataloguePage(await response.json()) : null;
+      if (!page) throw new Error("unavailable");
+      setState({ page, error: "" });
+    } catch { setState(current => ({ ...current, error: "Fresh finds couldn’t be loaded. Please try again." })); }
+    finally { setRetrying(false); }
+  }
   return <section id="discovery" className="discovery-section scroll-mt-24" aria-labelledby="fresh-finds-title">
-    <DiscoverySectionHeader id="fresh-finds-title" title="Fresh Finds" subtitle={state.personalized ? "Selected from your marketplace interests." : "Recently listed on TAKEME"} href="/explore" />
-    {!isFirebaseConfigured ? <FirebaseSetupState /> : state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" onClick={() => setRetry((value) => value + 1)} className="button-secondary mt-4 h-11 px-5">Retry</button></div> : state.loading ? <div className="home-product-grid home-discovery-preview">{Array.from({ length: 4 }, (_, index) => <ListingSkeleton key={index} discovery />)}</div> : state.page.listings.length ? <div className="home-product-grid home-discovery-preview">{state.page.listings.map((listing, index) => <ListingCard key={listing.id} listing={listing} variant="discovery" priority={index === 0} recommendationSource={state.sources[listing.id]} recommendationSessionId={state.sessionId} sizes="(max-width: 767px) 50vw, (max-width: 1279px) 33vw, 25vw" />)}</div> : <DiscoveryEmptyState title="Nothing here yet." description="Be the first to list something on TAKEME." action="Sell something" href="/sell" />}
+    <DiscoverySectionHeader id="fresh-finds-title" title="Fresh Finds" subtitle="Recently listed on TAKEME" href="/explore" />
+    {state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" disabled={retrying} onClick={() => void retry()} className="button-secondary mt-4 h-11 px-5">{retrying ? "Trying again…" : "Retry"}</button></div> : state.page.listings.length ? <div className="home-product-grid home-discovery-preview">{state.page.listings.map((listing, index) => <ListingCard key={listing.id} listing={listing} variant="discovery" priority={index === 0} sizes="(max-width: 767px) 50vw, (max-width: 1279px) 33vw, 25vw" />)}</div> : <DiscoveryEmptyState title="Nothing here yet." description="Be the first to list something on TAKEME." action="Sell something" href="/sell" />}
   </section>;
+}
+
+export function HomeMarketplaceSkeleton() {
+  return <section className="discovery-section" aria-label="Loading Fresh Finds"><DiscoverySectionHeader id="fresh-finds-loading" title="Fresh Finds" subtitle="Recently listed on TAKEME" href="/explore" /><div className="home-product-grid home-discovery-preview">{Array.from({ length: 4 }, (_, index) => <ListingSkeleton key={index} discovery />)}</div></section>;
+}
+
+/** Secondary region only: failures/sign-out never remove the public first feed. */
+export function PersonalizedMarketplace() {
+  const { user, loading, setup, setupError } = useAuth();
+  const [result, setResult] = useState<{ uid: string; page: RecommendationPage } | null>(null);
+  const uid = !loading && !setupError && setup?.step === "ready" && setup.policyAvailable === true ? user?.uid : undefined;
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    getHomeRecommendations().then(page => { if (active) setResult({ uid, page }); }).catch(() => {});
+    return () => { active = false; };
+  }, [uid]);
+  const page = uid && result?.uid === uid ? result.page : null;
+  if (!page?.listings.length) return null;
+  return <section className="discovery-section" aria-labelledby="personalized-finds-title"><DiscoverySectionHeader id="personalized-finds-title" title="For You" subtitle="Selected from your marketplace interests." href="/for-you" /><div className="home-product-grid home-discovery-preview">{page.listings.map(listing => <ListingCard key={listing.id} listing={listing} variant="discovery" recommendationSource={page.candidateSources[listing.id]} recommendationSessionId={page.sessionId} />)}</div></section>;
 }
 
 export function NearYouMarketplace() {

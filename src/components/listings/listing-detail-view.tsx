@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
+import { usePublicAuth } from "@/components/auth/auth-provider";
 import { FirebaseSetupState } from "@/components/ui/firebase-state";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { listingCanonicalUrl } from "@/lib/listing-metadata";
@@ -12,13 +12,17 @@ import { trackMarketplaceIntent } from "@/lib/services/intelligence";
 import type { Listing } from "@/types/marketplace";
 import { StandardProductDetail } from "./standard-product-detail";
 
-export function ListingDetailView({ id, created = false }: { id: string; created?: boolean }) {
-  const { user } = useAuth();
-  const [state, setState] = useState<{ loading: boolean; listing: Listing | null; related: Listing[]; error: string }>({ loading: true, listing: null, related: [], error: "" });
+const emptyBids: PublicAuctionBid[] = [];
+
+export function ListingDetailView({ id, initialListing = null, initialBids = emptyBids, created = false }: { id: string; initialListing?: Listing | null; initialBids?: PublicAuctionBid[]; created?: boolean }) {
+  const { user, setup, loading } = usePublicAuth();
+  const [state, setState] = useState<{ loading: boolean; listing: Listing | null; related: Listing[]; error: string }>({ loading: !initialListing, listing: initialListing, related: [], error: "" });
   const [retry, setRetry] = useState(0);
-  const [bids, setBids] = useState<PublicAuctionBid[]>([]);
+  const [bids, setBids] = useState<PublicAuctionBid[]>(initialBids);
   const [shareMessage, setShareMessage] = useState("");
   const trackedView = useRef("");
+  // Only a missing public snapshot may retry owner-private data after account verification.
+  const privateViewer = !initialListing && !loading && setup?.step === "ready" && setup.policyAvailable === true ? user?.uid : undefined;
 
   useEffect(() => {
     const listing = state.listing;
@@ -61,16 +65,17 @@ export function ListingDetailView({ id, created = false }: { id: string; created
       } catch {
         if (active && contextSeller === sellerId) setState(current => ({ ...current, related: [] }));
       }
-    }, (error) => { if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) }); });
+    }, (error) => { if (active) setState({ loading: false, listing: null, related: [], error: firebaseErrorMessage(error) }); }, { initialListing: retry === 0 ? initialListing : null, initialBids, allowPrivate: !!privateViewer });
     return () => { active = false; unsubscribe(); };
-  }, [id, user?.uid, retry]);
+  }, [id, initialListing, initialBids, privateViewer, retry]);
 
   if (!isFirebaseConfigured) return <main className="page-shell py-10"><FirebaseSetupState /></main>;
+  if (state.listing && ["draft", "removed"].includes(state.listing.status) && state.listing.sellerId !== privateViewer) return <DetailSkeleton />;
   if (state.loading) return <DetailSkeleton />;
   if (state.error === "not-found") return <NotFoundState />;
   if (state.error) return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-2xl font-bold">This listing isn’t available</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">{state.error === "permission-denied" ? "It may be private, sold or removed." : state.error}</p><div className="mt-5 flex justify-center gap-3"><Link href="/explore" className="button-primary min-h-11 px-5">Explore listings</Link><button type="button" className="button-secondary min-h-11 px-5" onClick={() => { setState(current => ({ ...current, loading: true, error: "" })); setRetry(value => value + 1); }}>Retry</button></div></div></main>;
   const listing = state.listing!;
-  return <StandardProductDetail key={`${listing.id}:${user?.uid ?? "guest"}`} listing={listing} related={state.related} userId={user?.uid} created={created} share={share} shareMessage={shareMessage} bids={bids} onAuctionChange={() => setRetry(value => value + 1)} />;
+  return <StandardProductDetail key={listing.id} listing={listing} related={state.related} userId={user?.uid} created={created} share={share} shareMessage={shareMessage} bids={bids} onAuctionChange={() => setRetry(value => value + 1)} />;
 }
 
 function NotFoundState() { return <main className="page-shell grid min-h-[55vh] place-items-center py-10 text-center"><div><Image src="/brand/mascot-2d-wink.png" alt="" width={132} height={110} className="mx-auto h-28 w-auto object-contain" /><h1 className="mt-3 text-2xl font-bold">This listing isn’t available</h1><p className="mt-2 text-sm text-[var(--takeme-gray)]">It may be private, sold or removed, or the link may be incorrect.</p><Link href="/explore" className="button-primary mt-6 h-11 px-6">Explore active listings</Link></div></main>; }

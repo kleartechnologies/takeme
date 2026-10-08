@@ -1,6 +1,5 @@
 import { createInFlightRead } from "@/lib/in-flight-read";
-import { httpsCallable } from "firebase/functions";
-import { functions as firebaseFunctions } from "@/lib/firebase/client";
+import { anonymousPublicRead } from "@/lib/firebase/public-read";
 import { chunkSellerIds } from "@/lib/public-seller-presentation";
 import type { PublicSellerSummary } from "@/types/marketplace";
 
@@ -22,12 +21,11 @@ async function flush() {
     let values = new Map<string, PublicSellerSummary>();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (!firebaseFunctions) throw new Error("Seller summary service is not configured.");
       const result = await Promise.race([
-        httpsCallable<{ sellerIds: string[] }, { sellers: PublicSellerSummary[] }>(firebaseFunctions, "getPublicSellerSummaries")({ sellerIds }),
+        anonymousPublicRead<{ sellers: PublicSellerSummary[] }>("getPublicSellerSummaries", { sellerIds }),
         new Promise<never>((_, reject) => timeout = setTimeout(() => reject(new Error("Seller trust request timed out.")), 8000)),
       ]);
-      values = new Map(result.data.sellers.map((seller) => [seller.uid, seller]));
+      values = new Map(result.sellers.map((seller) => [seller.uid, seller]));
     } catch {
       // Discovery remains usable when optional seller trust is unavailable.
     } finally {

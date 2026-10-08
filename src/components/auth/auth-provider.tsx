@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { auth, db, isFirebaseConfigured } from "@/lib/firebase/client";
 import { getAccountSetupStatus, type AccountSetupStatus } from "@/lib/services/account-setup";
-import { accountRouteRequiresSetup, isAuthPath, protectedActionDestination, safeAuthNext } from "@/lib/auth-routing";
+import { accountGateState, isAuthPath, protectedActionDestination, safeAuthNext } from "@/lib/auth-routing";
 import { isPublicInformationPath } from "@/lib/public-information";
 import { ACCOUNT_ELIGIBILITY_EVENT, type AccountEligibilityEventDetail } from "@/lib/account-eligibility";
 import { logout } from "@/lib/firebase/auth";
@@ -36,18 +36,19 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 function AccountSetupGate({ children }: { children: React.ReactNode }) {
-  const { user, setup, setupError, refreshSetup } = useAuth();
+  const { user, loading, setup, setupError, refreshSetup } = useAuth();
   const path = usePathname(), router = useRouter();
   const exempt = isAuthPath(path) || isPublicInformationPath(path);
-  const redirect = !!user && !exempt && !!setup && accountRouteRequiresSetup(path, setup);
+  const state = exempt ? "render" : accountGateState(path, loading, !!user, setup, setupError);
+  const redirect = state === "redirect";
   useEffect(() => {
     if (!redirect || !setup) return;
     const intended = safeAuthNext(`${path}${window.location.search}${window.location.hash}`);
     router.replace(protectedActionDestination(true, setup, intended) ?? intended);
   }, [redirect, path, router, setup]);
-  if (!user || exempt) return children;
-  if (setupError) return <main className="page-shell grid min-h-[75vh] place-content-center gap-4 text-center"><h1 className="text-2xl font-bold">Let’s reconnect</h1><p role="alert">Your account status could not be checked. Please try again.</p><button className="button-primary" onClick={() => void refreshSetup().catch(() => {})}>Retry</button><Link className="action-link" href="/account-deletion">Account deletion</Link><button className="action-link" onClick={() => void logout()}>Sign out</button></main>;
-  if (!setup || redirect) return <main className="grid min-h-[75vh] place-content-center" role="status">Checking your TAKEME account…</main>;
+  if (state === "render") return children;
+  if (state === "error") return <main className="page-shell grid min-h-[75vh] place-content-center gap-4 text-center"><h1 className="text-2xl font-bold">Let’s reconnect</h1><p role="alert">Your account status could not be checked. Please try again.</p><button className="button-primary" onClick={() => void refreshSetup().catch(() => {})}>Retry</button><Link className="action-link" href="/account-deletion">Account deletion</Link><button className="action-link" onClick={() => void logout()}>Sign out</button></main>;
+  if (state === "checking" || redirect) return <main className="grid min-h-[75vh] place-content-center" role="status">Checking your TAKEME account…</main>;
   return children;
 }
 
@@ -123,13 +124,25 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+const subscribeHydration = () => () => {};
+const clientReady = () => true;
+const serverPending = () => false;
+
+/** Streaming public boundaries can hydrate after Auth resolves. Match their server
+ * snapshot first, then attach account UI without replacing the public page. */
+export function usePublicAuth() {
+  const value = useAuth();
+  const ready = useSyncExternalStore(subscribeHydration, clientReady, serverPending);
+  return ready ? value : { ...value, user: null, loading: true, setup: null, setupError: false };
+}
+
 /** Used only for an explicit protected action, never from mount/navigation effects. */
 export function useProtectedMarketplaceAction() {
-  const { user, refreshSetup } = useAuth();
+  const { user, loading, refreshSetup } = useAuth();
   const router = useRouter();
   const checking = useRef(false);
   return useCallback(async (intended?: string) => {
-    if (checking.current) return false;
+    if (checking.current || loading) return false;
     const next = safeAuthNext(intended ?? `${window.location.pathname}${window.location.search}${window.location.hash}`);
     const uid = auth?.currentUser?.uid;
     checking.current = true;
@@ -147,5 +160,5 @@ export function useProtectedMarketplaceAction() {
       if (protectedWriteMaintenanceMessage(error)) announceProtectedWriteMaintenance();
       throw error;
     } finally { checking.current = false; }
-  }, [user, refreshSetup, router]);
+  }, [user, loading, refreshSetup, router]);
 }

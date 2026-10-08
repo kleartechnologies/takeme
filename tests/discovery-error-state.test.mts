@@ -5,7 +5,7 @@ import test from "node:test";
 test("discovery requires a server-confirmed, privacy-filtered public listing projection", () => {
   const service = readFileSync("src/lib/services/listings.ts", "utf8");
   const discovery = service.slice(service.indexOf("export async function getActiveListings"), service.indexOf("export async function getListing"));
-  assert.match(discovery, /httpsCallable.*getPublicListingPage/);
+  assert.match(discovery, /anonymousPublicRead.*getPublicListingPage/);
   assert.doesNotMatch(discovery, /getDocs(?:FromServer)?\(query\(/);
 });
 

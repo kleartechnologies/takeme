@@ -4,7 +4,7 @@ import { Heart, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
+import { usePublicAuth, useProtectedMarketplaceAction } from "@/components/auth/auth-provider";
 import { isListingSaved, removeSavedListing, saveListing } from "@/lib/services/saved";
 import type { Listing } from "@/types/marketplace";
 import { listingSaveAction } from "@/lib/listing-save-presentation";
@@ -12,7 +12,7 @@ import type { SavedChange } from "@/lib/marketplace-state-events";
 import { protectedWriteMaintenanceMessage } from "@/lib/protected-write-maintenance";
 
 export function SaveButton({ listingId, initialSaved, onChange, compact = false, listing, allowTerminalRemoval = false }: { listingId: string; listing?: Listing; allowTerminalRemoval?: boolean; initialSaved?: boolean; onChange?: (saved: boolean) => void; compact?: boolean }) {
-  const { user, loading } = useAuth();
+  const { user, loading } = usePublicAuth();
   const requireAction = useProtectedMarketplaceAction();
   const pathname = usePathname();
   const [saved, setSaved] = useState(initialSaved ?? false);

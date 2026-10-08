@@ -71,3 +71,21 @@ export function welcomeDestinations(intended?: string | null) {
 export function isPendingResolutionPath(path: string) {
   return path === "/account-deletion" || path === "/transactions" || path.startsWith("/transactions/") || path === "/profile/transactions" || path.startsWith("/profile/transactions/") || path === "/messages" || path.startsWith("/messages/");
 }
+
+/** Exact read-only surfaces. Unknown routes never acquire a public exemption. */
+export function isPublicMarketplaceRoute(path: string) {
+  return ["/", "/explore", "/categories", "/for-you"].includes(path)
+    || /^\/listings\/[^/]+$/.test(path) || /^\/sellers\/[^/]+$/.test(path)
+    || path === "/help/tiers";
+}
+
+export function accountGateState(path: string, loading: boolean, signedIn: boolean, setup: MarketplaceSetupState | null, error: boolean) {
+  if (isAuthPath(path)) return "render";
+  // A known lifecycle restriction wins over every public browsing exemption.
+  if (signedIn && setup && accountRouteRequiresSetup(path, setup)) return "redirect";
+  if (isPublicMarketplaceRoute(path)) return "render";
+  if (loading) return "checking";
+  if (!signedIn) return "render"; // Private page's existing login guard takes over.
+  if (error) return "error";
+  return setup ? "render" : "checking";
+}
