@@ -17,7 +17,7 @@ import { DiscoveryEmptyState, DiscoverySectionHeader } from "./discovery-section
 const emptyPage: ListingPage = { listings: [], cursor: null, hasMore: false };
 
 /** Public first row is stable across account changes. Personalization never replaces it. */
-export function HomeMarketplace({ initialPage }: { initialPage: PublicCataloguePage | null }) {
+export function HomeMarketplace({ initialPage, title = "Fresh Finds" }: { initialPage: PublicCataloguePage | null; title?: string }) {
   const [state, setState] = useState({ page: initialPage ?? emptyPage, error: initialPage ? "" : "Fresh finds couldn’t be loaded. Please try again." });
   const [retrying, setRetrying] = useState(false);
   async function retry() {
@@ -32,7 +32,7 @@ export function HomeMarketplace({ initialPage }: { initialPage: PublicCatalogueP
     finally { setRetrying(false); }
   }
   return <section id="discovery" className="discovery-section scroll-mt-24" aria-labelledby="fresh-finds-title">
-    <DiscoverySectionHeader id="fresh-finds-title" title="Fresh Finds" subtitle="Recently listed on TAKEME" href="/explore" />
+    <DiscoverySectionHeader id="fresh-finds-title" title={title} subtitle="Recently listed on TAKEME" href="/explore" />
     {state.error ? <div role="alert"><ErrorState message={state.error} /><button type="button" disabled={retrying} onClick={() => void retry()} className="button-secondary mt-4 h-11 px-5">{retrying ? "Trying again…" : "Retry"}</button></div> : state.page.listings.length ? <div className="home-product-grid home-discovery-preview">{state.page.listings.map((listing, index) => <ListingCard key={listing.id} listing={listing} variant="discovery" priority={index === 0} sizes="(max-width: 767px) 50vw, (max-width: 1279px) 33vw, 25vw" />)}</div> : <DiscoveryEmptyState title="Nothing here yet." description="Be the first to list something on TAKEME." action="Sell something" href="/sell" />}
   </section>;
 }

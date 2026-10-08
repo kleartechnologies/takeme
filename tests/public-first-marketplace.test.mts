@@ -65,8 +65,8 @@ test("public auction DTO retains fresh prices/dates but anonymous bids never cla
 });
 
 test("Home's public first row is independent of Auth and recommendation failure; retries stay anonymous", () => {
-  const shell = source("src/app/page.tsx");
-  assert.match(shell, /<EndingSoonMarketplace \/><FeaturedMarketplace \/><PersonalizedMarketplace \/>/);
+  const shell = source("src/components/home/published-home.tsx");
+  assert.match(shell, /<EndingSoonMarketplace[\s\S]*<FeaturedMarketplace[\s\S]*<PersonalizedMarketplace/);
   const home = source("src/components/home/home-marketplace.tsx");
   const primary = home.slice(home.indexOf("export function HomeMarketplace("), home.indexOf("export function HomeMarketplaceSkeleton"));
   assert.doesNotMatch(primary, /useAuth|getHomeRecommendations|getActiveListings/);
@@ -120,7 +120,7 @@ test("anonymous server feed rejects identity drift, redirects, foreign media and
     assert.deepEqual(requests[0].init?.headers, { "Content-Type": "application/json" });
     assert.equal(requests[0].init?.redirect, "manual");
     assert.equal(requests[0].init?.cache, "no-store");
-    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { data: { filters: { sort: "newest", pageSize: 8 }, cursor: null } });
+    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { data: { filters: { sort: "newest", pageSize: 8 }, cursor: null, includeHomepage: true } });
     payload = { listings: [publicItem] };
     await anonymousPublicRead("getPublicListingPage", { filters: { sort: "newest" }, cursor: null });
     assert.equal(requests.at(-1)?.init?.credentials, "omit");

@@ -1,3 +1,4 @@
+import { parseHomepage } from "../../../functions/src/homepage-projection.ts";
 import { cache } from "react";
 import { publicListingEndpoint } from "./public-listing-server.ts";
 import { parsePublicCatalogueListing, parsePublicCataloguePage, parseAnonymousBids } from "../public-catalogue.ts";
@@ -33,8 +34,14 @@ function safeImages(listing: { imageUrls: string[] }) {
 
 /** Fixed anonymous public query: no arbitrary query, bearer token or cookie forwarding. */
 export async function getPublicHomePage() {
-  const page = parsePublicCataloguePage(await readPublic("getPublicListingPage", { filters: { sort: "newest", pageSize: 8 }, cursor: null }));
-  return page && page.listings.every(safeImages) ? page : null;
+  const result = await readPublic("getPublicListingPage", { filters: { sort: "newest", pageSize: 8 }, cursor: null, includeHomepage: true }) as { homepage?: unknown } | null;
+  const page = parsePublicCataloguePage(result);
+  const parsed = parseHomepage(result?.homepage);
+  const images = parsed?.sections.flatMap(section => [...section.products.map(v => v.imageUrl), ...section.banners.map(v => v.url)]).filter(Boolean) ?? [];
+  const avatars = parsed?.sections.flatMap(section => section.sellers.flatMap(v => v.photoURL ? [v.photoURL] : [])) ?? [];
+  const safeAvatars = avatars.every(value => safeImages({imageUrls:[value]}) || (()=>{try {const url=new URL(value); return url.origin==="https://lh3.googleusercontent.com" && !url.username && !url.password;} catch{return false;}})());
+  const homepage = parsed && safeImages({ imageUrls: images }) && safeAvatars ? parsed : null;
+  return page && page.listings.every(safeImages) ? { ...page, homepage } : null;
 }
 
 /** React cache is request-scoped, including metadata/page reuse; no cross-user or auction cache. */

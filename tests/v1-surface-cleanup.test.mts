@@ -7,7 +7,7 @@ const source = (path: string) => readFileSync(path, "utf8");
 test("V1 discovery exposes supported rails without a Free listing control", () => {
   const home = source("src/components/home/home-marketplace.tsx");
   const explore = source("src/components/listings/explore-browser.tsx");
-  const page = source("src/app/page.tsx");
+  const page = source("src/components/home/published-home.tsx");
   const endingSoon = source("src/components/home/ending-soon-marketplace.tsx");
   assert.match(home, /Fresh Finds/);
   assert.match(home, /Near You/);
