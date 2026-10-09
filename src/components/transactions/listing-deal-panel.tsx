@@ -1,5 +1,6 @@
 "use client";
 
+import { listingImage } from "@/lib/listing-media";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getListingDealState, respondToOffer, submitOffer } from "@/lib/services/transactions";
@@ -101,6 +102,6 @@ export function ListingDealPanel({ listing, userId, hideMakeOffer = false }: { l
     })}</div>
     {notice && <p role="status" className="mt-3 text-sm text-[var(--takeme-dark-green)]">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
-    {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><ListingContextCard title={listing.title} image={listing.imageUrls[0]} detail={listing.condition} price={money.format(listing.price)} /><OfferRequestForm amount={amount} setAmount={setAmount} maximum={listing.price} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} busy={busy} error={error} onSubmit={() => void send("offer")} /></ActionSheet>}
+    {offerOpen && userId && !seller && listing.status === "active" && <ActionSheet title="Make an offer" description={listing.title} busy={busy} onClose={() => setOfferOpen(false)}><ListingContextCard title={listing.title} image={listingImage(listing, "thumbnail")} detail={listing.condition} price={money.format(listing.price)} /><OfferRequestForm amount={amount} setAmount={setAmount} maximum={listing.price} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} busy={busy} error={error} onSubmit={() => void send("offer")} /></ActionSheet>}
   </section>;
 }

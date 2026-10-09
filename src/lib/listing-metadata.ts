@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { formatPublicLocation, type PublicLocation } from "./general-location.ts";
-import { isStagingMediaUrl, isStagingSiteUrl } from "./firebase/staging-isolation.ts";
+import { isStagingSiteUrl } from "./firebase/staging-isolation.ts";
+import { isPublicMediaUrl } from "./public-media.ts";
+import { productionEnvironment } from "../../functions/src/production-environment.ts";
+import { stagingEnvironment } from "../../functions/src/staging-environment.ts";
 
 export type PublicListingMetadata = {
   status: string;
@@ -24,9 +27,8 @@ export function listingCanonicalUrl(id: string, siteUrl: string) {
 
 function previewImage(listing: PublicListingMetadata, siteUrl: string) {
   const image = listing.imageUrls?.find((value) => {
-    if (isStagingSiteUrl(siteUrl)) return isStagingMediaUrl(value);
-    try { return new URL(value).protocol === "https:"; }
-    catch { return false; }
+    const environment = isStagingSiteUrl(siteUrl) ? stagingEnvironment : siteUrl === productionEnvironment.siteUrl ? productionEnvironment : null;
+    return environment !== null && isPublicMediaUrl(value, environment);
   });
   return image ?? new URL("/brand/takeme-app-icon.png", siteUrl).toString();
 }

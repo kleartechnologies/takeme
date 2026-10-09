@@ -1,3 +1,4 @@
+import { readyMedia } from "./listing-media-domain";
 import { marketplaceCall as onCall, marketplaceMutationCall, runGuardedTransaction, accountIsActive } from "./account-lifecycle";
 import { marketplaceAccountIsEligible } from "./account-eligibility";
 import { createHash } from "node:crypto";
@@ -116,7 +117,8 @@ export function publicListing(data: DocumentData, id: string): RankableListing &
   return {
     id, sellerId: String(data.sellerId ?? ""), title: String(data.title ?? ""), description: String(data.description ?? ""), categoryId: String(data.categoryId ?? ""),
     condition: String(data.condition ?? ""), price: Number(data.price ?? 0), listingType: String(data.listingType ?? "buy_now"), location: publishableLocation(data) ? displayPublicLocation(publishableLocation(data)!) : "",
-    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [], status: String(data.status ?? ""), createdAt: iso(data.createdAt) ?? "", updatedAt: iso(data.updatedAt),
+    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+    mediaImages: Array.isArray(data.mediaImages) && data.mediaImages.length <= 8 ? data.mediaImages.flatMap((item: Record<string, unknown>) => { const parsed = readyMedia(item, String(data.sellerId)); return parsed && Number.isInteger(item.coverOrder) && Number(item.coverOrder) >= 0 && Number(item.coverOrder) < 8 ? [{ ...parsed, coverOrder: item.coverOrder }] : []; }) : [], status: String(data.status ?? ""), createdAt: iso(data.createdAt) ?? "", updatedAt: iso(data.updatedAt),
     auctionStartAt: iso(data.auctionStartAt), auctionEndAt: iso(data.auctionEndAt), startingBid: data.startingBid ?? null, currentBid: data.currentBid ?? null,
     bidCount: data.bidCount ?? null, minimumBidIncrement: data.minimumBidIncrement ?? null,
     auctionStatus: data.auctionStatus ?? null, finalBid: data.finalBid ?? null, endedAt: iso(data.endedAt),

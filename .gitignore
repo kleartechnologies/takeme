@@ -69,3 +69,6 @@ next-env.d.ts
 *.heapsnapshot
 *.p12
 *.pfx
+
+# Isolated server-side media processor dependencies
+/media-processor/node_modules/

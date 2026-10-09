@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import { validateReleaseEnvironment } from "./src/lib/release-config.ts";
 import { encodeReleaseProof } from "./src/lib/release-proof.ts";
+import { STAGING_MEDIA_BUCKET } from "./functions/src/listing-media-domain.ts";
 import { firebaseWorkerAliases } from "./scripts/firebase-worker-aliases.mjs";
 
 export default function nextConfig(phase: string): NextConfig {
@@ -22,6 +23,7 @@ export default function nextConfig(phase: string): NextConfig {
       dangerouslyAllowLocalIP: configuration.useEmulators,
       remotePatterns: [
         { protocol: "https", hostname: "firebasestorage.googleapis.com", pathname: configuration.target === "staging" ? `/v0/b/${configuration.publicFirebase.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}/o/**` : "/**" },
+        ...(configuration.target === "staging" ? [{ protocol: "https" as const, hostname: "firebasestorage.googleapis.com", pathname: `/v0/b/${STAGING_MEDIA_BUCKET}/o/users%2F**` }] : []),
         { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/**" },
         ...(configuration.useEmulators ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "9199", pathname: "/**" }] : []),
       ],

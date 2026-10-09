@@ -1,0 +1,14 @@
+**
+!media-processor/
+!media-processor/*.mjs
+!media-processor/package.json
+!media-processor/package-lock.json
+!media-processor/native-sources.json
+!media-processor/test/
+!media-processor/test/**
+!functions/
+!functions/package.json
+!functions/package-lock.json
+!functions/tsconfig.json
+!functions/src/
+!functions/src/**

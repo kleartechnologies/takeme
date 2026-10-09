@@ -1,0 +1,250 @@
+{
+  "mode": "PREPARATION_ONLY",
+  "projectId": "takeme-52b80",
+  "projectNumber": "367115645204",
+  "region": "asia-southeast1",
+  "bucket": {
+    "name": "takeme-52b80-media-v1",
+    "location": "ASIA-SOUTHEAST1",
+    "storageClass": "STANDARD",
+    "iamConfiguration": {
+      "uniformBucketLevelAccess": {
+        "enabled": true
+      },
+      "publicAccessPrevention": "enforced"
+    },
+    "softDeletePolicy": {
+      "retentionDurationSeconds": "604800"
+    },
+    "cors": [
+      {
+        "origin": [
+          "https://takeme.my"
+        ],
+        "method": [
+          "GET",
+          "HEAD"
+        ],
+        "responseHeader": [
+          "Content-Type"
+        ],
+        "maxAgeSeconds": 3600
+      }
+    ]
+  },
+  "appBucketUnchanged": "takeme-52b80.firebasestorage.app",
+  "roles": {
+    "takemeMediaStorageBrokerV1": [
+      "storage.objects.get",
+      "storage.objects.create"
+    ],
+    "takemeMediaStorageProcessorV1": [
+      "storage.objects.get",
+      "storage.objects.create",
+      "storage.objects.delete"
+    ],
+    "takemeMediaGuardReaderV1": [
+      "datastore.databases.get",
+      "datastore.databases.getMetadata",
+      "datastore.entities.get",
+      "firebaseauth.users.get"
+    ],
+    "takemeMediaApiV1": [
+      "datastore.databases.get",
+      "datastore.databases.getMetadata",
+      "datastore.entities.get",
+      "firebaseauth.users.get",
+      "datastore.entities.create",
+      "datastore.entities.update"
+    ],
+    "takemeMediaMetadataV1": [
+      "datastore.databases.get",
+      "datastore.databases.getMetadata",
+      "datastore.entities.get",
+      "firebaseauth.users.get",
+      "datastore.entities.list",
+      "datastore.entities.create",
+      "datastore.entities.update",
+      "datastore.entities.delete"
+    ]
+  },
+  "bucketBindings": [
+    {
+      "role": "projects/takeme-52b80/roles/takemeMediaStorageBrokerV1",
+      "members": [
+        "serviceAccount:media-v1-broker@takeme-52b80.iam.gserviceaccount.com"
+      ],
+      "condition": {
+        "title": "takeme_media_broker_only",
+        "expression": "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/takeme-52b80-media-v1/objects/users/') && (resource.name.extract('projects/_/buckets/takeme-52b80-media-v1/objects/users/{uid}/listing-media-staging/') != '')"
+      }
+    },
+    {
+      "role": "projects/takeme-52b80/roles/takemeMediaStorageProcessorV1",
+      "members": [
+        "serviceAccount:media-v1-processor@takeme-52b80.iam.gserviceaccount.com"
+      ],
+      "condition": {
+        "title": "takeme_media_processor_only",
+        "expression": "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/takeme-52b80-media-v1/objects/users/') && (resource.name.extract('projects/_/buckets/takeme-52b80-media-v1/objects/users/{uid}/listing-media-staging/') != '' || resource.name.extract('projects/_/buckets/takeme-52b80-media-v1/objects/users/{uid}/listing-media/') != '')"
+      }
+    }
+  ],
+  "projectBindings": {
+    "media-v1-api": [
+      "takemeMediaApiV1"
+    ],
+    "media-v1-broker": [
+      "takemeMediaGuardReaderV1"
+    ],
+    "media-v1-processor": [
+      "takemeMediaMetadataV1"
+    ],
+    "media-v1-events": [
+      "roles/eventarc.eventReceiver"
+    ]
+  },
+  "serviceAccountDomain": "takeme-52b80.iam.gserviceaccount.com",
+  "processor": {
+    "service": "takeme-media-v1",
+    "cpu": 2,
+    "memory": "2Gi",
+    "concurrency": 1,
+    "minInstances": 0,
+    "serviceMaxInstances": 2,
+    "revisionMaxInstances": 2,
+    "timeoutSeconds": 90,
+    "runtimeAccount": "media-v1-processor",
+    "allowUnauthenticated": false,
+    "invokerAccounts": [
+      "media-v1-events",
+      "media-v1-cleanup"
+    ],
+    "env": {
+      "TAKEME_RELEASE_TARGET": "production",
+      "TAKEME_FIREBASE_PROJECT_ID": "takeme-52b80",
+      "TAKEME_STORAGE_BUCKETS": "takeme-52b80.firebasestorage.app",
+      "TAKEME_MEDIA_BUCKET": "takeme-52b80-media-v1",
+      "TAKEME_MEDIA_PIPELINE": "v1",
+      "TAKEME_ENABLE_PRODUCTION_DELETION": "false",
+      "PROTECTED_PAYMENTS_ENABLED": "false"
+    },
+    "imageDigest": "sha256:cc4c1051c6ff58a86efe180dfb05e5af728ac4b8cca5451911b2689df285bbc8",
+    "artifactRepository": "takeme-media-v1",
+    "artifactImage": "processor"
+  },
+  "eventarc": {
+    "type": "google.cloud.storage.object.v1.finalized",
+    "bucket": "takeme-52b80-media-v1",
+    "region": "asia-southeast1",
+    "runtimeAccount": "media-v1-events",
+    "destination": "takeme-media-v1",
+    "retryBackoffSeconds": {
+      "minimum": 10,
+      "maximum": 120
+    },
+    "maxDeliveryAttempts": 5,
+    "deadLetterRetentionSeconds": 604800,
+    "trigger": "takeme-media-v1-finalize",
+    "deadLetterTopic": "takeme-media-v1-dead-letter",
+    "deadLetterReviewSubscription": "takeme-media-v1-dead-letter-review"
+  },
+  "cleanup": {
+    "runtimeAccount": "media-v1-cleanup",
+    "service": "takeme-media-v1",
+    "path": "/cleanup",
+    "cron": "0 3 * * *",
+    "timeZone": "UTC",
+    "oidcAudience": "EXACT_RUN_SERVICE_URL_REQUIRED",
+    "deadlineSeconds": 90,
+    "retryCount": 3,
+    "job": "takeme-media-v1-cleanup"
+  },
+  "budgetProposal": {
+    "approval": "OWNER_RM200_APPROVED",
+    "currency": "MYR",
+    "monthlyAmount": 200,
+    "actualThresholds": [
+      0.5,
+      0.9,
+      1.0
+    ],
+    "forecastThresholds": [
+      1.0
+    ],
+    "destinations": [
+      "support.takeme@gmail.com",
+      "zweetdata@gmail.com"
+    ],
+    "spendingCap": false,
+    "billingAccountCurrency": "MYR",
+    "creationStatus": "CREATED_READBACK_PASS",
+    "enabled": true,
+    "monitoringNotificationChannels": [
+      "projects/takeme-52b80/notificationChannels/17384389673105497221",
+      "projects/takeme-52b80/notificationChannels/14950290015287672268"
+    ],
+    "delivery": "Existing contacts verified; new budget threshold notification not observed"
+  },
+  "mediaFunctions": {
+    "new": [
+      "beginListingMedia",
+      "getListingMedia",
+      "uploadListingMediaSource"
+    ],
+    "affected": [
+      "publishFixedListing",
+      "updateFixedListing",
+      "publishAuctionListing",
+      "updateAuctionListing",
+      "getPublicListingDetail",
+      "getPublicListingPage",
+      "getMarketplaceRecommendations",
+      "getMyListingHistory"
+    ],
+    "runtimeAccounts": {
+      "beginListingMedia": "media-v1-api",
+      "getListingMedia": "media-v1-api",
+      "uploadListingMediaSource": "media-v1-broker"
+    },
+    "preserveAllExistingNonMediaPins": true
+  },
+  "frontend": {
+    "worker": "takeme-web",
+    "enableMediaPipeline": "v1",
+    "publicVariants": [
+      "CARD",
+      "THUMBNAIL",
+      "DETAIL"
+    ],
+    "preserveLegacyReader": true
+  },
+  "readbackGates": [
+    "Bucket location/class/UBLA/PAP/soft-delete/exact CORS; default app bucket unchanged",
+    "Exact dedicated service identities, custom permission sets and conditional namespace bindings; no Owner/Editor/public GCS grant",
+    "Run image digest and all production pins; concurrency=1, min=0, max=2, 2CPU/2Gi/90s; IAM invokers only Eventarc/cleanup",
+    "Eventarc exact bucket/type/region/authenticated destination; transport retry/dead-letter bindings and delivery proof",
+    "Cleanup job exact path/audience/identity/cron/deadline and bounded application cleanup",
+    "Only listed media/affected projection Functions; reviewed runtime accounts, preserved production Auth/policy/maintenance env",
+    "Dedicated bucket Firebase registration/media rules; raw denied; published derivatives and private draft owner reads",
+    "Versioned frontend readers plus Sell flag; no staging/access wrapper or project leakage",
+    "Synthetic production smoke only after separate deployment approval; real supported photo, publication/variants, failure isolation, ownership/expiry/replay/overwrite/maintenance",
+    "Verified incident contacts; Run/Function/Storage/Worker error, pending queue/dead-letter/cleanup/spend checks",
+    "Stop new admissions on failure; retain published READY references/readers/rules, settle issued work, preserve private evidence; rollback frontend/affected versions only"
+  ],
+  "rolloutOrder": [
+    "Create/register takeme-52b80-media-v1 with reviewed bucket settings",
+    "Apply exact dedicated identities and least-privilege conditional IAM; verify readback",
+    "Deploy immutable no-HEVC image to private takeme-media-v1",
+    "Configure takeme-media-v1-finalize and transport/dead-letter; verify actual delivery",
+    "Deploy only mediaFunctions.new and mediaFunctions.affected with preserved runtime pins",
+    "Apply dedicated-bucket Firebase rules and permit support; preserve legacy bucket",
+    "Deploy Sell frontend integration only to takeme-web with media flag v1",
+    "Deploy consumer CARD/THUMBNAIL/DETAIL readers; preserve legacy compatibility",
+    "Create explicitly approved synthetic production photo smoke",
+    "Verify Home/Explore/Product derivatives, guards and recovery",
+    "Withdraw only that production synthetic smoke; preserve historical evidence and retention",
+    "Monitor processor/Functions/Worker/Storage/Eventarc/cleanup/quotas/spend",
+    "Rollback if required: stop admissions, retain READY references/readers/rules, settle issued operations, restore affected versions only"
+  ]
+}

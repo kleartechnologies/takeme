@@ -260,7 +260,7 @@ test("every callable/trigger export has an explicit maintenance classification",
       publishAuctionListing publishFixedListing removeFixedListing reportPublicReview requestTransactionCancellation respondToOffer
       saveSearch sendConversationMessage setNotificationPreference setSellerFollow submitMarketplaceReport submitOffer
       submitTransactionReview trackMarketplaceEvent trackPromotionEngagement updateAdminReport updateAuctionListing updateFixedListing
-      requestUploadPermits createProtectedPayment respondToProtectedDispute addProtectedDisputeEvidence
+      uploadListingMediaSource beginListingMedia requestUploadPermits createProtectedPayment respondToProtectedDispute addProtectedDisputeEvidence
       mutateAdminEditorial publishAdminHomepage requestAdminAssetPermit finalizeAdminAsset`.split(/\s+/),
     readOnly: `getAdminMetrics getAdminPage getAdminRecord getAuctionViewerState getConversation getConversationMessages
       getConversations getFeaturedPromotions getFollowState getFollowing getListingDealState getMarketplaceDiscovery
@@ -268,7 +268,7 @@ test("every callable/trigger export has an explicit maintenance classification",
       getNotificationPreferences getNotifications getPromotionPackages getPromotionPlacements getPublicListingDetail getPublicListingPage
       getPublicReviews getPublicSellerSummaries getReputationPolicy getSavedSearches getTransactionDetail getUnreadCount
       getAccountSetupStatus getAccountDeletionAvailability getAccountDeletionStatus getProtectedPaymentPolicy getSellerPaymentOnboarding
-      getProtectedWriteStatus getAdminEditorialPage getAdminEditorialRecord previewAdminHomepage getPublicHomepage getAdminControlOverview getAdminSession`.split(/\s+/),
+      getListingMedia getProtectedWriteStatus getAdminEditorialPage getAdminEditorialRecord previewAdminHomepage getPublicHomepage getAdminControlOverview getAdminSession`.split(/\s+/),
     specialWrite: `acceptWebPolicies completeFirstTimeProfile finishAccountWelcome requestAccountDeletion retryAccountDeletion loadAdminReportContext`.split(/\s+/),
     derived: `onSavedListingCreated onSavedListingDeleted onAuctionBidCreated onConversationStarted onConversationMessageCreated
       onCompletedTransactionInterest onAuctionWonCreateTransaction onBidEngagementCreated onListingEngagementChanged
@@ -279,9 +279,9 @@ test("every callable/trigger export has an explicit maintenance classification",
       expirePromotions processAccountDeletions`.split(/\s+/),
     syntheticOperational: ["cleanupApprovedSyntheticFixture"],
   };
-  assert.deepEqual(Object.values(groups).map(names => names.length), [42, 41, 6, 20, 7, 1]);
+  assert.deepEqual(Object.values(groups).map(names => names.length), [44, 42, 6, 20, 7, 1]);
   const classified = Object.values(groups).flat();
-  assert.equal(new Set(classified).size, 117, "No classification may overlap or omit an export.");
+  assert.equal(new Set(classified).size, 120, "No classification may overlap or omit an export.");
   const constructors = new Map(), helpers = new Map(), exported = new Set();
   for (const file of fs.readdirSync(sourceDir).filter(name => name.endsWith(".ts"))) {
     const source = ts.createSourceFile(file, fs.readFileSync(path.join(sourceDir, file), "utf8"), ts.ScriptTarget.Latest, true);
@@ -309,6 +309,14 @@ test("every callable/trigger export has an explicit maintenance classification",
   assert.doesNotMatch(cleanup.source, /assertMarketplaceEligibility|acceptWebPolicies|\.delete\(.*listing/);
   for (const name of groups.protected) {
     const entry = constructors.get(name);
+    if (name === "uploadListingMediaSource") {
+      assert.equal(entry?.constructor, "onRequest");
+      assert.ok(entry.source.includes("verifyIdToken(authorization.slice(7), true)"));
+      assert.ok(entry.source.includes("db.runTransaction") && entry.source.includes("assertProtectedWritesAvailable(tx)") && entry.source.includes("assertMarketplaceEligibility(uid, tx)"));
+      assert.ok(entry.source.indexOf("assertProtectedWritesAvailable(tx)") < entry.source.indexOf("file.save(bytes"));
+      assert.ok(entry.source.includes("ifGenerationMatch: 0"));
+      continue;
+    }
     assert.ok(["marketplaceMutationCall", "resolutionMutationCall"].includes(entry?.constructor), `${name} must use a protected mutation wrapper.`);
     // The disabled payment creation stub has no write to commit; every other
     // protected handler rereads maintenance in its actual guarded transaction.

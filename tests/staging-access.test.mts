@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { stagingAccessAllowed, createStagingWorker } from "../workers/staging-access.mjs";
 import { stagingEnvironment as staging } from "../functions/src/staging-environment.ts";
+import { STAGING_MEDIA_BUCKET } from "../functions/src/listing-media-domain.ts";
 
 const audience = "a".repeat(64), issuer = "https://qualification.cloudflareaccess.com";
 const approvedEmails = ["amirulaidi@gmail.com", "zweetdata@gmail.com"];
@@ -202,6 +203,11 @@ test("guarded Worker blocks all app calls without Access and marks authenticated
   assert.equal(allowed.status, 200); assert.equal(allowed.headers.get("X-Robots-Tag"), "noindex, nofollow"); assert.equal(allowed.headers.get("Cache-Control"), "no-store"); assert.equal(calls, 1);
   const policy = allowed.headers.get("Content-Security-Policy");
   assert.ok(policy?.includes(`/v0/b/${staging.storageBucket}/o/`));
+  assert.ok(policy?.includes(`/v0/b/${STAGING_MEDIA_BUCKET}/o/`));
+  assert.deepEqual(policy?.split(" ").filter(value => value.startsWith("https://firebasestorage.googleapis.com")), [
+    `https://firebasestorage.googleapis.com/v0/b/${staging.storageBucket}/o/`,
+    `https://firebasestorage.googleapis.com/v0/b/${STAGING_MEDIA_BUCKET}/o/`,
+  ]);
   assert.ok(policy?.includes("blob:")); assert.ok(policy?.includes("'self'"));
   assert.equal(policy?.includes("takeme-52b80"), false);
   assert.equal(policy?.includes("firebasestorage.googleapis.com;"), false);

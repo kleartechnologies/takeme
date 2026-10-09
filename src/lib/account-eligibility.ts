@@ -10,7 +10,7 @@ const protectedCallables = new Set([
   "cancelAuction", "cancelPromotionRequest", "confirmTransactionCompletion", "createAuctionListing", "createFixedListingDraft",
   "createPromotionRequest", "declineTransactionCancellation", "deleteSavedSearch", "disputeTransaction", "markAllNotificationsRead",
   "markConversationSeen", "markNotificationRead", "openListingConversation", "openNotification", "openTransactionConversation",
-  "placeBid", "publishAuctionListing", "publishFixedListing", "removeFixedListing", "reportPublicReview", "requestTransactionCancellation",
+  "beginListingMedia", "placeBid", "publishAuctionListing", "publishFixedListing", "removeFixedListing", "reportPublicReview", "requestTransactionCancellation",
   "requestUploadPermits", "respondToOffer", "saveSearch", "sendConversationMessage", "setNotificationPreference", "setSellerFollow",
   "submitMarketplaceReport", "submitOffer", "submitTransactionReview", "trackMarketplaceEvent", "trackPromotionEngagement",
   "updateAdminReport", "updateAuctionListing", "updateFixedListing", "createProtectedPayment", "respondToProtectedDispute", "addProtectedDisputeEvidence",

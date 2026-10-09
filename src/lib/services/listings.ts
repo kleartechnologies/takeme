@@ -1,3 +1,5 @@
+import { parseListingMedia } from "@/lib/listing-media";
+import { mediaPipelineEnabled, serverPhotoUrls, preparedMedia } from "./listing-media";
 import { anonymousPublicRead } from "@/lib/firebase/public-read";
 import { parsePublicCataloguePage } from "@/lib/public-catalogue";
 import { createInFlightRead } from "@/lib/in-flight-read";
@@ -87,6 +89,7 @@ export function fromDocument(snapshot: QueryDocumentSnapshot<DocumentData> | { i
     meetupLocationId: typeof data.meetupLocationId === "string" ? data.meetupLocationId : null,
     meetupLocation: data.meetupLocation ?? null,
     imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+    mediaImages: parseListingMedia(data.mediaImages, data.sellerId),
     status: data.status,
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
@@ -176,6 +179,7 @@ export async function getListingsBySeller(sellerId: string, includeRemoved = fal
 
 async function uploadListingImages(uid: string, listingId: string, files: File[], checkpoint?: ListingSubmissionCheckpoint, onCheckpoint?: () => void) {
   const services = requireServices();
+  if (mediaPipelineEnabled) return serverPhotoUrls(files);
   return uploadListingImagesWith(uid, listingId, files, {
     prepare: prepareListingImage,
     reference: (path) => ref(services.storage, path),
@@ -202,7 +206,7 @@ async function uploadListingImages(uid: string, listingId: string, files: File[]
 /** Sell V1.1 retries retain known drafts and immutable uploads, without changing server contracts. */
 export async function submitListingWithRecovery(input: ListingInput, files: File[], checkpoint: ListingSubmissionCheckpoint, saveDraft: boolean, onCheckpoint: () => void) {
   const services = requireServices();
-  const errors = [...validateListingInput(input), ...validateImageFiles(files)];
+  const errors = [...validateListingInput(input), ...validateSubmissionPhotos(files)];
   if (errors.length) throw new Error(errors[0]);
   if (checkpoint.type !== input.listingType) throw new Error("Resume the existing draft's listing type in My Listings.");
   if (saveDraft && input.listingType === "auction" && Date.parse(input.auctionStartAt) <= Date.now()) throw new Error("Schedule for later to save a resumable auction draft.");
@@ -222,7 +226,7 @@ export async function submitListingWithRecovery(input: ListingInput, files: File
 
 export async function createListing(input: ListingInput, files: File[]) {
   const services = requireServices();
-  const errors = [...validateListingInput(input), ...validateImageFiles(files)];
+  const errors = [...validateListingInput(input), ...validateSubmissionPhotos(files)];
   if (errors.length) throw new Error(errors[0]);
   const uploaded: { url: string; fullPath: string }[] = [];
   let listingId = "";
@@ -263,7 +267,7 @@ export async function updateListing(id: string, input: ListingInput, orderedPhot
   const errors = validateListingInput(input);
   if (finalCount < 1 || finalCount > MAX_LISTING_IMAGES) errors.push(`Keep between 1 and ${MAX_LISTING_IMAGES} images.`);
   if (newFiles.length) {
-    const fileErrors = validateImageFiles(newFiles);
+    const fileErrors = validateSubmissionPhotos(newFiles);
     if (fileErrors[0] === "Add at least one image.") fileErrors.shift();
     errors.push(...fileErrors);
   }
@@ -302,7 +306,7 @@ export async function publishExistingAuctionDraft(id: string, input: ListingInpu
 /** Uses the existing draft/update callables; no public write occurs here. */
 export async function saveListingDraft(input: ListingInput, files: File[]) {
   const services = requireServices();
-  const errors = [...validateListingInput(input), ...validateImageFiles(files)];
+  const errors = [...validateListingInput(input), ...validateSubmissionPhotos(files)];
   if (errors.length) throw new Error(errors[0]);
   if (input.listingType === "auction" && Date.parse(input.auctionStartAt) <= Date.now()) throw new Error("Schedule for later to save a resumable auction draft.");
   const id = input.listingType === "auction" ? await createAuctionDraft(input) : await createFixedDraft(input);
@@ -337,4 +341,10 @@ export async function deleteListing(id: string) {
   if (current.sellerId !== services.user.uid) throw new Error("You are not allowed to remove this listing.");
   if (current.listingType === "auction" || current.listingType === "buy_now_and_auction") await cancelAuctionListing(id);
   else await removeFixed(id);
+}
+
+function validateSubmissionPhotos(files: File[]) {
+  if (!mediaPipelineEnabled) return validateImageFiles(files);
+  if (files.length < 1 || files.length > 8 || files.some(file => !preparedMedia(file))) return ["Wait for your photos to finish processing."];
+  return [];
 }

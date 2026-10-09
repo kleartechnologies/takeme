@@ -28,6 +28,7 @@ export interface Listing {
   meetupLocationId?: string | null;
   meetupLocation?: { name: string; area: string; state: string; country: "Malaysia" } | null;
   imageUrls: string[];
+  mediaImages?: import("@/lib/listing-media").ListingMedia[];
   status: ListingStatus;
   createdAt: string;
   updatedAt: string;

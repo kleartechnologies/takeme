@@ -102,3 +102,10 @@
 .publishSummary { padding:14px; margin-top:16px; border-radius:12px; background:var(--takeme-light-green); font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
 .confirmActions { flex-wrap:wrap; }.confirmActions button { min-width:110px; }
 @media(max-width:600px) { .typeOption { min-height:64px; padding:10px 8px; gap:6px; }.typeIcon { width:24px; height:24px; }.typeOption strong { font-size:13px; }.conditionChoices button { min-height:76px; }.photoGrid { gap:8px; } }
+
+.photoProgress { margin:0 0 20px; padding:14px 16px; border:1px solid #d5eddd; border-radius:14px; background:#f4fcf6; color:var(--takeme-dark-green); }
+.photoProgress > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:12px; }
+.photoProgress strong { font-weight:650; }.photoProgress span { color:#991b1b; }
+.photoProgress progress { display:block; width:100%; height:7px; margin:10px 0; accent-color:var(--takeme-dark-green); }
+.photoProgress p { font-size:12px; line-height:1.6; }.photoProgress .textButton { margin-top:4px; }
+.retryPhoto { display:flex; justify-content:center; align-items:center; min-height:44px; width:100%; font-size:12px; font-weight:600; color:var(--takeme-dark-green); }

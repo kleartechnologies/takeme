@@ -1,3 +1,5 @@
+import { listingMediaBucket } from "./listing-media-domain";
+import { attachListingMedia } from "./listing-media-attachment";
 import { consumeActionCadence } from "./action-cadence";
 import { marketplaceMutationCall, runGuardedTransaction } from "./account-lifecycle";
 import { assertAuctionCreationAvailable } from "./auction-creation-runtime.ts";
@@ -155,14 +157,14 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
     const emulatorUrl = Boolean(process.env.FIREBASE_STORAGE_EMULATOR_HOST)
       && url.protocol === "http:"
       && ["127.0.0.1", "localhost"].includes(url.hostname);
-    if (!(emulatorUrl || (url.protocol === "https:" && url.hostname === "firebasestorage.googleapis.com")) || !url.searchParams.get("token") || url.searchParams.get("alt") !== "media") {
+    if (!(emulatorUrl || (url.protocol === "https:" && url.hostname === "firebasestorage.googleapis.com")) || url.searchParams.get("alt") !== "media") {
       throw new HttpsError("invalid-argument", "Listing images must be uploaded to Firebase Storage.");
     }
     const match = /^\/v0\/b\/([^/]+)\/o\/([^/]+)$/.exec(url.pathname);
     let objectPath = "";
     try { objectPath = match ? decodeURIComponent(match[2]!) : ""; }
     catch { throw new HttpsError("invalid-argument", "A listing image URL is invalid."); }
-    if (!match || !allowedBuckets.has(match[1]!) || !objectPath.startsWith(listingMediaPrefix(uid, listingId)) || paths.has(objectPath)) {
+    if (!match || !(objectPath.startsWith(`users/${uid}/listing-media/`) ? match[1] === listingMediaBucket(projectId) : allowedBuckets.has(match[1]!)) || !(objectPath.startsWith(listingMediaPrefix(uid, listingId)) || new RegExp(`^users/${uid}/listing-media/[A-Za-z0-9_-]{1,128}/v1-[a-f0-9]{64}/detail\\.webp$`).test(objectPath)) || paths.has(objectPath)) {
       throw new HttpsError("invalid-argument", "Listing images must belong to this listing.");
     }
     const bucket = getStorage().bucket(match[1]!);
@@ -170,7 +172,7 @@ async function verifyListingImages(uid: string, listingId: string, value: unknow
       throw new HttpsError("invalid-argument", "A listing image is missing from Storage.");
     });
     const downloadTokens = String(metadata.metadata?.firebaseStorageDownloadTokens ?? "").split(",");
-    if (!downloadTokens.includes(url.searchParams.get("token")!)) {
+    if (!objectPath.startsWith(`users/${uid}/listing-media/`) && (!url.searchParams.get("token") || !downloadTokens.includes(url.searchParams.get("token")!))) {
       throw new HttpsError("invalid-argument", "A listing image download token is invalid.");
     }
     if (!/^image\/(jpeg|png|webp)$/.test(String(metadata.contentType)) || Number(metadata.size) > 8 * 1024 * 1024) {
@@ -209,7 +211,8 @@ export const publishFixedListing = marketplaceMutationCall(async (request) => {
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
     if (data.listingType !== "buy_now" || data.status !== "draft") throw new HttpsError("failed-precondition", "This listing cannot be published.");
     if (!publishableLocation(data) || data.privacyVersion !== 2) throw new HttpsError("failed-precondition", "Please add your general location before publishing.");
-    tx.update(ref, { imageUrls, status: "active", updatedAt: Timestamp.now() });
+    const mediaImages = await attachListingMedia(tx, uid, listingId, imageUrls);
+    tx.update(ref, { imageUrls, mediaImages, mediaImageIds: mediaImages.map(m => m.imageId), status: "active", updatedAt: Timestamp.now() });
   });
   return { listingId };
 });
@@ -227,7 +230,8 @@ export const updateFixedListing = marketplaceMutationCall(async (request) => {
     const data = snapshot.data();
     if (!data || data.sellerId !== uid) throw new HttpsError("permission-denied", "This listing is not yours.");
     if (data.listingType !== "buy_now" || !["draft", "active"].includes(data.status)) throw new HttpsError("failed-precondition", "This listing cannot be edited.");
-    tx.update(ref, { ...content, ...meetup, ...legacyPreciseFields, imageUrls, updatedAt: Timestamp.now() });
+    const mediaImages = await attachListingMedia(tx, uid, listingId, imageUrls);
+    tx.update(ref, { ...content, ...meetup, ...legacyPreciseFields, imageUrls, mediaImages, mediaImageIds: mediaImages.map(m => m.imageId), updatedAt: Timestamp.now() });
   });
   return { listingId };
 });
@@ -352,7 +356,8 @@ export const publishAuctionListing = marketplaceMutationCall(async (request) => 
       throw new HttpsError("failed-precondition", "This auction has already expired.");
     }
     const auctionStatus = now.toMillis() >= data.auctionStartAt.toMillis() ? "active" : "scheduled";
-    transaction.update(listingRef, { imageUrls, status: "active", auctionStatus, updatedAt: now });
+    const mediaImages = await attachListingMedia(transaction, uid, listingId, imageUrls);
+    transaction.update(listingRef, { imageUrls, mediaImages, mediaImageIds: mediaImages.map(m => m.imageId), status: "active", auctionStatus, updatedAt: now });
     return { ...data, imageUrls, status: "active", auctionStatus, updatedAt: now };
   });
   return serializeAuction(result);
@@ -377,7 +382,8 @@ export const updateAuctionListing = marketplaceMutationCall(async (request) => {
     if (!resumableDraft && !editablePublishedAuction) {
       throw new HttpsError("failed-precondition", "Auction settings are locked after the auction starts.");
     }
-    transaction.update(listingRef, { ...listingContent(input), ...meetup, ...legacyPreciseFields, imageUrls, auctionStatus: "scheduled", updatedAt: now });
+    const mediaImages = await attachListingMedia(transaction, uid, listingId, imageUrls);
+    transaction.update(listingRef, { ...listingContent(input), ...meetup, ...legacyPreciseFields, imageUrls, mediaImages, mediaImageIds: mediaImages.map(m => m.imageId), auctionStatus: "scheduled", updatedAt: now });
   });
   return { listingId };
 });
@@ -563,6 +569,9 @@ export { getAccountSetupStatus, acceptWebPolicies, completeFirstTimeProfile, fin
 export { requestUploadPermits } from "./upload-permits";
 export { getProtectedWriteStatus } from "./protected-write-maintenance-runtime.ts";
 
+export { beginListingMedia, getListingMedia } from "./listing-media-runtime";
+
+export { uploadListingMediaSource } from "./listing-media-source";
 export { cleanupApprovedSyntheticFixture } from "./synthetic-fixture-cleanup";
 
 export { getAdminSession, getAdminEditorialPage, getAdminEditorialRecord, mutateAdminEditorial, previewAdminHomepage, publishAdminHomepage, getPublicHomepage, requestAdminAssetPermit, finalizeAdminAsset, getAdminControlOverview, invalidateEditorialListing, invalidateEditorialSeller, invalidateEditorialLifecycle } from "./editorial";

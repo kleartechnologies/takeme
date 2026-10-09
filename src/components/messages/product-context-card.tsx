@@ -1,5 +1,6 @@
 "use client";
 
+import { listingImage } from "@/lib/listing-media";
 import Image from "next/image";
 import Link from "next/link";
 import { ImageIcon } from "lucide-react";
@@ -17,7 +18,7 @@ export function ProductContextCard({ listing, listingId, title, image, link = tr
   const priceLabel = auction ? auctionBidLabel(listing, now) : listing?.status !== "active" ? "Listed price" : "";
   const price = listing ? auction && listing.auctionStatus === "ended" && listing.finalBid != null ? listing.finalBid / 100 : discoveryPrice(listing) : null;
   return <div className={styles.productCard}>
-    <span className={styles.productImage}>{(listing?.imageUrls[0] ?? image) ? <Image src={(listing?.imageUrls[0] ?? image)!} alt="" fill sizes="72px" className="object-cover" /> : <ImageIcon size={24} />}</span>
+    <span className={styles.productImage}>{(listing ? listingImage(listing, "thumbnail") : image) ? <Image src={(listing ? listingImage(listing, "thumbnail") : image)!} alt="" fill sizes="72px" className="object-cover" /> : <ImageIcon size={24} />}</span>
     <div className={styles.productText}><strong>{listing?.title ?? title}</strong><span>{listing ? `${listing.condition} · ${state}` : state}</span>{price !== null && <b>{priceLabel && <small>{priceLabel} </small>}{money(price)}</b>}</div>
     {link && <Link className={styles.viewItem} href={`/listings/${listingId}`}>{auction ? "View Auction" : "View Item"}</Link>}
   </div>;

@@ -110,5 +110,24 @@ service firebase.storage {
       allow update: if false;
       allow delete: if canManageListingMedia(uid, listingId);
     }
+    match /users/{uid}/listing-media-staging/{imageId}/source {
+      // Only the authenticated permit-checking broker creates raw objects via IAM.
+      // Direct SDK writes could mint a public download token, so clients have no access.
+      allow read, create, update, delete: if false;
+    }
+    match /users/{uid}/listing-media/{imageId}/{version}/{fileName} {
+      function mediaIsPublic() {
+        let op = firestore.get(/databases/(default)/documents/mediaOperations/$(imageId)).data;
+        let item = listing(op.listingId);
+        return op.uid == uid && op.status == 'READY' && item.sellerId == uid
+          && imageId in item.mediaImageIds
+          && (item.status in ['active', 'ended']
+            || (item.status == 'sold' && item.listingType == 'buy_now' && item.privacyVersion == 2));
+      }
+      allow read: if bucket in ['takeme-staging-822a5-media-v1', 'takeme-52b80-media-v1', 'demo-takeme.firebasestorage.app']
+        && (mediaIsPublic() || (request.auth != null && request.auth.uid == uid));
+      // Only the IAM-bound processor writes derivatives. Clients cannot replace them.
+      allow create, update, delete: if false;
+    }
   }
 }

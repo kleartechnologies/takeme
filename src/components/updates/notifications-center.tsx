@@ -1,5 +1,6 @@
 "use client";
 
+import { listingImage } from "@/lib/listing-media";
 import { ArrowDown, ArrowRight, ArrowUpDown, Bell, CheckCheck, CheckCircle2, Gavel, Heart, LoaderCircle, MessageCircle, Settings2, ShoppingBag, Star, Tag, TriangleAlert, Trophy, UserRound } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -61,7 +62,7 @@ function UpdatesFeed() {
     ids.forEach(id => requestedMedia.current.add(id));
     // Optional public thumbnails never block the private feed or replace event-time wording.
     void Promise.all(ids.map(async id => {
-      try { const { listing } = await getPublicListingDetail(id); return [id, { title: listing.title, image: listing.imageUrls[0] ?? null }] as const; }
+      try { const { listing } = await getPublicListingDetail(id); return [id, { title: listing.title, image: listingImage(listing, "thumbnail") ?? null }] as const; }
       catch { return [id, null] as const; }
     })).then(results => {
       const loaded: Record<string, ListingMedia> = {};

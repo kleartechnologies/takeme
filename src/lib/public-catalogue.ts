@@ -1,3 +1,4 @@
+import { parseListingMedia } from "./listing-media.ts";
 import type { Listing } from "../types/marketplace.ts";
 import { parsePublicLocation, formatPublicLocation } from "./general-location.ts";
 
@@ -26,6 +27,7 @@ export function parsePublicCatalogueListing(input: unknown): PublicCatalogueList
     categoryId: data.categoryId, condition: data.condition as Listing["condition"], price: data.price,
     listingType: data.listingType as Listing["listingType"], status: data.status as Listing["status"],
     publicLocation: area, location: formatPublicLocation(area), imageUrls,
+    mediaImages: parseListingMedia(data.mediaImages, data.sellerId),
     createdAt: date(data.createdAt)!, updatedAt: date(data.updatedAt) ?? date(data.createdAt)!,
   };
   for (const key of ["auctionStartAt", "auctionEndAt", "endedAt"] as const) {

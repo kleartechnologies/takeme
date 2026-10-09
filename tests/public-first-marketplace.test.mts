@@ -110,7 +110,7 @@ test("anonymous server feed rejects identity drift, redirects, foreign media and
   const env = { ...firebase, NODE_ENV: "production", TAKEME_RELEASE_TARGET: "staging", NEXT_PUBLIC_SITE_URL: stage.siteUrl, NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "false", TAKEME_BUILD_RELEASE_PROOF: releaseProofPrefix + btoa(JSON.stringify({ format: 1, purpose: "staging-preview", target: "staging", projectId: stage.projectId, siteUrl: stage.siteUrl, useEmulators: false, firebase, policy: { publicationApproved: true, termsVersion: stage.policyVersion, privacyVersion: stage.policyVersion, minimumAge: 18 } })) };
   const previous = Object.fromEntries(Object.keys(env).map(k => [k, process.env[k]]));
   const requests: { url: string; init?: RequestInit }[] = [];
-  const publicItem = { ...listing, imageUrls: [`https://firebasestorage.googleapis.com/v0/b/${stage.storageBucket}/o/photo.png?alt=media&token=synthetic-media-token`] };
+  const publicItem = { ...listing, imageUrls: [`https://firebasestorage.googleapis.com/v0/b/${stage.storageBucket}/o/users%2Fseller%2Flistings%2Fpublic-item%2Fphoto.png?alt=media&token=synthetic-media-token`] };
   let payload: unknown = { listings: [publicItem] }, status = 200;
   t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => { requests.push({ url, init }); return new Response(JSON.stringify({ result: payload }), { status }); });
   try {

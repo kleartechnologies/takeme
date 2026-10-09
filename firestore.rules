@@ -232,6 +232,11 @@ service cloud.firestore {
       }
     }
 
+    match /mediaOperations/{imageId} {
+      allow get: if signedIn() && resource.data.uid == request.auth.uid;
+      allow list, create, update, delete: if false;
+    }
+
     match /categories/{categoryId} { allow read: if true; allow write: if isAdmin() && marketplaceEligible(); }
     match /favorites/{favoriteId} { allow read, write: if false; }
 

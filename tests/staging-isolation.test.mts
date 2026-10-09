@@ -29,7 +29,7 @@ function fixture() {
 }
 
 const stageImage = `https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/users%2Ftest-seller%2Flistings%2Ftest-listing%2Fphoto.png?alt=media&token=synthetic-media-token`;
-const productionImage = "https://firebasestorage.googleapis.com/v0/b/takeme-52b80.firebasestorage.app/o/photo.png?alt=media&token=synthetic-media-token";
+const productionImage = "https://firebasestorage.googleapis.com/v0/b/takeme-52b80.firebasestorage.app/o/users%2Ftest-seller%2Flistings%2Ftest-listing%2Fphoto.png?alt=media&token=synthetic-media-token";
 
 test("token-free staging editorial assets are restricted to the exact bucket and PNG namespace", () => {
   const image = `https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/admin-assets%2F12345678-abcd-4321-abcd-123456789abc%2Fimage.png?alt=media`;

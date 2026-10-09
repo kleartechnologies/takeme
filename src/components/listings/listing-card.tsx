@@ -1,5 +1,6 @@
 "use client";
 
+import { listingImage } from "@/lib/listing-media";
 import { Clock3, MapPin, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -64,7 +65,7 @@ export function ListingCard({ listing, sizes = "(max-width: 380px) 100vw, (max-w
     <article ref={card} className={`${variant === "discovery" ? "discovery-product " : ""}group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--takeme-border)] bg-white shadow-[var(--takeme-shadow-sm)] transition hover:border-[var(--takeme-green)] hover:shadow-[var(--takeme-shadow-md)]`}>
       <div className={`${variant === "discovery" ? "discovery-product-image " : ""}relative aspect-[4/3] overflow-hidden bg-stone-100`}>
         <Link href={`/listings/${listing.id}`} onClick={recordClick} aria-label={`View ${listing.title}`} className="relative block h-full w-full">
-          {listing.imageUrls[0] && <Image src={listing.imageUrls[0]} alt={listing.title} fill sizes={sizes} loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : "auto"} className="object-cover transition duration-500 group-hover:scale-[1.04]" />}
+          {listing.imageUrls[0] && <Image src={listingImage(listing, "card")} alt={listing.title} fill sizes={sizes} loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : "auto"} className="object-cover transition duration-500 group-hover:scale-[1.04]" />}
         </Link>
         <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5 sm:left-3 sm:top-3">
           {(isAuction || variant !== "discovery") && <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shadow-sm sm:text-xs ${isAuction ? "bg-orange-700 text-white" : "bg-white/95 text-[var(--takeme-dark-green)]"}`}>{isAuction ? auctionLabel(listing) : listing.condition}</span>}

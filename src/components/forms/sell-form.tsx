@@ -1,4 +1,7 @@
 "use client";
+import { mediaPipelineEnabled, prepareServerPhoto, serverPhotoPreview, serverReadyPhotoPreview, preparedMedia } from "@/lib/services/listing-media";
+import { retainedListingMedia } from "@/lib/listing-media";
+import { mediaPhotoProgress, mediaPhotoFailure } from "@/lib/media-photo-state";
 
 import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, ChevronRight, Gavel, ImagePlus, LoaderCircle, MapPin, ShieldCheck, ShoppingBag, Wrench, X } from "lucide-react";
 import Image from "next/image";
@@ -27,7 +30,7 @@ import { useTransientDraft } from "@/lib/use-transient-draft";
 import type { Listing } from "@/types/marketplace";
 import styles from "./sell.module.css";
 
-interface PhotoEntry { id: string; url: string; file?: File; existing: boolean; failed?: boolean; preparing?: boolean; name?: string; digest?: string; error?: string }
+interface PhotoEntry { id: string; url: string; previewUrl?: string; file?: File; existing: boolean; failed?: boolean; preparing?: boolean; retryable?: boolean; name?: string; digest?: string; error?: string; pipelineStatus?: "UPLOADING" | "PROCESSING"; previewFailed?: boolean }
 const conditionHelp = { New: "Brand new, unused.", "Like new": "Used, with minimal signs of wear.", Good: "Used, with normal signs of use.", Fair: "Used, with visible wear. Read the description for details." };
 const money = new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" });
 function localDateTime(value: Date | string) {
@@ -54,7 +57,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     const dates = auctionDefaults();
     return { title: listing?.title ?? "", categoryId: listing?.categoryId ?? "", condition: listing?.condition ?? "Good", description: listing?.description ?? "", price: listing?.listingType === "buy_now" ? String(listing.price) : "", districtOrCity: listing?.publicLocation?.districtOrCity ?? "", state: listing?.publicLocation?.state ?? "", meetupLocationId: listing?.meetupLocationId ?? "", saveLocationToProfile: false, listingType: listing?.listingType === "auction" ? "auction" : "buy_now", startingBid: listing?.startingBid ? senToRinggit(listing.startingBid) : "", minimumBidIncrement: listing?.minimumBidIncrement ? senToRinggit(listing.minimumBidIncrement) : "", auctionStartAt: listing?.auctionStartAt ? localDateTime(listing.auctionStartAt) : dates.start, auctionEndAt: listing?.auctionEndAt ? localDateTime(listing.auctionEndAt) : dates.end, startMode: listing ? "scheduled" : "now" };
   }, [listing]);
-  const [photos, setPhotos] = useState<PhotoEntry[]>(() => listing?.imageUrls.map(url => ({ id: url, url, existing: true })) ?? []);
+  const [photos, setPhotos] = useState<PhotoEntry[]>(() => listing?.imageUrls.map(url => ({ id: url, url, existing: true, preparing: mediaPipelineEnabled && !!retainedListingMedia(listing, url, process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "") })) ?? []);
   const photoUrls = useRef(new Set<string>());
   const [photoError, setPhotoError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -67,6 +70,8 @@ export function SellForm({ listing }: { listing?: Listing }) {
   const restoredStage = useRef(listing ? 2 : 0);
   const historyCallbacks = useRef<{ exit: () => void; blocked: () => boolean }>({ exit: () => {}, blocked: () => false });
   const queuedPhotoBytes = useRef(0);
+  const preparingPhotos = useRef(new Set<string>());
+  const replacePhotoInputs = useRef(new Map<string, HTMLInputElement>());
   const preparationQueue = useRef(Promise.resolve());
   const photoGeneration = useRef(0);
   const [switchType, setSwitchType] = useState<SellValues["listingType"] | null>(null);
@@ -96,10 +101,30 @@ export function SellForm({ listing }: { listing?: Listing }) {
     recovered.current = true; setHasRecoveredDraft(true);
     reset(value.values); restoredStage.current = restoredSellStep(value.step, value.flowVersion); setStep(restoredStage.current); setSheet(null);
     const retained = readRecoveryFiles(recoveryScope, user.uid);
-    setPhotos(current => [...current.filter(photo => photo.existing), ...retained.map(file => {
+    const restoredPhotos = retained.map(file => {
       const url = URL.createObjectURL(file); photoUrls.current.add(url);
-      return { id: crypto.randomUUID(), url, file, digest: preparedPhotoFingerprint(file), existing: false };
-    })]);
+      return { id: crypto.randomUUID(), url, file, digest: mediaPipelineEnabled ? preparedMedia(file)?.digest : preparedPhotoFingerprint(file), existing: false, preparing: mediaPipelineEnabled };
+    });
+    setPhotos(current => [...current.filter(photo => photo.existing), ...restoredPhotos]);
+    const generation = photoGeneration.current;
+    if (mediaPipelineEnabled) for (const photo of restoredPhotos) {
+      // Restore only an already-ready preview. Authentication/policy recovery
+      // never silently issues a new permit or repeats an upload.
+      const ready = preparedMedia(photo.file);
+      if (!ready) {
+        setPhotos(current => current.map(item => item.id === photo.id ? { ...item, preparing: false, failed: true, error: "Reselect this photo to prepare it again." } : item));
+        continue;
+      }
+      void serverPhotoPreview(photo.file).then(blob => {
+        if (generation !== photoGeneration.current) return;
+        const url = URL.createObjectURL(blob); photoUrls.current.add(url);
+        URL.revokeObjectURL(photo.url); photoUrls.current.delete(photo.url);
+        setPhotos(current => {
+          if (!current.some(item => item.id === photo.id)) { URL.revokeObjectURL(url); photoUrls.current.delete(url); return current; }
+          return current.map(item => item.id === photo.id ? { ...item, url, preparing: false, failed: false } : item);
+        });
+      }).catch(() => { if (generation === photoGeneration.current) setPhotos(current => current.map(item => item.id === photo.id ? { ...item, preparing: false, failed: true } : item)); });
+    }
     const missing = Math.max(0, value.photoCount - retained.length); setMissingPhotos(missing);
     if (missing) { restoredStage.current = 0; setStep(0); }
     setRecoveryMessage(missing ? "Your listing entries are restored. Please reselect your photos; the browser could not retain those files. Nothing has been published." : "Your listing draft is restored. Review it before saving or publishing.");
@@ -108,6 +133,26 @@ export function SellForm({ listing }: { listing?: Listing }) {
     // Initial empty form state must not overwrite files before recovery reads them.
     if (recoveryReady && user && !result) rememberRecoveryFiles(recoveryScope, user.uid, photos.flatMap(photo => photo.file ? [photo.file] : []));
   }, [user, result, photos, recoveryScope, recoveryReady]);
+
+  useEffect(() => {
+    if (!mediaPipelineEnabled || !listing || listing.sellerId !== user?.uid) return;
+    let active = true;
+    for (const originalUrl of listing.imageUrls) {
+      const media = retainedListingMedia(listing, originalUrl, process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "");
+      if (!media) continue;
+      void serverReadyPhotoPreview(media).then(blob => {
+        if (!active) return;
+        const previewUrl = URL.createObjectURL(blob); photoUrls.current.add(previewUrl);
+        setPhotos(current => {
+          if (!current.some(photo => photo.existing && photo.url === originalUrl)) { URL.revokeObjectURL(previewUrl); photoUrls.current.delete(previewUrl); return current; }
+          return current.map(photo => photo.existing && photo.url === originalUrl ? { ...photo, previewUrl, preparing: false, failed: false } : photo);
+        });
+      }).catch(() => {
+        if (active) setPhotos(current => current.map(photo => photo.existing && photo.url === originalUrl ? { ...photo, preparing: false, failed: true, error: "This photo could not be loaded. Reopen the draft or replace it." } : photo));
+      });
+    }
+    return () => { active = false; };
+  }, [listing, user?.uid]);
 
   useEffect(() => {
     if (!user) return;
@@ -150,38 +195,60 @@ export function SellForm({ listing }: { listing?: Listing }) {
     const incoming = Array.from(files).slice(0, replacementId ? 1 : available);
     if (files.length > available) setPhotoError(`You can keep up to ${MAX_LISTING_IMAGES} photos. The extra photos were not added.`);
     else setPhotoError("");
-    const generation = photoGeneration.current;
-    const entries = incoming.map(file => ({ id: crypto.randomUUID(), url: "", existing: false, preparing: true, name: file.name }));
+    const entries = incoming.map(file => ({ id: crypto.randomUUID(), url: mediaPipelineEnabled ? URL.createObjectURL(file) : "", file: mediaPipelineEnabled ? file : undefined, existing: false, preparing: true, name: file.name }));
+    for (const entry of entries) if (entry.url) photoUrls.current.add(entry.url);
     if (replacementId) {
       const old = photos.find(photo => photo.id === replacementId);
+      if (old?.previewUrl) { URL.revokeObjectURL(old.previewUrl); photoUrls.current.delete(old.previewUrl); }
       if (old?.url && !old.existing) { URL.revokeObjectURL(old.url); photoUrls.current.delete(old.url); }
       setPhotos(current => current.map(photo => photo.id === replacementId ? entries[0] : photo));
     } else setPhotos(current => [...current, ...entries]);
     setMissingPhotos(count => Math.max(0, count - incoming.length));
     incoming.forEach((file, index) => {
-      const permittedSize = file.size > 0 && file.size <= MAX_CONSUMER_PHOTO_BYTES && queuedPhotoBytes.current + file.size <= 60 * 1024 * 1024;
-      const id = entries[index].id;
-      if (!permittedSize) { setPhotos(current => current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true } : photo)); return; }
-      queuedPhotoBytes.current += file.size;
-      preparationQueue.current = preparationQueue.current.then(async () => {
+      preparePhoto(file, entries[index].id, entries[index].url);
+    });
+  }
+  function preparePhoto(file: File, id: string, originalPreview: string) {
+    if (preparingPhotos.current.has(id)) return;
+    const generation = photoGeneration.current;
+    const permittedSize = file.size > 0 && file.size <= MAX_CONSUMER_PHOTO_BYTES && queuedPhotoBytes.current + file.size <= 60 * 1024 * 1024;
+    if (!permittedSize) { setPhotos(current => current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true, retryable: false } : photo)); return; }
+    queuedPhotoBytes.current += file.size;
+    preparingPhotos.current.add(id);
+    const prepare = async () => {
         try {
           if (generation !== photoGeneration.current) return;
-          const normalized = await prepareConsumerPhoto(file);
+          const normalized = mediaPipelineEnabled
+            ? (await prepareServerPhoto(file, id, pipelineStatus => setPhotos(current => current.map(photo => photo.id === id ? { ...photo, pipelineStatus } : photo))), file)
+            : await prepareConsumerPhoto(file);
           if (generation !== photoGeneration.current) return;
-          const url = URL.createObjectURL(normalized); photoUrls.current.add(url);
+          const preview = mediaPipelineEnabled ? await serverPhotoPreview(normalized) : normalized;
+          const url = URL.createObjectURL(preview); photoUrls.current.add(url);
+          if (originalPreview) { URL.revokeObjectURL(originalPreview); photoUrls.current.delete(originalPreview); }
           setPhotos(current => {
             if (!current.some(photo => photo.id === id)) { URL.revokeObjectURL(url); photoUrls.current.delete(url); return current; }
-            const digest = preparedPhotoFingerprint(normalized);
-            if (current.some(photo => photo.id !== id && photo.digest === digest)) {
+            const digest = mediaPipelineEnabled ? preparedMedia(normalized)?.digest : preparedPhotoFingerprint(normalized);
+            if (digest && current.some(photo => photo.id !== id && photo.digest === digest)) {
               URL.revokeObjectURL(url); photoUrls.current.delete(url);
-              return current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true } : photo);
+              return current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true, retryable: false, error: "This photo is already included. Remove the duplicate or replace it." } : photo);
             }
-            return current.map(photo => photo.id === id ? { ...photo, url, file: normalized, digest, preparing: false, failed: false } : photo);
+            return current.map(photo => photo.id === id ? { ...photo, url, file: normalized, digest, preparing: false, failed: false, retryable: false, error: undefined, previewFailed: false } : photo);
           });
-        } catch (error) { if (generation === photoGeneration.current) setPhotos(current => current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true, error: error instanceof ListingImagePipelineError ? error.message : undefined } : photo)); }
-        finally { queuedPhotoBytes.current -= file.size; }
-      });
-    });
+        } catch (error) {
+          const failure = mediaPipelineEnabled ? mediaPhotoFailure(error) : { retryable: false, message: error instanceof ListingImagePipelineError ? error.message : undefined };
+          if (generation === photoGeneration.current) setPhotos(current => current.map(photo => photo.id === id ? { ...photo, preparing: false, failed: true, retryable: failure.retryable, error: failure.message } : photo));
+        }
+        finally { queuedPhotoBytes.current -= file.size; preparingPhotos.current.delete(id); }
+      };
+    if (mediaPipelineEnabled) void prepare(); else preparationQueue.current = preparationQueue.current.then(prepare);
+  }
+  function retryPhoto(photo: PhotoEntry) {
+    if (!mediaPipelineEnabled || photo.preparing || busy) return;
+    if (!photo.retryable) { replacePhotoInputs.current.get(photo.id)?.click(); return; }
+    if (!photo.file) return;
+    // Same File/operation ID: a lost response cannot issue a second image upload.
+    setPhotos(current => current.map(item => item.id === photo.id ? { ...item, preparing: true, failed: false, retryable: false, error: undefined } : item));
+    preparePhoto(photo.file, photo.id, photo.url);
   }
   function chooseType(type: SellValues["listingType"]) {
     if (listing || type === listingType) return;
@@ -191,6 +258,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
     reset(switchedSellValues(getValues(), type), { keepDefaultValues: true });
   }
   function removePhoto(photo: PhotoEntry) {
+    if (photo.previewUrl) { URL.revokeObjectURL(photo.previewUrl); photoUrls.current.delete(photo.previewUrl); }
     if (!photo.existing) { URL.revokeObjectURL(photo.url); photoUrls.current.delete(photo.url); }
     setPhotos(current => current.filter(item => item.id !== photo.id));
   }
@@ -212,8 +280,11 @@ export function SellForm({ listing }: { listing?: Listing }) {
   }
   function next() {
     clearErrors(); setSubmitError("");
-    if (step === 2 && photos.some(photo => photo.preparing)) { setSubmitError("Your photos are still preparing. You can keep editing the details."); return; }
-    if (step === 2 ? validateAll() : validateStep(step)) go(Math.min(3, step + 1)); else setFocusStep(n => n + 1);
+    // Review is read-only; preparation must block publication, not editing/review.
+    if (step === 2 && mediaPipelineEnabled) {
+      for (let index = 0; index < 3; index++) if (!validateStep(index)) { go(index); setFocusStep(n => n + 1); return; }
+      go(3);
+    } else if (step === 2 ? validateAll() : validateStep(step)) go(Math.min(3, step + 1)); else setFocusStep(n => n + 1);
   }
   function requestExit() { if (dirty && !result) setSheet("exit"); else router.push("/profile/listings"); }
   function checkpointSubmission() {
@@ -260,13 +331,15 @@ export function SellForm({ listing }: { listing?: Listing }) {
   let previewListing: Listing | null = null;
   if (step === 3 && previewLocation) {
     const input = sellInput(preview, previewAt);
-    previewListing = { ...input, id: listing?.id ?? "unpublished-preview", sellerId: user.uid, imageUrls: photos.map(photo => photo.url), location: formatPublicLocation(previewLocation), price: input.listingType === "buy_now" ? input.price : 0, status: "active", createdAt: listing?.createdAt ?? new Date(previewAt).toISOString(), updatedAt: new Date(previewAt).toISOString(), meetupLocation: selectedMeetup ? { name: selectedMeetup.name, area: selectedMeetup.area, state: selectedMeetup.state, country: "Malaysia" } : null, ...(input.listingType === "auction" ? { bidCount: 0, currentBid: 0, auctionStatus: Date.parse(input.auctionStartAt) > previewAt ? "scheduled" : "active" } : {}) };
+    previewListing = { ...input, id: listing?.id ?? "unpublished-preview", sellerId: user.uid, imageUrls: photos.filter(photo => !photo.preparing && !photo.failed).map(photo => photo.previewUrl ?? photo.url), location: formatPublicLocation(previewLocation), price: input.listingType === "buy_now" ? input.price : 0, status: "active", createdAt: listing?.createdAt ?? new Date(previewAt).toISOString(), updatedAt: new Date(previewAt).toISOString(), meetupLocation: selectedMeetup ? { name: selectedMeetup.name, area: selectedMeetup.area, state: selectedMeetup.state, country: "Malaysia" } : null, ...(input.listingType === "auction" ? { bidCount: 0, currentBid: 0, auctionStatus: Date.parse(input.auctionStartAt) > previewAt ? "scheduled" : "active" } : {}) };
   }
   const publishLabel = auctionDraft ? "Publish draft auction" : listing && !draft ? "Save changes" : listingType === "auction" ? "Publish auction" : "Publish listing";
+  const photoProgress = mediaPhotoProgress(photos, missingPhotos);
 
   return <div className={styles.flow} data-sell-flow>
     {recoveryMessage && !result && <p role="status" className={styles.helper}>{recoveryMessage}</p>}
-    {step > 0 && !result && photos.some(photo => photo.preparing || photo.failed) && <p role="status" className={styles.helper}>{photos.some(photo => photo.failed) ? "A photo couldn’t be processed." : "Your photos are preparing while you edit."} <button type="button" className={styles.textButton} onClick={() => go(0)}>Review photos</button></p>}
+    {!mediaPipelineEnabled && step > 0 && !result && photos.some(photo => photo.preparing || photo.failed) && <p role="status" className={styles.helper}>{photos.some(photo => photo.failed) ? "A photo couldn’t be processed." : "Your photos are preparing while you edit."} <button type="button" className={styles.textButton} onClick={() => go(0)}>Review photos</button></p>}
+    {mediaPipelineEnabled && !result && photoProgress.total > 0 && <section className={styles.photoProgress} aria-label="Photo preparation"><div><strong role="status" aria-live="polite">{step === 0 && photoProgress.pending ? "Preparing photos…" : photoProgress.label}</strong>{photoProgress.failed > 0 && <span>{photoProgress.failed} {photoProgress.failed === 1 ? "photo needs" : "photos need"} attention</span>}</div><progress value={photoProgress.ready} max={photoProgress.total} aria-label="Photos ready" /><p>{photoProgress.pending ? step === 3 ? `Preparing ${photoProgress.pending} remaining ${photoProgress.pending === 1 ? "photo" : "photos"}… You can review your details while you wait.` : "Large photos may take a little longer. Keep this page open; you can continue editing your listing." : photoProgress.failed ? "Retry a connection failure, or replace/remove the affected photo. Your ready photos are kept." : "Your photos are ready for review."}</p>{step > 0 && (photoProgress.pending > 0 || photoProgress.failed > 0) && <button type="button" className={styles.textButton} onClick={() => go(0)}>Review photos</button>}</section>}
     <header className={styles.header}><button type="button" className="icon-button" disabled={busy} aria-label={step && !result ? "Previous step" : "Exit listing flow"} onClick={() => step && !result ? go(step - 1) : requestExit()}><ArrowLeft size={21} /></button><Image src="/brand/takeme-wordmark.png" alt="TAKEME" width={108} height={36} /><button type="button" className="icon-button" disabled={busy} aria-label="Close listing flow" onClick={requestExit}><X size={21} /></button></header>
     {result ? <section className={styles.success}><Image src={result.draft ? "/brand/mascot-2d-happy.png" : "/brand/mascot-3d-excited.png"} alt="" width={190} height={190} priority /><p className={styles.eyebrow}>{result.draft ? "Safe in your drafts" : listing && !draft ? "Listing updated" : "A new find on TAKEME"}</p><h1 ref={heading} tabIndex={-1}>{title}</h1><p>{result.draft ? "Your listing is private. Resume it from My Listings when you’re ready." : result.scheduled ? `Buyers can discover your auction. Bidding opens ${new Date(preview.auctionStartAt).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" })}.` : listing && !draft ? "Your updated details are now visible to buyers." : "Buyers can now discover your item and contact you on TAKEME."}</p><div className={styles.successActions}><Link className="button-primary" href={result.draft ? `/listings/${result.id}/edit` : `/listings/${result.id}`}>{result.draft ? "Resume draft" : result.auction ? "View auction" : "View listing"}<ArrowRight size={17} /></Link>{!result.draft && <button type="button" className="button-secondary" onClick={async () => {
         try { const url = `${window.location.origin}/listings/${result.id}`; if (navigator.share) await navigator.share({ title: getValues().title, url }); else { await navigator.clipboard.writeText(url); setShareMessage("Listing link copied."); } }
@@ -279,7 +352,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
           <fieldset disabled={busy} className={styles.fields}><h2 ref={heading} tabIndex={-1}>{["Show your item at its best", "Find the right category", "Tell buyers about your item", "Review your listing"][step]}</h2>
             <p className={styles.intro}>{[`Add 1–${MAX_LISTING_IMAGES} photos. The first photo is your cover.`, "Choose a category to continue straight to details.", "One screen for your item, price and general area.", "Check your photos and details. Nothing is public until you publish."][step]}</p>
             {step === 0 && <div className={styles.typeChoices} role="group" aria-label="Listing type"><input type="hidden" {...register("listingType")} /><TypeOption title="Fixed price" description="Set an asking price. Discuss offers in Chat." caption="For new, branded and preloved finds" icon={<ShoppingBag size={27} />} active={listingType === "buy_now"} disabled={Boolean(listing && listing.listingType !== "buy_now")} onClick={() => chooseType("buy_now")} /><TypeOption title="Auction" description="Let buyers compete with bids." caption="For collectibles and one-of-a-kind items" icon={<Gavel size={27} />} active={listingType === "auction"} disabled={Boolean(listing && listing.listingType !== "auction")} onClick={() => chooseType("auction")} />{listing && <p className={styles.helper}>The listing format stays the same when editing.</p>}</div>}
-            {step === 0 && <div id="listing-photos"><div className={styles.photoToolbar}><strong>{photos.length} / {MAX_LISTING_IMAGES} photos{missingPhotos > 0 && ` · ${missingPhotos} to reselect`}</strong><span>JPEG, PNG, WebP, AVIF · HEIC/HEIF when supported by your device · up to 30 MB</span></div><div className={styles.photoGrid}>{photos.map((photo, index) => <article key={photo.id} className={styles.photo} draggable={!busy} onDragStart={() => { dragPhoto.current = photo.id; }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const source = photos.findIndex(item => item.id === dragPhoto.current); if (source >= 0 && source !== index) movePhoto(source, index); dragPhoto.current = null; }}><div className={styles.photoImage}>{photo.preparing || photo.failed ? <div className={styles.failedPhoto}>{photo.preparing ? <LoaderCircle size={24} className="animate-spin" /> : <Camera size={24} />}<span>{photo.preparing ? "Preparing…" : (photo.error ?? "We couldn’t process this photo. Tap to replace it.")}</span></div> : <Image src={photo.url} alt={`Listing photo ${index + 1}`} fill sizes="180px" unoptimized className="object-cover" onError={() => setPhotos(current => current.map(item => item.id === photo.id ? { ...item, failed: true } : item))} />}{index === 0 && <span className={styles.cover}>Cover</span>}<button type="button" aria-label={`Remove image ${index + 1}`} onClick={() => removePhoto(photo)} className={styles.removePhoto}><X size={17} /></button></div><p className={styles.photoStatus} role="status">{photo.preparing ? "Preparing…" : photo.failed ? "Couldn’t process" : "Ready"}</p><label className={styles.replacePhoto}>Replace<input type="file" accept={CONSUMER_PHOTO_ACCEPT} aria-label={`Replace image ${index + 1}`} className="sr-only" onChange={event => { addPhotos(event.target.files, photo.id); event.target.value = ""; }} /></label><div className={styles.photoControls}><button type="button" disabled={index === 0} onClick={() => movePhoto(index, index - 1)} aria-label={`Move image ${index + 1} earlier`}><ArrowLeft size={16} /></button><button type="button" disabled={index === photos.length - 1} onClick={() => movePhoto(index, index + 1)} aria-label={`Move image ${index + 1} later`}><ArrowRight size={16} /></button><button type="button" disabled={index === 0} onClick={() => movePhoto(index, 0)} aria-label={`Make image ${index + 1} the cover`}>Cover</button></div></article>)}{Array.from({ length: missingPhotos }, (_, index) => <article key={`missing-${index}`} className={styles.photo}><div className={styles.photoImage}><div className={styles.failedPhoto}><Camera size={24} /><span>Reselect this photo. Its file was not retained by the browser.</span></div><button type="button" aria-label={`Remove missing photo ${index + 1}`} className={styles.removePhoto} onClick={() => setMissingPhotos(count => Math.max(0, count - 1))}><X size={17} /></button></div><label className={styles.replacePhoto}>Reselect<input type="file" accept={CONSUMER_PHOTO_ACCEPT} aria-label={`Reselect missing photo ${index + 1}`} className="sr-only" onChange={event => { addPhotos(event.target.files); event.target.value = ""; }} /></label></article>)}{photos.length < MAX_LISTING_IMAGES && <label className={styles.addPhoto}><ImagePlus size={30} /><strong>Add photos</strong><span>Choose from your device</span><input type="file" multiple accept={CONSUMER_PHOTO_ACCEPT} aria-label="Add photos" className="sr-only" onChange={event => { addPhotos(event.target.files); event.target.value = ""; }} /></label>}</div><p className={styles.helper}>Photos prepare while you fill in the details and upload only when you save or publish. Drag to reorder, or use the arrows and cover controls.</p>{photoError && <p className={styles.error} role="alert">{photoError}</p>}</div>}
+            {step === 0 && <div id="listing-photos"><div className={styles.photoToolbar}><strong>{photos.length} / {MAX_LISTING_IMAGES} photos{missingPhotos > 0 && ` · ${missingPhotos} to reselect`}</strong><span>JPEG, PNG, WebP, AVIF · {mediaPipelineEnabled ? "Compatible iPhone photos" : "HEIC/HEIF when supported by your device"} · up to 30 MB</span></div><div className={styles.photoGrid}>{photos.map((photo, index) => <article key={photo.id} className={styles.photo} draggable={!busy} onDragStart={() => { dragPhoto.current = photo.id; }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const source = photos.findIndex(item => item.id === dragPhoto.current); if (source >= 0 && source !== index) movePhoto(source, index); dragPhoto.current = null; }}><div className={styles.photoImage}>{photo.preparing && !photo.existing && mediaPipelineEnabled && photo.url && !photo.previewFailed && <Image src={photo.url} alt={`Selected photo ${index + 1}`} fill sizes="180px" unoptimized className="object-cover" onError={() => setPhotos(current => current.map(item => item.id === photo.id ? { ...item, previewFailed: true } : item))} />}{photo.preparing || photo.failed ? <div className={styles.failedPhoto}>{photo.preparing ? <LoaderCircle size={24} className="animate-spin" /> : <Camera size={24} />}<span>{photo.preparing ? "Preparing…" : (photo.error ?? "We couldn’t process this photo. Tap to replace it.")}</span></div> : <Image src={photo.previewUrl ?? photo.url} alt={`Listing photo ${index + 1}`} fill sizes="180px" unoptimized className="object-cover" onError={() => setPhotos(current => current.map(item => item.id === photo.id ? { ...item, failed: true } : item))} />}{index === 0 && <span className={styles.cover}>Cover</span>}<button type="button" aria-label={`Remove image ${index + 1}`} onClick={() => removePhoto(photo)} className={styles.removePhoto}><X size={17} /></button></div><p className={styles.photoStatus} role="status">{photo.preparing ? photo.pipelineStatus === "UPLOADING" ? "Uploading…" : photo.pipelineStatus === "PROCESSING" ? "Processing…" : "Preparing…" : photo.failed ? "Needs attention" : "Ready"}</p>{mediaPipelineEnabled && photo.failed && <button type="button" className={styles.retryPhoto} disabled={busy} onClick={() => retryPhoto(photo)} aria-label={`Retry image ${index + 1}`}>Retry</button>}<label className={styles.replacePhoto}>Replace<input type="file" accept={CONSUMER_PHOTO_ACCEPT} aria-label={`Replace image ${index + 1}`} ref={element => { if (element) replacePhotoInputs.current.set(photo.id, element); else replacePhotoInputs.current.delete(photo.id); }} className="sr-only" onChange={event => { addPhotos(event.target.files, photo.id); event.target.value = ""; }} /></label><div className={styles.photoControls}><button type="button" disabled={index === 0} onClick={() => movePhoto(index, index - 1)} aria-label={`Move image ${index + 1} earlier`}><ArrowLeft size={16} /></button><button type="button" disabled={index === photos.length - 1} onClick={() => movePhoto(index, index + 1)} aria-label={`Move image ${index + 1} later`}><ArrowRight size={16} /></button><button type="button" disabled={index === 0} onClick={() => movePhoto(index, 0)} aria-label={`Make image ${index + 1} the cover`}>Cover</button></div></article>)}{Array.from({ length: missingPhotos }, (_, index) => <article key={`missing-${index}`} className={styles.photo}><div className={styles.photoImage}><div className={styles.failedPhoto}><Camera size={24} /><span>Reselect this photo. Its file was not retained by the browser.</span></div><button type="button" aria-label={`Remove missing photo ${index + 1}`} className={styles.removePhoto} onClick={() => setMissingPhotos(count => Math.max(0, count - 1))}><X size={17} /></button></div><label className={styles.replacePhoto}>Reselect<input type="file" accept={CONSUMER_PHOTO_ACCEPT} aria-label={`Reselect missing photo ${index + 1}`} className="sr-only" onChange={event => { addPhotos(event.target.files); event.target.value = ""; }} /></label></article>)}{photos.length < MAX_LISTING_IMAGES && <label className={styles.addPhoto}><ImagePlus size={30} /><strong>Add photos</strong><span>Choose from your device</span><input type="file" multiple accept={CONSUMER_PHOTO_ACCEPT} aria-label="Add photos" className="sr-only" onChange={event => { addPhotos(event.target.files); event.target.value = ""; }} /></label>}</div><p className={styles.helper}>{mediaPipelineEnabled ? "Photos upload and process while you fill in the details." : "Photos prepare while you fill in the details and upload only when you save or publish."} Drag to reorder, or use the arrows and cover controls.</p>{photoError && <p className={styles.error} role="alert">{photoError}</p>}</div>}
             {step === 1 && <><label className="form-field"><span>Search categories</span><input type="search" value={categorySearch} onChange={event => setCategorySearch(event.target.value)} placeholder="Try electronics, fashion…" /></label><input type="hidden" {...register("categoryId")} /><div className={styles.categoryGrid} role="group" aria-label="Category (required)" aria-describedby={errors.categoryId ? "category-error" : undefined}>{categories.filter(category => category.name.toLowerCase().includes(categorySearch.trim().toLowerCase())).map(category => <button type="button" key={category.id} aria-pressed={preview.categoryId === category.id} onClick={() => { setValue("categoryId", category.id, { shouldDirty: true }); clearErrors("categoryId"); go(2); }}><span className={styles.categoryIcon}>{category.icon.startsWith("/") ? <Image src={category.icon} alt="" width={44} height={44} /> : <Wrench size={25} />}</span><span>{category.name}</span>{preview.categoryId === category.id ? <CheckCircle2 size={18} /> : <ChevronRight size={17} />}</button>)}</div>{!categories.some(category => category.name.toLowerCase().includes(categorySearch.trim().toLowerCase())) && <p className={styles.helper}>No categories match. Try another search.</p>}{errors.categoryId && <p id="category-error" className={styles.error} role="alert">{errors.categoryId.message}</p>}</>}
             {step === 2 && <div className={styles.fieldStack}><Field label="Item title" id="sell-title" error={errors.title?.message} hint="Be specific: brand, item and useful details. 6–80 characters."><input id="sell-title" {...register("title")} maxLength={80} placeholder="e.g. Nintendo Switch OLED with controllers" aria-invalid={Boolean(errors.title)} aria-describedby="sell-title-help" /></Field></div>}
             {step === 2 && <><h3 className={styles.sectionTitle}>Condition</h3><input type="hidden" {...register("condition")} /><div className={styles.conditionChoices} role="group" aria-label="Condition (required)">{LISTING_CONDITIONS.map(condition => <button type="button" key={condition} aria-pressed={preview.condition === condition} onClick={() => { setValue("condition", condition, { shouldDirty: true }); clearErrors("condition"); }}><span className={styles.choiceMarker}>{preview.condition === condition && <Check size={16} />}</span><span><strong>{condition}</strong><small>{conditionHelp[condition]}</small></span></button>)}</div>{errors.condition && <p role="alert" className={styles.error}>{errors.condition.message}</p>}<p className={styles.helper}>Buyers see this exact condition on Product Detail.</p></>}
@@ -292,7 +365,7 @@ export function SellForm({ listing }: { listing?: Listing }) {
           {progress && <p className={styles.helper} role="status" aria-live="polite">{progress}</p>}
           <div className={styles.actions}><button type="button" className="button-secondary" disabled={busy} onClick={() => step ? go(step - 1) : requestExit()}>{step ? "Back" : "Cancel"}</button><button type="submit" disabled={busy || (step === 0 && photos.length + missingPhotos === 0) || (step === 3 && Boolean(photoPreparationIssue(photos, missingPhotos)))} className="button-primary">{busy ? <><LoaderCircle size={17} className="animate-spin" />Saving…</> : step === 3 ? listing && !draft ? "Review changes" : "Ready to publish" : step === 2 ? "Review listing" : "Next"}<ArrowRight size={17} /></button></div>
         </form>
-        {step !== 3 && <aside className={styles.sidebar}><p className={styles.eyebrow}>Your next marketplace find</p><div className={styles.miniPreview}><div className={styles.miniImage}>{photos[0]?.url && !photos[0].failed ? <Image src={photos[0].url} alt="Your cover photo" fill sizes="320px" unoptimized className="object-contain" /> : <Camera size={36} />}</div><div><small>{preview.categoryId ? getCategoryName(preview.categoryId) : "Your listing"}</small><h3>{preview.title?.trim() || "Something good deserves a new home"}</h3><strong>{listingType === "auction" ? "Starting bid " : ""}{money.format(Number(listingType === "auction" ? preview.startingBid : preview.price) || 0)}</strong><span>{preview.condition}</span><p><MapPin size={13} />{previewLocation ? formatPublicLocation(previewLocation) : "Your general area"}</p></div></div><div className={styles.sidebarTip}><Image src="/brand/mascot-2d-happy.png" alt="" width={70} height={70} /><div><strong>A little detail goes a long way</strong><p>Use your own photos, describe the item honestly, and choose a public place to meet.</p></div></div><p className={styles.helper}>{listing && !draft ? "Your current listing stays visible. Changes appear after you save." : "Save draft is manual. Complete the required details and add a photo first. Nothing is public until you publish."}</p></aside>}
+        {step !== 3 && <aside className={styles.sidebar}><p className={styles.eyebrow}>Your next marketplace find</p><div className={styles.miniPreview}><div className={styles.miniImage}>{photos[0]?.url && !photos[0].failed ? <Image src={photos[0].previewUrl ?? photos[0].url} alt="Your cover photo" fill sizes="320px" unoptimized className="object-contain" /> : <Camera size={36} />}</div><div><small>{preview.categoryId ? getCategoryName(preview.categoryId) : "Your listing"}</small><h3>{preview.title?.trim() || "Something good deserves a new home"}</h3><strong>{listingType === "auction" ? "Starting bid " : ""}{money.format(Number(listingType === "auction" ? preview.startingBid : preview.price) || 0)}</strong><span>{preview.condition}</span><p><MapPin size={13} />{previewLocation ? formatPublicLocation(previewLocation) : "Your general area"}</p></div></div><div className={styles.sidebarTip}><Image src="/brand/mascot-2d-happy.png" alt="" width={70} height={70} /><div><strong>A little detail goes a long way</strong><p>Use your own photos, describe the item honestly, and choose a public place to meet.</p></div></div><p className={styles.helper}>{listing && !draft ? "Your current listing stays visible. Changes appear after you save." : "Save draft is manual. Complete the required details and add a photo first. Nothing is public until you publish."}</p></aside>}
       </div>
     </>}
     {switchType && <ActionSheet title="Change listing type?" description="Your photos and item details stay. The price and bid amounts will be cleared." onClose={() => setSwitchType(null)}><div className={styles.confirmActions}><button type="button" className="button-secondary" onClick={() => setSwitchType(null)}>Keep current type</button><button type="button" className="button-primary" onClick={() => { submission.current = newListingSubmission(switchType); reset(switchedSellValues(getValues(), switchType), { keepDefaultValues: true }); setSwitchType(null); }}>Change type</button></div></ActionSheet>}

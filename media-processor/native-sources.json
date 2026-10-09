@@ -1,0 +1,14 @@
+[
+  {
+    "name": "libvips",
+    "version": "8.18.7",
+    "url": "https://codeload.github.com/libvips/libvips/tar.gz/refs/tags/v8.18.7",
+    "sha256": "5024b4b36f20e722c267f4a9bfbdbbafb3b37d48d7125cf425c55bbf76cc9286"
+  },
+  {
+    "name": "libavif",
+    "version": "1.4.2",
+    "url": "https://codeload.github.com/AOMediaCodec/libavif/tar.gz/refs/tags/v1.4.2",
+    "sha256": "2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d"
+  }
+]

@@ -1,3 +1,5 @@
+import { STAGING_MEDIA_BUCKET } from "../../../functions/src/listing-media-domain.ts";
+import { isListingDerivativeUrl } from "../public-media.ts";
 import { stagingEnvironment } from "../../../functions/src/staging-environment.ts";
 import { clientReleaseProofMatches, decodeReleaseProof, isStagingReleaseProof } from "../release-proof.ts";
 
@@ -59,6 +61,10 @@ export function isStagingMediaUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.origin !== "https://firebasestorage.googleapis.com" || url.username || url.password || url.hash) return false;
+    const derivative = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);
+    if (derivative?.[1] === STAGING_MEDIA_BUCKET) {
+      return isListingDerivativeUrl(value, STAGING_MEDIA_BUCKET);
+    }
     if ([...url.searchParams.keys()].some(key => key !== "alt" && key !== "token")
       || url.searchParams.getAll("alt").length !== 1 || url.searchParams.getAll("token").length !== 1) return false;
     const path = /^\/v0\/b\/([^/]+)\/o\/(.+)$/.exec(url.pathname);

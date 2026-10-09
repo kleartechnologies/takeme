@@ -2,8 +2,7 @@ import { parseHomepage } from "../../../functions/src/homepage-projection.ts";
 import { cache } from "react";
 import { publicListingEndpoint } from "./public-listing-server.ts";
 import { parsePublicCatalogueListing, parsePublicCataloguePage, parseAnonymousBids } from "../public-catalogue.ts";
-import { isStagingMediaUrl, isStagingEditorialAssetUrl } from "./staging-isolation.ts";
-import { stagingEnvironment } from "../../../functions/src/staging-environment.ts";
+import { isPublicMediaUrl, type PublicMediaEnvironment } from "../public-media.ts";
 
 async function readPublic(name: "getPublicListingPage" | "getPublicListingDetail", data: object): Promise<unknown> {
   if (process.env.TAKEME_OFFLINE_QUALIFICATION === "true") return null;
@@ -20,16 +19,12 @@ async function readPublic(name: "getPublicListingPage" | "getPublicListingDetail
     return payload.result ?? null;
   } catch { return null; }
 }
+function mediaEnvironment(): PublicMediaEnvironment {
+  return { projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    useEmulators: process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true" };
+}
 function safeImages(listing: { imageUrls: string[] }) {
-  return listing.imageUrls.every(value => {
-    if (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === stagingEnvironment.projectId) return isStagingMediaUrl(value);
-    try {
-      const url = new URL(value);
-      const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-      return url.origin === "https://firebasestorage.googleapis.com" && url.pathname.startsWith(`/v0/b/${bucket}/o/`)
-        || process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true" && url.origin === "http://127.0.0.1:9199";
-    } catch { return false; }
-  });
+  return listing.imageUrls.every(value => isPublicMediaUrl(value, mediaEnvironment()));
 }
 
 /** Fixed anonymous public query: no arbitrary query, bearer token or cookie forwarding. */
@@ -39,10 +34,9 @@ export async function getPublicHomePage() {
   const parsed = parseHomepage(result?.homepage);
   const images = parsed?.sections.flatMap(section => section.products.map(v => v.imageUrl)).filter(Boolean) ?? [];
   const banners = parsed?.sections.flatMap(section => section.banners.map(v => v.url)) ?? [];
-  const safeBanners = banners.every(value => process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === stagingEnvironment.projectId
-    ? isStagingEditorialAssetUrl(value) : safeImages({ imageUrls: [value] }));
+  const safeBanners = banners.every(value => isPublicMediaUrl(value, mediaEnvironment(), "editorial"));
   const avatars = parsed?.sections.flatMap(section => section.sellers.flatMap(v => v.photoURL ? [v.photoURL] : [])) ?? [];
-  const safeAvatars = avatars.every(value => safeImages({imageUrls:[value]}) || (()=>{try {const url=new URL(value); return url.origin==="https://lh3.googleusercontent.com" && !url.username && !url.password;} catch{return false;}})());
+  const safeAvatars = avatars.every(value => isPublicMediaUrl(value, mediaEnvironment(), "avatar") || (()=>{try {const url=new URL(value); return url.origin==="https://lh3.googleusercontent.com" && !url.username && !url.password;} catch{return false;}})());
   const homepage = parsed && safeImages({ imageUrls: images }) && safeBanners && safeAvatars ? parsed : null;
   return page && page.listings.every(safeImages) ? { ...page, homepage } : null;
 }

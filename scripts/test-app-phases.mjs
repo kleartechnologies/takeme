@@ -36,7 +36,7 @@ function run(args, cwd) {
 }
 const fixture = await mkdtemp(path.join(tmpdir(), "takeme-prepublication-tests-"));
 try {
-  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
+  const tracked = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
   // Read current checkout bytes, never retrieve an old commit or install dependencies.
   for (const relative of tracked) {
     const target = path.join(fixture, relative);

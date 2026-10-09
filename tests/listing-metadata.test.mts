@@ -7,7 +7,7 @@ const siteUrl = "https://takeme.my";
 const listing = {
   status: "active", title: "iPhone 15 Pro 256GB", description: "No 40 Jalan Halban 06000 Jitra Kedah",
   publicLocation: { districtOrCity: "Jitra", state: "Kedah", country: "Malaysia" as const },
-  price: 2500, listingType: "buy_now", imageUrls: ["https://firebasestorage.googleapis.com/example-image"],
+  price: 2500, listingType: "buy_now", imageUrls: ["https://firebasestorage.googleapis.com/v0/b/takeme-52b80.firebasestorage.app/o/users%2Fseller%2Flistings%2Flisting-123%2Fphoto.webp?alt=media&token=synthetic-media-token"],
   sellerEmail: "private@example.test", buyerId: "private-buyer", internalNotes: "private notes",
 };
 

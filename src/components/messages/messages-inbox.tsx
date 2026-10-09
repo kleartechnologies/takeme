@@ -1,5 +1,6 @@
 "use client";
 
+import { listingImage } from "@/lib/listing-media";
 import Image from "next/image";
 import Link from "next/link";
 import { ImageIcon } from "lucide-react";
@@ -18,7 +19,7 @@ type Context = { listing: PublicListing | null; hasOffer: boolean; hasDeal: bool
 export function ConversationRow({ item, context, active, now }: { item: ConversationSummary; context?: Context; active: boolean; now: number }) {
   const unread = (item.unreadCount ?? 0) > 0;
   return <Link href={`/messages/${item.id}`} className={styles.row} aria-current={active ? "page" : undefined}>
-    <span className={styles.thumbnail}>{(context?.listing?.imageUrls[0] ?? item.listingImage) ? <Image src={(context?.listing?.imageUrls[0] ?? item.listingImage)!} alt="" fill sizes="62px" className="object-cover" /> : <ImageIcon size={22} />}</span>
+    <span className={styles.thumbnail}>{(context?.listing ? listingImage(context.listing, "thumbnail") : item.listingImage) ? <Image src={(context?.listing ? listingImage(context.listing, "thumbnail") : item.listingImage)!} alt="" fill sizes="62px" className="object-cover" /> : <ImageIcon size={22} />}</span>
     <span className={styles.rowText}><span className={styles.rowTop}><strong>{item.otherName}</strong><time dateTime={item.updatedAt ?? undefined}>{messageTime(item.lastMessageAt ?? item.updatedAt, now, true)}</time></span>
       <span className={`${styles.preview} ${unread ? "font-semibold" : ""}`}>{item.latestMessage ?? (context?.hasDeal ? "Deal agreed · View details" : context?.hasOffer ? "Offer · View details" : "Start the conversation")}</span>
       <span className={styles.rowBottom}><span>{item.listingTitle}</span>{context?.listing && <span className={styles.price}>{money(discoveryPrice(context.listing))}</span>}{unread && <span className={styles.unread} aria-label={`${item.unreadCount} unread messages`}>{item.unreadCount! > 99 ? "99+" : item.unreadCount}</span>}</span>

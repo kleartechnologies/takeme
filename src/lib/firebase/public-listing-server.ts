@@ -1,6 +1,7 @@
 import type { PublicListingMetadata } from "../listing-metadata";
 import { parsePublicLocation } from "../general-location.ts";
-import { isStagingMediaUrl, metadataEndpoint } from "./staging-isolation.ts";
+import { metadataEndpoint } from "./staging-isolation.ts";
+import { isPublicMediaUrl } from "../public-media.ts";
 import { stagingEnvironment } from "../../../functions/src/staging-environment.ts";
 
 export async function getPublicListingForMetadata(id: string): Promise<PublicListingMetadata | null> {
@@ -35,7 +36,10 @@ export async function getPublicListingForMetadata(id: string): Promise<PublicLis
       startingBid: typeof data.startingBid === "number" ? data.startingBid : undefined,
       currentBid: typeof data.currentBid === "number" ? data.currentBid : undefined,
       bidCount: typeof data.bidCount === "number" ? data.bidCount : undefined,
-      imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((url: unknown): url is string => typeof url === "string" && (!staging || isStagingMediaUrl(url))) : [],
+      imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls.filter((url: unknown): url is string => typeof url === "string" && isPublicMediaUrl(url, {
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+        useEmulators: process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true",
+      })) : [],
     };
   } catch {
     // Missing, private, and temporarily unavailable listings get neutral metadata.

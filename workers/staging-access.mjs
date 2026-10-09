@@ -1,4 +1,5 @@
 import { stagingEnvironment } from "../functions/src/staging-environment.ts";
+import { STAGING_MEDIA_BUCKET } from "../functions/src/listing-media-domain.ts";
 
 const tokenLimit = 16384;
 const certificates = new Map();
@@ -97,7 +98,7 @@ export function createStagingWorker(worker, accessOptions = {}) {
       const headers = new Headers(response.headers);
       headers.set("X-Robots-Tag", "noindex, nofollow");
       // Also covers browser-direct/unoptimized images, which skip Next's loader.
-      headers.append("Content-Security-Policy", `img-src 'self' blob: data: https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/ https://lh3.googleusercontent.com`);
+      headers.append("Content-Security-Policy", `img-src 'self' blob: data: https://firebasestorage.googleapis.com/v0/b/${stagingEnvironment.storageBucket}/o/ https://firebasestorage.googleapis.com/v0/b/${STAGING_MEDIA_BUCKET}/o/ https://lh3.googleusercontent.com`);
       if (!new URL(request.url).pathname.startsWith("/_next/static/")) headers.set("Cache-Control", "no-store");
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     },
